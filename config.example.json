@@ -1,0 +1,15 @@
+{
+  "_comment": "EASY Operations config. EASIEST PATH: delete this file's copy and let the app's first-time setup wizard write it for you \u2014 it signs in with a WordPress username + application password and stores this per-instructor format. OFFICE/SHARED MODE: instead of wpUser/mode/instructor, use the legacy format: {\"mediaAuth\": {\"user\": \"\", \"appPassword\": \"\"}, \"postAuth\": {\"user\": \"\", \"appPassword\": \"\"}} \u2014 instructor details are then typed into the app by hand. Generate FRESH application passwords in WordPress \u2014 never reuse ones that were pasted into chat or email. Do not commit the filled-in file. Card-printer matching: \"printerName\" (exact name picked by the setup wizard) wins; otherwise \"printerNameContains\" (substring, default \"Nisca PR5350\") is used.",
+  "wpBaseUrl": "https://easysafety.ca",
+  "mode": "instructor",
+  "wpUser": {
+    "user": "",
+    "appPassword": ""
+  },
+  "instructor": {
+    "name": "",
+    "email": ""
+  },
+  "printerName": null,
+  "sumatraExe": "SumatraPDF-3.4.6-32.exe"
+}

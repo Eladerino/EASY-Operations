@@ -1,0 +1,33 @@
+{
+  "author": "Brandon Glynn",
+  "dependencies": {
+    "electron-squirrel-startup": "^1.0.1",
+    "pdf-lib": "^1.17.1",
+    "pdf-to-printer": "^5.6.1",
+    "update-electron-app": "^3.3.0"
+  },
+  "description": "EASY Safety Training — desktop operations hub: student certificates, class scheduling, and approvals.",
+  "devDependencies": {
+    "@electron-forge/cli": "^7.6.0",
+    "@electron-forge/maker-squirrel": "^7.6.0",
+    "@electron-forge/maker-zip": "^7.6.0",
+    "@electron-forge/plugin-auto-unpack-natives": "^7.6.0",
+    "@electron-forge/plugin-fuses": "^7.6.0",
+    "@electron-forge/publisher-github": "^8.0.1",
+    "@electron/fuses": "^1.8.0",
+    "electron": "^34.0.0"
+  },
+  "main": "main.js",
+  "name": "easy-operations",
+  "scripts": {
+    "make": "electron-forge make",
+    "package": "electron-forge package",
+    "start": "electron-forge start",
+    "publish": "electron-forge publish"
+  },
+  "version": "1.0.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Eladerino/EASY-Operations.git"
+  }
+}

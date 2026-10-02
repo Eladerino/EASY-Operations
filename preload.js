@@ -1,0 +1,51 @@
+// preload.js — locked-down bridge.
+//
+// The renderer gets a small fixed set of methods. There is intentionally no
+// generic send/receive: renderer code must not be able to talk on
+// arbitrary IPC channels.
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('easyCert', {
+  submit: (payload) => ipcRenderer.invoke('submit-certificate', payload),
+  getAppInfo: () => ipcRenderer.invoke('get-app-info'),
+  printPdf: () => ipcRenderer.invoke('print-pdf-dialog'),
+  savePdfCopy: () => ipcRenderer.invoke('save-pdf-copy'),
+  openPdfExternal: () => ipcRenderer.invoke('open-pdf-external'),
+  testConnection: (args) => ipcRenderer.invoke('test-connection', args),
+  openProfile: () => ipcRenderer.invoke('open-profile'),
+  getPrinters: () => ipcRenderer.invoke('get-printers'),
+  setPrinter: (name) => ipcRenderer.invoke('set-printer', name),
+  saveSetup: (setup) => ipcRenderer.invoke('save-setup', setup),
+  resetSetup: () => ipcRenderer.invoke('reset-setup'),
+  schedule: {
+    probe: () => ipcRenderer.invoke('schedule-probe'),
+    listEvents: (start, end) => ipcRenderer.invoke('schedule-list-events', { start, end }),
+    listVenues: () => ipcRenderer.invoke('schedule-list-venues'),
+    listOrganizers: () => ipcRenderer.invoke('schedule-list-organizers'),
+    listCategories: () => ipcRenderer.invoke('schedule-list-categories'),
+    createVenue: (venue) => ipcRenderer.invoke('schedule-create-venue', venue),
+    createOrganizer: (organizer) => ipcRenderer.invoke('schedule-create-organizer', organizer),
+    createEvent: (payload) => ipcRenderer.invoke('schedule-create-event', payload),
+    updateEvent: (id, payload) => ipcRenderer.invoke('schedule-update-event', { id, payload }),
+    deleteEvent: (id) => ipcRenderer.invoke('schedule-delete-event', id),
+    siteInfo: () => ipcRenderer.invoke('schedule-site-info'),
+  },
+  approvals: {
+    probe: () => ipcRenderer.invoke('approvals-probe'),
+    list: () => ipcRenderer.invoke('approvals-list'),
+    approve: (id) => ipcRenderer.invoke('approvals-approve', id),
+    reject: (id) => ipcRenderer.invoke('approvals-reject', id),
+  },
+  certApprovals: {
+    probe: () => ipcRenderer.invoke('cert-approvals-probe'),
+    list: () => ipcRenderer.invoke('cert-approvals-list'),
+    publish: (id) => ipcRenderer.invoke('cert-approvals-publish', id),
+    preview: (id) => ipcRenderer.invoke('cert-approvals-preview', id),
+    get: (id) => ipcRenderer.invoke('cert-approvals-get', id),
+  },
+  certTools: {
+    search: (query) => ipcRenderer.invoke('cert-tools-search', query),
+    reprint: (id) => ipcRenderer.invoke('cert-tools-reprint', id),
+    expiring: (days) => ipcRenderer.invoke('cert-tools-expiring', days),
+  },
+});
