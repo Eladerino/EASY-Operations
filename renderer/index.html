@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EASY Operations</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="schedule.css">
+</head>
+<body class="cert-form-mode">
+  <div id="configBanner" class="banner hidden" role="alert"></div>
+
+  <section id="setupScreen" class="hidden" aria-label="Setup">
+    <div class="setup-card">
+      <img src="icon.png" alt="EASY Safety Training" class="setup-logo" width="72" height="72">
+      <h2 id="setupHeading">Set up EASY Operations</h2>
+      <p class="setup-sub" id="setupSub">Sign in with your WordPress account. Your instructor name and email are taken from your profile and locked to your login.</p>
+
+      <section class="card setup-section" aria-label="WordPress sign-in">
+        <h3>WordPress sign-in</h3>
+        <div id="signInStatus" class="setup-signin-status hidden">
+          <span class="hint">Signed in as <strong id="signInUser"></strong></span>
+          <span class="setup-signin-actions">
+            <button type="button" id="signInChangeButton" class="btn btn-secondary btn-small">Change sign-in</button>
+            <button type="button" id="setupSignOutButton" class="btn btn-danger btn-small">Sign out</button>
+          </span>
+        </div>
+        <div id="signInForm">
+          <div class="field">
+            <label for="setupBaseUrl">WordPress site URL</label>
+            <input type="url" id="setupBaseUrl" value="https://easysafety.ca" inputmode="url" readonly class="locked">
+            <div class="hint">Fixed &mdash; instructors always connect to easysafety.ca.</div>
+          </div>
+          <div class="field">
+            <label for="setupUser">WordPress username</label>
+            <input type="text" id="setupUser" autocomplete="username" placeholder="e.g. jdoe">
+          </div>
+          <div class="field">
+            <label for="setupAppPassword">Application password</label>
+            <input type="password" id="setupAppPassword" autocomplete="new-password" placeholder="xxxx xxxx xxxx xxxx xxxx xxxx">
+            <div class="hint">Create one on your WordPress profile under &ldquo;Application Passwords&rdquo; (name it &ldquo;EASY Operations&rdquo;), then paste it here.</div>
+            <div class="setup-actions">
+              <button type="button" id="setupProfileButton" class="btn btn-secondary">Open my WordPress profile</button>
+            </div>
+          </div>
+          <div class="setup-actions">
+            <button type="button" id="setupTestButton" class="btn btn-secondary">Test connection</button>
+          </div>
+          <div id="setupTestResult" class="setup-result hidden" role="status"></div>
+          <div class="field hidden" id="setupEmailField">
+            <label for="setupEmail">Your email</label>
+            <input type="email" id="setupEmail" autocomplete="email" placeholder="you@example.com">
+            <div class="hint">WordPress didn't return an email address for this account, so enter it here. It will be stored with your certificates.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card setup-section" aria-label="Card printer">
+        <h3>Card printer</h3>
+        <div class="field">
+          <label for="setupPrinter">Printer <span class="optional">(optional)</span></label>
+          <select id="setupPrinter">
+            <option value="">No card printer</option>
+          </select>
+          <div class="hint">Only needed for the NISCA card printer. Leave as-is otherwise.</div>
+        </div>
+      </section>
+
+      <div class="setup-actions setup-footer-actions">
+        <button type="button" id="setupBackButton" class="btn btn-secondary hidden">Back</button>
+        <button type="button" id="setupSaveButton" class="btn btn-primary" disabled>Save &amp; start</button>
+      </div>
+    </div>
+  </section>
+
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <img src="icon.png" alt="" width="64" height="64">
+      </span>
+      <div>
+        <h1>EASY Operations</h1>
+        <p>EASY Safety Training &middot; Operations made EASY!</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <nav class="view-tabs" aria-label="App views">
+        <button type="button" id="tabCerts" class="view-tab active">Certificates</button>
+        <button type="button" id="tabApprovals" class="view-tab">Approvals <span id="tabApprovalsBadge" class="tab-badge hidden"></span></button>
+        <button type="button" id="tabSchedule" class="view-tab">Schedule</button>
+        <button type="button" id="tabOnlineLearning" class="view-tab">Online Learning <span id="tabOnlineLearningBadge" class="tab-badge hidden"></span></button>
+      </nav>
+      <button type="button" id="setupHeaderButton" class="btn btn-secondary btn-small" title="Settings">Setup</button>
+    </div>
+  </header>
+
+  <main id="certMain">
+    <div class="sub-tabs" role="tablist" aria-label="Certificate tools">
+      <button type="button" id="subTabCertNew" class="sub-tab active" role="tab">New certificate</button>
+      <button type="button" id="subTabCertLookup" class="sub-tab" role="tab">Find &amp; reprint</button>
+      <button type="button" id="subTabCertExpiring" class="sub-tab" role="tab">Expiring soon <span id="subTabCertExpiringBadge" class="tab-badge hidden"></span></button>
+    </div>
+
+    <div id="certNewPanel" role="tabpanel">
+    <form id="certForm" autocomplete="off">
+      <div id="errorSummary" class="error-summary hidden" role="alert"></div>
+
+      <section class="card">
+        <h2><span class="step">1</span> Student</h2>
+        <div class="grid">
+          <div class="field span-2">
+            <label for="studentName">Student name</label>
+            <input type="text" id="studentName" required>
+            <div id="studentNameError" class="error-message"></div>
+          </div>
+          <div class="field">
+            <label for="studentEmail">Student email</label>
+            <input type="email" id="studentEmail" required>
+            <div id="studentEmailError" class="error-message"></div>
+          </div>
+          <div class="field">
+            <label for="confirmEmail">Confirm email</label>
+            <input type="email" id="confirmEmail" required>
+            <div id="confirmEmailError" class="error-message"></div>
+          </div>
+          <div class="field">
+            <label for="studentPhone">Student phone <span class="optional">(optional)</span></label>
+            <input type="tel" id="studentPhone" pattern="\d{10}" inputmode="numeric" placeholder="7095551234" title="Enter a valid 10-digit phone number">
+            <div id="studentPhoneError" class="error-message"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2><span class="step">2</span> Course</h2>
+        <div class="grid">
+          <div class="field">
+            <label for="courseCategory">Course category</label>
+            <select id="courseCategory" required>
+              <option value="">Select category</option>
+              <option value="workplace-nl-approved-training">Workplace NL Approved Training</option>
+              <option value="powered-mobile-equipment">Powered Mobile Equipment</option>
+              <option value="confined-space-training">Confined Space Training</option>
+              <option value="first-aid">First Aid</option>
+              <option value="scaffolding">Scaffolding</option>
+              <option value="additional-safety-training">Additional Safety Training</option>
+              <option value="crane-rigging-training">Crane &amp; Rigging Training</option>
+            </select>
+            <div id="courseCategoryError" class="error-message"></div>
+          </div>
+          <div class="field">
+            <label for="courseTitle">Course title</label>
+            <select id="courseTitle" required>
+              <option value="">Select title</option>
+            </select>
+            <div id="courseTitleError" class="error-message"></div>
+          </div>
+
+          <div id="forkliftClassGroup" class="field span-2 hidden">
+            <span class="group-label">Forklift class <span class="required-hint">(select at least one)</span></span>
+            <div id="forkliftClasses" class="check-row">
+              <label><input type="checkbox" name="forkliftClass" value="1"> 1</label>
+              <label><input type="checkbox" name="forkliftClass" value="2"> 2</label>
+              <label><input type="checkbox" name="forkliftClass" value="3"> 3</label>
+              <label><input type="checkbox" name="forkliftClass" value="4"> 4</label>
+              <label><input type="checkbox" name="forkliftClass" value="5"> 5</label>
+            </div>
+            <div id="forkliftClassError" class="error-message"></div>
+          </div>
+
+          <div class="field">
+            <label for="completionDate">Completion date</label>
+            <input type="date" id="completionDate" required>
+            <div id="completionDateError" class="error-message"></div>
+          </div>
+          <div class="field">
+            <label for="expiryDate">Expiry date <span class="hint">(auto: +3 years)</span></label>
+            <input type="date" id="expiryDate" disabled required>
+            <div id="expiryDateError" class="error-message"></div>
+          </div>
+
+          <div id="wpnlControlGroup" class="field span-2 hidden">
+            <label for="WPNLcontrol">Workplace NL control #</label>
+            <input type="text" id="WPNLcontrol">
+            <div id="WPNLcontrolError" class="error-message"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2><span class="step">3</span> Instructor</h2>
+        <div class="grid">
+          <div class="field">
+            <label for="instructorName">Instructor name</label>
+            <input type="text" id="instructorName" required>
+            <div id="instructorNameError" class="error-message"></div>
+          </div>
+          <div class="field">
+            <label for="instructorEmail">Instructor email</label>
+            <input type="email" id="instructorEmail" required>
+            <div id="instructorEmailError" class="error-message"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2><span class="step">4</span> Company <span class="optional">(optional)</span></h2>
+        <div class="grid">
+          <div class="field">
+            <label for="companyName">Company name</label>
+            <input type="text" id="companyName">
+            <div id="companyNameError" class="error-message"></div>
+          </div>
+          <div class="field">
+            <label for="companyContact">Company contact</label>
+            <input type="text" id="companyContact">
+            <div id="companyContactError" class="error-message"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2><span class="step">5</span> Certificate</h2>
+        <div class="field">
+          <label for="certificateNumber">Certificate number</label>
+          <div id="certificateContainer">
+            <input type="text" id="certificateNumber" readonly tabindex="-1">
+            <button type="button" id="decrementButton" class="stepper" title="Previous instance">&minus;</button>
+            <button type="button" id="incrementButton" class="stepper" title="Next instance">+</button>
+          </div>
+          <div id="certificateNumberError" class="error-message"></div>
+        </div>
+
+        <label class="print-card">
+          <input type="checkbox" id="printPhysicalCard">
+          <span>
+            <strong>Print physical ID card now</strong>
+            <small>Silent print to the NISCA PR5350 card printer (if connected)</small>
+          </span>
+        </label>
+      </section>
+    </form>
+
+    <div id="editDraftBanner" class="edit-banner hidden" role="status">
+      <span id="editDraftBannerText">Editing draft</span>
+      <button type="button" id="editDraftCancel" class="btn btn-secondary btn-small">Cancel edit</button>
+    </div>
+    </div><!-- /certNewPanel -->
+
+    <div id="certLookupPanel" class="hidden" role="tabpanel">
+    <section class="card" aria-label="Find and reprint a certificate">
+      <h2>Find &amp; reprint</h2>
+      <p class="hint">Search issued certificates by student name or course, then reprint the stored PDF.</p>
+      <div class="lookup-row">
+        <input type="search" id="lookupQuery" placeholder="e.g. Jane Doe" autocomplete="off">
+        <button type="button" id="lookupSearch" class="btn btn-secondary">Search</button>
+      </div>
+      <div id="lookupLoading" class="hint hidden">Searching…</div>
+      <ul id="lookupResults" class="approv-list"></ul>
+    </section>
+    </div><!-- /certLookupPanel -->
+
+    <div id="certExpiringPanel" class="hidden" role="tabpanel">
+    <section class="card" aria-label="Certificates expiring soon">
+      <h2>Expiring soon</h2>
+      <p class="hint">Certificates expiring inside the window, grouped by company — spot renewal sessions to book.</p>
+      <div class="lookup-row" role="group" aria-label="Expiry window">
+        <button type="button" class="btn btn-secondary btn-small exp-window" data-days="30">30 days</button>
+        <button type="button" class="btn btn-secondary btn-small exp-window" data-days="60">60 days</button>
+        <button type="button" class="btn btn-secondary btn-small exp-window active" data-days="90">90 days</button>
+        <button type="button" id="expiringRefresh" class="btn btn-secondary btn-small">Refresh</button>
+      </div>
+      <div id="expiringLoading" class="hint hidden">Loading…</div>
+      <div id="expiringResults"></div>
+    </section>
+    </div><!-- /certExpiringPanel -->
+  </main>
+
+  <main id="approvalsMain" class="hidden" aria-label="Approvals">
+    <div class="sub-tabs" role="tablist" aria-label="Approval queues">
+      <button type="button" id="subTabCerts" class="sub-tab active" role="tab">Certificates <span id="subTabCertsBadge" class="tab-badge hidden"></span></button>
+      <button type="button" id="subTabAccounts" class="sub-tab" role="tab">Accounts <span id="subTabAccountsBadge" class="tab-badge hidden"></span></button>
+    </div>
+
+    <section id="certApprovPanel" aria-label="Certificate approvals">
+      <div id="certApprovPermBanner" class="sched-banner hidden" role="alert"></div>
+      <div class="card">
+        <h2>Certificates awaiting review</h2>
+        <p class="hint">Draft certificates submitted by instructors. Publishing makes the certificate live and notifies the student.</p>
+        <div class="lookup-row">
+          <button type="button" id="certApprovRefresh" class="btn btn-secondary btn-small">Refresh</button>
+        </div>
+        <div id="certApprovError" class="error-summary hidden" role="alert"></div>
+        <div id="certApprovLoading" class="hint hidden">Loading&hellip;</div>
+        <div id="certApprovEmpty" class="hint hidden">No certificates are waiting for review.</div>
+        <ul id="certApprovList" class="approv-list"></ul>
+      </div>
+    </section>
+
+    <section id="accountApprovPanel" class="hidden" aria-label="Account approvals">
+      <div id="approvPermBanner" class="sched-banner hidden" role="alert"></div>
+      <div class="card">
+        <h2>Pending approvals</h2>
+        <p class="hint">New student accounts waiting for admin review. Approving activates the account; rejecting blocks it from logging in.</p>
+        <div class="lookup-row">
+          <button type="button" id="approvRefresh" class="btn btn-secondary btn-small">Refresh</button>
+        </div>
+        <div id="approvError" class="error-summary hidden" role="alert"></div>
+        <div id="approvLoading" class="hint hidden">Loading&hellip;</div>
+        <div id="approvEmpty" class="hint hidden">No accounts are waiting for review.</div>
+        <ul id="approvList" class="approv-list"></ul>
+      </div>
+    </section>
+  </main>
+
+  <main id="scheduleMain" class="hidden sched-main" aria-label="Class scheduling">
+    <div id="schedPermBanner" class="sched-banner hidden" role="alert"></div>
+    <div class="sched-toolbar card">
+      <div class="sched-nav">
+        <button type="button" id="schedPrev" class="btn btn-secondary btn-small">&lsaquo; Prev</button>
+        <h2 id="schedMonthTitle">Month</h2>
+        <button type="button" id="schedNext" class="btn btn-secondary btn-small">Next &rsaquo;</button>
+        <button type="button" id="schedToday" class="btn btn-secondary btn-small">Today</button>
+      </div>
+      <div class="sched-meta">
+        <span id="schedTz" class="hint"></span>
+        <span id="schedCount" class="hint"></span>
+      </div>
+    </div>
+    <div class="sched-layout">
+      <aside class="sched-palette card" aria-label="Courses">
+        <h3>Courses</h3>
+        <input type="search" id="paletteSearch" placeholder="Search courses&hellip;" aria-label="Search courses">
+        <div id="paletteGroups"></div>
+        <p class="hint">Drag a course onto a day to schedule it, or click a day to pick from a list.</p>
+      </aside>
+      <div class="sched-cal card">
+        <div class="sched-dow" aria-hidden="true">
+          <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+        </div>
+        <div id="schedGrid" class="sched-grid"></div>
+        <div id="schedLoading" class="sched-loading hidden">Loading classes&hellip;</div>
+        <div id="schedError" class="sched-error hidden" role="alert"></div>
+      </div>
+    </div>
+  </main>
+
+  <main id="onlineMain" class="hidden" aria-label="Online learning (concept preview)">
+    <div class="concept-banner" role="note">
+      <strong>Concept preview</strong> &mdash; sample data only. This tab sketches the future online-course admin view; nothing here connects to real students, courses, or bookings yet.
+    </div>
+
+    <div class="sub-tabs" role="tablist" aria-label="Online learning sections">
+      <button type="button" id="subTabOnlineStudents" class="sub-tab active" role="tab">Students</button>
+      <button type="button" id="subTabOnlineInquiries" class="sub-tab" role="tab">Inquiries <span id="subTabOnlineInquiriesBadge" class="tab-badge hidden"></span></button>
+      <button type="button" id="subTabOnlinePracticals" class="sub-tab" role="tab">Practicals <span id="subTabOnlinePracticalsBadge" class="tab-badge hidden"></span></button>
+    </div>
+
+    <section id="onlineStudentsPanel" role="tabpanel" aria-label="Student statuses">
+      <div class="ol-stats" aria-label="Learning metrics">
+        <div class="card ol-stat">
+          <div class="ol-stat-num" id="olStatActive">&ndash;</div>
+          <div class="ol-stat-label">Active learners</div>
+          <div class="ol-stat-sub ok" id="olStatActiveSub"></div>
+        </div>
+        <div class="card ol-stat">
+          <div class="ol-stat-num" id="olStatProgress">&ndash;</div>
+          <div class="ol-stat-label">Average progress</div>
+          <div class="ol-stat-sub ok">Across active learners</div>
+        </div>
+        <div class="card ol-stat">
+          <div class="ol-stat-num" id="olStatNudge">&ndash;</div>
+          <div class="ol-stat-label">May need a nudge</div>
+          <div class="ol-stat-sub warn" id="olStatNudgeSub"></div>
+        </div>
+        <div class="card ol-stat">
+          <div class="ol-stat-num" id="olStatTheory">&ndash;</div>
+          <div class="ol-stat-label">Theory complete</div>
+          <div class="ol-stat-sub ok">Ready for next step</div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Students</h2>
+        <p class="hint">Sample data &mdash; where each online learner stands in their course.</p>
+        <div class="lookup-row">
+          <input type="search" id="onlineStudentSearch" placeholder="Search students&hellip;" autocomplete="off" aria-label="Search students">
+          <select id="onlineStudentFilter" aria-label="Filter by status">
+            <option value="">All statuses</option>
+            <option value="In theory">In theory</option>
+            <option value="Theory complete">Theory complete</option>
+            <option value="Stalled">Stalled</option>
+            <option value="Practical booked">Practical booked</option>
+            <option value="Certified">Certified</option>
+          </select>
+        </div>
+        <ul id="onlineStudentList" class="approv-list"></ul>
+        <p id="onlineStudentEmpty" class="hint hidden">No students match.</p>
+      </div>
+    </section>
+
+    <section id="onlineInquiriesPanel" class="hidden" role="tabpanel" aria-label="Student inquiries">
+      <div class="card">
+        <h2>Inquiries</h2>
+        <p class="hint">Sample data &mdash; course questions from online learners waiting on an instructor reply.</p>
+        <ul id="onlineInquiryList" class="approv-list"></ul>
+        <p id="onlineInquiryEmpty" class="hint hidden">No open inquiries.</p>
+      </div>
+    </section>
+
+    <section id="onlinePracticalsPanel" class="hidden" role="tabpanel" aria-label="Practicals">
+      <div class="online-pract-cols">
+        <div class="card">
+          <h2>Needs booking</h2>
+          <p class="hint">Theory finished, waiting for a practical slot.</p>
+          <ul id="onlinePracBookList" class="approv-list"></ul>
+          <p id="onlinePracBookEmpty" class="hint hidden">Nothing waiting to book.</p>
+        </div>
+        <div class="card">
+          <h2>Awaiting completion</h2>
+          <p class="hint">Booked practicals waiting on the instructor sign-off.</p>
+          <ul id="onlinePracDoneList" class="approv-list"></ul>
+          <p id="onlinePracDoneEmpty" class="hint hidden">Nothing awaiting sign-off.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="action-bar">
+    <button type="button" id="clearButton" class="btn btn-secondary">Clear</button>
+    <button type="button" id="postButton" class="btn btn-primary" disabled>
+      <span class="btn-label">Post certificate</span>
+    </button>
+  </footer>
+
+  <div id="toasts" aria-live="polite"></div>
+
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-box">
+      <h3 id="modalTitle"></h3>
+      <p id="modalBody"></p>
+      <div class="modal-actions">
+        <button type="button" id="modalCancel" class="btn btn-secondary">Cancel</button>
+        <button type="button" id="modalOk" class="btn btn-primary">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="certModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-box modal-wide">
+      <h3>Certificate posted</h3>
+      <div class="cert-preview">
+        <embed id="certPreview" type="application/pdf" title="Certificate preview">
+      </div>
+      <div class="modal-actions cert-actions">
+        <button type="button" id="certPrintButton" class="btn btn-secondary">Print&hellip;</button>
+        <button type="button" id="certSaveButton" class="btn btn-secondary">Save a copy&hellip;</button>
+        <button type="button" id="certOpenButton" class="btn btn-secondary">Open in viewer&hellip;</button>
+      </div>
+      <p class="more-students">Are there other students for this course?</p>
+      <div class="modal-actions">
+        <button type="button" id="certDoneButton" class="btn btn-secondary">No, done</button>
+        <button type="button" id="certMoreButton" class="btn btn-primary">Yes, another student</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="eventModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="eventModalTitle">
+    <div class="modal-box modal-wide">
+      <h3 id="eventModalTitle">Schedule class</h3>
+      <div id="eventModalError" class="error-summary hidden" role="alert"></div>
+      <div class="grid">
+        <div class="field span-2">
+          <label for="evTitle">Class title</label>
+          <input type="text" id="evTitle" placeholder="e.g. Fall Protection Day 1">
+        </div>
+        <div class="field span-2">
+          <label for="evCourse">Course <span class="hint">(fills in the title)</span></label>
+          <select id="evCourse"><option value="">Pick a course&hellip;</option></select>
+          <p class="cat-line hidden" id="evCatLine"></p>
+        </div>
+        <div class="field">
+          <label for="evDate">Date</label>
+          <input type="date" id="evDate">
+        </div>
+        <div class="field">
+          <label for="evEndDate">End date</label>
+          <input type="date" id="evEndDate">
+        </div>
+        <div class="field">
+          <label for="evStartTime">Start time</label>
+          <input type="time" id="evStartTime" value="09:00">
+        </div>
+        <div class="field">
+          <label for="evEndTime">End time</label>
+          <input type="time" id="evEndTime" value="17:00">
+        </div>
+        <div class="field span-2">
+          <label class="check-inline"><input type="checkbox" id="evAllDay"> All-day class</label>
+        </div>
+        <div class="field span-2">
+          <label for="evVenue">Location</label>
+          <div class="inline-row">
+            <select id="evVenue"><option value="">No location set</option></select>
+            <button type="button" id="evNewVenueBtn" class="btn btn-secondary btn-small">+ New location</button>
+          </div>
+        </div>
+        <div id="evVenueForm" class="field span-2 hidden subform">
+          <span class="group-label">New location</span>
+          <div class="grid">
+            <div class="field span-2">
+              <label for="evVenueName">Location name</label>
+              <input type="text" id="evVenueName" placeholder="e.g. EASY Training Room">
+            </div>
+            <div class="field span-2">
+              <label for="evVenueAddress">Address</label>
+              <input type="text" id="evVenueAddress">
+            </div>
+            <div class="field">
+              <label for="evVenueCity">City</label>
+              <input type="text" id="evVenueCity">
+            </div>
+            <div class="field">
+              <label for="evVenueProvince">Province</label>
+              <input type="text" id="evVenueProvince" value="NL">
+            </div>
+            <div class="field">
+              <label for="evVenuePostal">Postal code</label>
+              <input type="text" id="evVenuePostal">
+            </div>
+            <div class="field">
+              <label for="evVenuePhone">Phone</label>
+              <input type="tel" id="evVenuePhone">
+            </div>
+          </div>
+        </div>
+        <div class="field span-2">
+          <label for="evOrganizer">Instructor</label>
+          <div class="inline-row">
+            <select id="evOrganizer"><option value="">No instructor set</option></select>
+            <button type="button" id="evNewOrgBtn" class="btn btn-secondary btn-small">+ New instructor</button>
+          </div>
+        </div>
+        <div id="evOrgForm" class="field span-2 hidden subform">
+          <span class="group-label">New instructor</span>
+          <div class="grid">
+            <div class="field">
+              <label for="evOrgName">Name</label>
+              <input type="text" id="evOrgName">
+            </div>
+            <div class="field">
+              <label for="evOrgEmail">Email</label>
+              <input type="email" id="evOrgEmail">
+            </div>
+            <div class="field">
+              <label for="evOrgPhone">Phone</label>
+              <input type="tel" id="evOrgPhone">
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="evCost">Cost <span class="optional">(optional)</span></label>
+          <input type="text" id="evCost" placeholder="e.g. 430">
+        </div>
+        <div class="field">
+          <label for="evStatus">Status</label>
+          <select id="evStatus">
+            <option value="publish">Published</option>
+            <option value="draft">Draft</option>
+          </select>
+        </div>
+        <div class="field span-2">
+          <label for="evDesc">Description <span class="optional">(optional)</span></label>
+          <textarea id="evDesc" rows="3"></textarea>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" id="evDelete" class="btn btn-danger hidden">Delete</button>
+        <span class="flex-spacer"></span>
+        <button type="button" id="evCancel" class="btn btn-secondary">Cancel</button>
+        <button type="button" id="evSave" class="btn btn-primary">Save class</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="bookModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="bookModalTitle">
+    <div class="modal-box">
+      <h3 id="bookModalTitle">Book practical</h3>
+      <p class="hint">Sample data &mdash; demo booking only. Pick a slot for this practical.</p>
+      <div class="grid">
+        <div class="field span-2">
+          <label for="bookStudentName">Student</label>
+          <input type="text" id="bookStudentName" readonly tabindex="-1" class="locked">
+        </div>
+        <div class="field">
+          <label for="bookDate">Date</label>
+          <input type="date" id="bookDate">
+        </div>
+        <div class="field">
+          <label for="bookTime">Time</label>
+          <input type="time" id="bookTime" value="09:00">
+        </div>
+        <div class="field span-2">
+          <label for="bookLocation">Location</label>
+          <input type="text" id="bookLocation" value="EASY Training Room">
+        </div>
+        <div class="field span-2">
+          <label for="bookInstructor">Instructor</label>
+          <input type="text" id="bookInstructor" value="M. Doyle">
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" id="bookCancel" class="btn btn-secondary">Cancel</button>
+        <button type="button" id="bookConfirm" class="btn btn-primary">Confirm booking</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="replyModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="replyModalTitle">
+    <div class="modal-box">
+      <h3 id="replyModalTitle">Reply to learner</h3>
+      <p class="hint">Sample data &mdash; demo reply only. Nothing is actually sent.</p>
+      <div class="grid">
+        <div class="field span-2">
+          <label for="replyTo">To</label>
+          <input type="text" id="replyTo" readonly tabindex="-1" class="locked">
+        </div>
+        <div class="field span-2">
+          <span class="group-label">Their question</span>
+          <p class="ol-quote" id="replyQuestion"></p>
+        </div>
+        <div class="field span-2">
+          <label for="replyBody">Your reply</label>
+          <textarea id="replyBody" rows="4" placeholder="Type your reply&hellip;"></textarea>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" id="replyCancel" class="btn btn-secondary">Cancel</button>
+        <button type="button" id="replySend" class="btn btn-primary">Send reply</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="../shared.js"></script>
+  <script src="renderer.js"></script>
+  <script src="schedule.js"></script>
+  <script src="approvals.js"></script>
+  <script src="cert-approvals.js"></script>
+  <script src="cert-tools.js"></script>
+  <script src="startup-scan.js"></script>
+  <script src="online-learning.js"></script>
+</body>
+</html>

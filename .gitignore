@@ -1,0 +1,9 @@
+node_modules/
+out/
+# Per-machine config: holds the WordPress application password.
+# NEVER commit the filled-in file — config.example.json is the template.
+config.json
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
