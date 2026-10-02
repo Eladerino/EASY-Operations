@@ -25,7 +25,7 @@
   // Both approval queues report here; the top-level Approvals tab shows
   // the combined pending count.
   window.EasyApprovalBadges = {
-    counts: { certs: 0, accounts: 0 },
+    counts: { certs: 0, classes: 0, accounts: 0 },
     set(kind, n) {
       this.counts[kind] = Math.max(0, n | 0);
       const paint = (id, v) => {
@@ -35,8 +35,9 @@
         el.classList.toggle('hidden', v <= 0);
       };
       paint('subTabCertsBadge', this.counts.certs);
+      paint('subTabClassesBadge', this.counts.classes);
       paint('subTabAccountsBadge', this.counts.accounts);
-      paint('tabApprovalsBadge', this.counts.certs + this.counts.accounts);
+      paint('tabApprovalsBadge', this.counts.certs + this.counts.classes + this.counts.accounts);
     },
   };
 
@@ -47,13 +48,25 @@
   function showSub(name) {
     lastSub = name;
     const certs = name === 'certs';
+    const classes = name === 'classes';
+    const accounts = name === 'accounts';
     $('subTabCerts').classList.toggle('active', certs);
-    $('subTabAccounts').classList.toggle('active', !certs);
+    $('subTabClasses').classList.toggle('active', classes);
+    $('subTabAccounts').classList.toggle('active', accounts);
     $('certApprovPanel').classList.toggle('hidden', !certs);
-    $('accountApprovPanel').classList.toggle('hidden', certs);
+    $('classApprovPanel').classList.toggle('hidden', !classes);
+    $('accountApprovPanel').classList.toggle('hidden', !accounts);
+    // Prime the classes badge even when another sub-tab is active, so Pam
+    // sees the full pending count on the Approvals tab. Skipped for plain
+    // instructor accounts (no queue, no badge needed).
+    if (window.EasyClassApprovals && (!window.EasyPerms || window.EasyPerms.privileged)) {
+      window.EasyClassApprovals.primeBadge();
+    }
     if (certs) {
       window.EasyCertApprovals.show();
-    } else if (window.EasyApprovals) {
+    } else if (classes && window.EasyClassApprovals) {
+      window.EasyClassApprovals.show();
+    } else if (accounts && window.EasyApprovals) {
       window.EasyApprovals.show();
     }
   }
@@ -184,11 +197,17 @@
         previewBtn.addEventListener('click', () => previewCert(c, previewBtn));
         actions.appendChild(previewBtn);
       }
-      const publishBtn = document.createElement('button');
-      publishBtn.type = 'button';
-      publishBtn.className = 'btn btn-primary btn-small';
-      publishBtn.textContent = 'Publish';
-      publishBtn.addEventListener('click', () => publishCert(c));
+      // Publish is a reviewer action: instructors see the queue read-only
+      // (their own submissions' status); Pam and office accounts publish.
+      const privileged = window.EasyPerms && window.EasyPerms.privileged;
+      let publishBtn = null;
+      if (privileged) {
+        publishBtn = document.createElement('button');
+        publishBtn.type = 'button';
+        publishBtn.className = 'btn btn-primary btn-small';
+        publishBtn.textContent = 'Publish';
+        publishBtn.addEventListener('click', () => publishCert(c));
+      }
 
       // Fix before publish: open the draft in the certificate form.
       const editBtn = document.createElement('button');
@@ -202,7 +221,7 @@
 
       // Order: review, fix, then commit.
       actions.appendChild(editBtn);
-      actions.appendChild(publishBtn);
+      if (publishBtn) actions.appendChild(publishBtn);
 
       li.appendChild(info);
       li.appendChild(actions);
@@ -286,6 +305,7 @@
   }
 
   $('subTabCerts').addEventListener('click', () => showSub('certs'));
+  $('subTabClasses').addEventListener('click', () => showSub('classes'));
   $('subTabAccounts').addEventListener('click', () => showSub('accounts'));
   $('certApprovRefresh').addEventListener('click', () => { if (canReview) loadQueue(); });
 

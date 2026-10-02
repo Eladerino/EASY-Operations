@@ -162,27 +162,39 @@
   let organizerCache = []; // { id, name }
   let categoryCache = []; // raw TEC categories: { id, name, slug, parent }
   let catBySlug = {}; // slug -> { id, name, parent }
+  let catByName = {}; // decoded lowercase name -> { id, name, slug, parent }
   let modalCategoryIds = []; // TEC category IDs for the class being edited
   let editingId = null;
 
-  // Reverse map: course value -> app category key, for category resolution.
+  // Reverse maps: course value -> app category key / course label.
   const courseValueToCategory = {};
+  const courseValueToLabel = {};
+  const courseValueToDescription = {};
   for (const [catKey, courses] of Object.entries(S.titlesByCategory)) {
-    for (const course of courses) courseValueToCategory[course.value] = catKey;
+    for (const course of courses) {
+      courseValueToCategory[course.value] = catKey;
+      courseValueToLabel[course.value] = course.label;
+      if (course.description) courseValueToDescription[course.value] = course.description;
+    }
   }
 
   // Resolve the TEC categories for a course: the parent is the course's
   // category (e.g. "Powered Mobile Equipment"), the child is the specific
   // course (e.g. "Counter Balance Forklift") when the site defines one.
-  // Slugs are unique per taxonomy, so slug matching is reliable.
+  // Slugs are matched first; when a slug doesn't line up (e.g. WordPress
+  // deduplicated it to "skid-steer-2"), fall back to the exact category
+  // name, which matches the course label.
   function resolveCourseCategories(courseValue) {
     const ids = [];
     let parent = null;
     let child = null;
     if (courseValue) {
       const catKey = courseValueToCategory[courseValue];
-      parent = (catKey && catBySlug[catKey.toLowerCase()]) || null;
-      child = catBySlug[String(courseValue).toLowerCase()] || null;
+      const label = courseValueToLabel[courseValue] || '';
+      parent = (catKey && catBySlug[catKey.toLowerCase()]) ||
+        (catKey && catByName[prettifyCategory(catKey).toLowerCase()]) || null;
+      child = catBySlug[String(courseValue).toLowerCase()] ||
+        (label && catByName[label.toLowerCase()]) || null;
       if (child) ids.push(child.id);
       if (parent && (!child || parent.id !== child.id)) ids.push(parent.id);
     }
@@ -203,6 +215,9 @@
     let names = [];
     if (courseValue) {
       const { parent, child } = resolveCourseCategories(courseValue);
+      console.log(`[schedule] course "${courseValue}" -> categories:`,
+        `parent=${parent ? `${decodeEntities(parent.name)} [${parent.slug}]` : 'none'}`,
+        `child=${child ? `${decodeEntities(child.name)} [${child.slug}]` : 'none'}`);
       if (parent) names.push(decodeEntities(parent.name));
       if (child) names.push(decodeEntities(child.name));
       if (!names.length) {
@@ -220,6 +235,38 @@
     }
     line.textContent = `Filed under: ${names.join(' › ')}`;
     line.classList.remove('hidden');
+  }
+
+  // Match an existing event back to a course in the picker: first by exact
+  // title vs course label (the picker fills the title from the course, so
+  // the common case matches), then by the event's own categories (a child
+  // category whose slug is a known course value). Returns the course value
+  // or '' when nothing matches.
+  function matchCourseForEvent(event) {
+    const title = String((event && event.title) || '').trim().toLowerCase();
+    if (title) {
+      for (const opt of $('evCourse').options) {
+        if (opt.value && opt.textContent.trim().toLowerCase() === title) return opt.value;
+      }
+    }
+    for (const id of (event && event.categoryIds) || []) {
+      const cat = categoryCache.find((c) => c && c.id === id);
+      const slug = cat && cat.slug ? String(cat.slug).toLowerCase() : '';
+      if (slug && courseValueToCategory[slug]) return slug;
+    }
+    return '';
+  }
+
+  // Preset course description (adapted from the site's training-courses
+  // outlines). Fills the editor's description box when it is empty — Pam
+  // can edit or clear it before saving; an existing description is never
+  // clobbered. This also repairs old barren events: opening one whose
+  // course is recognized fills in the preset on save.
+  function prefillDescription(courseValue) {
+    const preset = courseValue && courseValueToDescription[courseValue];
+    if (!preset) return;
+    const box = $('evDesc');
+    if (box && !box.value.trim()) box.value = preset;
   }
 
   /* ---------------- course palette ---------------- */
@@ -612,9 +659,15 @@
         if (res.ok) {
           categoryCache = res.categories;
           catBySlug = {};
+          catByName = {};
           for (const c of categoryCache) {
             if (c && c.slug) catBySlug[String(c.slug).toLowerCase()] = c;
+            if (c && c.name) catByName[decodeEntities(c.name).toLowerCase()] = c;
           }
+          // Diagnostic: what the site actually calls its categories, so a
+          // missed child match can be traced to the real name/slug.
+          console.log('[schedule] categories loaded:',
+            categoryCache.map((c) => `${decodeEntities(c.name)} [${c.slug}]`).join(', '));
         }
       } catch (err) {
         console.error('Could not load categories:', err);
@@ -669,6 +722,17 @@
       $('evStatus').value = event.status === 'draft' ? 'draft' : 'publish';
       $('evDesc').value = event.description || '';
       $('evDelete').classList.remove('hidden');
+      // Pre-select the course when the event matches one, so the picker
+      // isn't blank on drafts created from a course. Categories are
+      // recomputed from the matched course — the "Filed under" line shows
+      // what a save will file, which also repairs events that were saved
+      // with only the parent category. When nothing matches, the event's
+      // existing categories are kept as before.
+      const matchedCourse = matchCourseForEvent(event);
+      if (matchedCourse) {
+        $('evCourse').value = matchedCourse;
+        modalCategoryIds = resolveCourseCategories(matchedCourse).ids;
+      }
       updateCategoryLine();
     } else {
       if (date) {
@@ -688,6 +752,10 @@
         updateCategoryLine();
       }
     }
+    // Prefill the preset course description when the box is empty (new
+    // class from a course, or an older event whose description was never
+    // filled in). Existing descriptions are left alone.
+    prefillDescription($('evCourse').value);
     $('eventModal').classList.remove('hidden');
     setTimeout(() => $('evTitle').focus(), 50);
   }
@@ -701,6 +769,7 @@
     if (opt && opt.value) {
       $('evTitle').value = opt.textContent;
       modalCategoryIds = resolveCourseCategories(opt.value).ids;
+      prefillDescription(opt.value);
     } else {
       modalCategoryIds = [];
     }
@@ -907,5 +976,34 @@
 
     refreshMonth();
   }
+
+  // Shared with the Classes approval queue (Approvals tab): editing a draft
+  // and jumping the calendar to it. Ensures the schedule module is
+  // initialized first so the editor's reference data exists.
+  async function ensureInit() {
+    if (!schedInitialized) {
+      schedInitialized = true;
+      await initSchedule();
+    }
+  }
+
+  window.EasySchedule = {
+    normalizeEvent,
+    refreshCalendar() { if (schedInitialized) refreshMonth(); },
+    async editEvent(ev) {
+      await ensureInit();
+      openEventModal({ event: ev });
+    },
+    async gotoDate(dateStr) {
+      await ensureInit();
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr || '');
+      if (m) {
+        viewYear = parseInt(m[1], 10);
+        viewMonth = parseInt(m[2], 10) - 1;
+      }
+      window.EasyViews.showView('schedule');
+      refreshMonth();
+    },
+  };
 
 })();
