@@ -19,13 +19,136 @@ const { fillCertificatePdf } = require('./pdfgen');
 if (require('electron-squirrel-startup')) app.quit();
 
 // Self-updates via GitHub Releases (public repo Eladerino/EASY-Operations).
-// Only runs in the packaged app; in dev it would just be noise. The module
-// reads the repo from package.json's "repository" field, checks on launch
-// and every 10 minutes, and shows Pam a "restart to install" dialog when an
-// update is downloaded.
-if (app.isPackaged) {
+// Only runs in the packaged app; in dev it would just be noise.
+//
+// Policy (per Brandon):
+// - An update found DURING operation just notifies — Pam can finish what
+//   she's doing and restart later.
+// - An update still uninstalled at the NEXT launch is mandatory: the app
+//   shows a blocking "Restart to update" prompt before the main window
+//   opens, so she can never run more than one session behind.
+const PENDING_UPDATE_FILE = () => path.join(app.getPath('userData'), 'pending-update.json');
+let gateCheckInFlight = false;
+
+function readPendingUpdate() {
   try {
-    require('update-electron-app').updateElectronApp();
+    const data = JSON.parse(fs.readFileSync(PENDING_UPDATE_FILE(), 'utf8'));
+    return data && data.version ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+function writePendingUpdate(version) {
+  try {
+    fs.writeFileSync(PENDING_UPDATE_FILE(), JSON.stringify({ version }), 'utf8');
+  } catch (err) {
+    console.error('[updater] could not record pending update:', err && err.message);
+  }
+}
+
+function clearPendingUpdate() {
+  try { fs.unlinkSync(PENDING_UPDATE_FILE()); } catch { /* already gone */ }
+}
+
+// Minimal semver compare: true when a is strictly newer than b.
+function isNewerVersion(a, b) {
+  const pa = String(a).split('.').map((x) => parseInt(x, 10) || 0);
+  const pb = String(b).split('.').map((x) => parseInt(x, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const x = pa[i] || 0;
+    const y = pb[i] || 0;
+    if (x !== y) return x > y;
+  }
+  return false;
+}
+
+// Settles when the update check resolves: 'downloaded' | 'none' | 'error'.
+// Never rejects; times out so a dead network can't brick the launch.
+function checkForUpdatesSettled(timeoutMs) {
+  const { autoUpdater } = require('electron');
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (r) => { if (!done) { done = true; resolve(r); } };
+    const timer = setTimeout(() => finish('error'), timeoutMs || 30000);
+    autoUpdater.once('update-downloaded', () => { clearTimeout(timer); finish('downloaded'); });
+    autoUpdater.once('update-not-available', () => { clearTimeout(timer); finish('none'); });
+    autoUpdater.once('error', () => { clearTimeout(timer); finish('error'); });
+    try {
+      autoUpdater.checkForUpdates();
+    } catch {
+      clearTimeout(timer);
+      finish('error');
+    }
+  });
+}
+
+// Startup gate: if a previous session downloaded an update that never got
+// installed, re-verify it against the feed and force the restart before the
+// main window opens. Returns true when the app is about to quit for the
+// install (caller must not create the main window).
+async function maybeGateForPendingUpdate() {
+  if (!app.isPackaged) return false;
+  const pending = readPendingUpdate();
+  if (!pending || !isNewerVersion(pending.version, app.getVersion())) {
+    if (pending) clearPendingUpdate();
+    return false;
+  }
+  gateCheckInFlight = true;
+  try {
+    const result = await checkForUpdatesSettled(30000);
+    if (result === 'downloaded') {
+      dialog.showMessageBoxSync({
+        type: 'info',
+        title: 'Update ready',
+        message: `EASY Operations ${pending.version} has been downloaded.`,
+        detail: 'Please restart to apply the update before continuing.',
+        buttons: ['Restart to update'],
+        noLink: true,
+      });
+      // No way forward except the restart — that is the point of the gate.
+      require('electron').autoUpdater.quitAndInstall();
+      return true;
+    }
+    // Definitive "nothing pending" clears a stale flag; a network failure
+    // keeps the flag so the next launch tries again. Either way the app
+    // opens — an unreachable feed must never brick the launch.
+    if (result === 'none') clearPendingUpdate();
+    return false;
+  } finally {
+    gateCheckInFlight = false;
+  }
+}
+
+// Background updater: update-electron-app checks on launch and every 10
+// minutes. Downloading is silent; a downloaded update notifies gently and
+// records itself so the next launch can enforce it (see
+// maybeGateForPendingUpdate).
+function initUpdater() {
+  if (!app.isPackaged) return;
+  try {
+    const { autoUpdater } = require('electron');
+    require('update-electron-app').updateElectronApp({ notifyUser: false });
+    autoUpdater.on('update-downloaded', (event, releaseNotes, releaseName) => {
+      const version = String(releaseName || '').trim() || 'new version';
+      writePendingUpdate(version);
+      if (gateCheckInFlight) return; // the gate is handling this one
+      dialog.showMessageBox({
+        type: 'info',
+        title: 'Update available',
+        message: `EASY Operations ${version} is ready to install.`,
+        detail: 'Restart now to apply it, or later — it will be required the next time you open the app.',
+        buttons: ['Restart now', 'Later'],
+        defaultId: 0,
+        cancelId: 1,
+        noLink: true,
+      }).then(({ response }) => {
+        if (response === 0) {
+          clearPendingUpdate();
+          autoUpdater.quitAndInstall();
+        }
+      }).catch(() => { /* dialog dismissed */ });
+    });
   } catch (err) {
     console.error('[updater] failed to start:', err && err.message);
   }
@@ -164,12 +287,16 @@ if (!singleInstance) {
     }
   });
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     const config = getConfig();
     if (!config.ok) {
       dialog.showErrorBox('EASY Operations — setup needed', `${config.error}\n\nFile: ${config.path}`);
     }
+    // A downloaded-but-uninstalled update from a previous session is
+    // mandatory: restart to apply it before the main window opens.
+    if (await maybeGateForPendingUpdate()) return;
     createWindow();
+    initUpdater();
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -260,7 +387,7 @@ async function printPdfBuffer(pdfBuffer, config) {
 /* Build tag — lets the renderer detect stale/mismatched app files      */
 /* ------------------------------------------------------------------ */
 
-const BUILD_TAG = 'ops-20261002x';
+const BUILD_TAG = 'ops-20261002ae';
 
 // Instructors always connect here; the setup screen shows it read-only.
 const SETUP_SITE_URL = 'https://easysafety.ca';
@@ -763,7 +890,11 @@ ipcMain.handle('schedule-list-categories', async () => {
     let page = 1;
     let totalPages = 1;
     do {
-      const r = await tribeRequest(config, 'GET', '/categories', { query: { per_page: 100, page } });
+      // hide_empty=0: the endpoint omits terms with no events by default,
+      // which makes a child category undiscoverable (and unassignable)
+      // until something is filed under it — exactly the Skid Steer case.
+      // "0" (not false): in PHP the string "false" is truthy.
+      const r = await tribeRequest(config, 'GET', '/categories', { query: { per_page: 100, page, hide_empty: 0 } });
       if (r.status !== 200) {
         return { ok: false, error: (r.json && r.json.message) || `WordPress returned HTTP ${r.status}.` };
       }
@@ -823,7 +954,15 @@ ipcMain.handle('schedule-update-event', async (_event, { id, payload } = {}) => 
   if (!id) return { ok: false, error: 'No event id was provided.' };
   try {
     const r = await tribeRequest(config, 'PUT', `/events/${id}`, { body: payload || {} });
-    if (r.status === 200 || r.status === 201) return { ok: true, event: r.json };
+    if (r.status === 200 || r.status === 201) {
+      // WordPress can answer 200 while silently leaving the status
+      // unchanged when the account lacks publish rights — verify before
+      // claiming success, or the app toasts "published" for a draft.
+      if (payload && payload.status === 'publish' && r.json && r.json.status && r.json.status !== 'publish') {
+        return { ok: false, error: 'WordPress kept the class as a draft. This account cannot publish classes (it needs the publish_tribe_events capability).' };
+      }
+      return { ok: true, event: r.json };
+    }
     return { ok: false, error: friendlyWriteError(r, 'update the class') };
   } catch (err) {
     return { ok: false, error: err.message };
@@ -987,7 +1126,11 @@ ipcMain.handle('cert-approvals-probe', async () => {
     if (r.status === 200) {
       return { ok: true, canReview: true, count: parseInt(r.total || '0', 10) || 0 };
     }
-    if (r.status === 401 || r.status === 403) return { ok: true, canReview: false };
+    // 401/403 = no permission. 400 is WordPress's way of saying the same
+    // thing here: for accounts without edit rights on the cert post type,
+    // `status=draft` is rejected as an invalid parameter (rest_invalid_param)
+    // rather than a permission error.
+    if (r.status === 400 || r.status === 401 || r.status === 403) return { ok: true, canReview: false };
     return { ok: false, error: `Unexpected response while checking certificate review permissions (HTTP ${r.status}).` };
   } catch (err) {
     return { ok: false, error: `Could not reach the certificates API: ${err.message}` };

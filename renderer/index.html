@@ -279,6 +279,7 @@
   <main id="approvalsMain" class="hidden" aria-label="Approvals">
     <div class="sub-tabs" role="tablist" aria-label="Approval queues">
       <button type="button" id="subTabCerts" class="sub-tab active" role="tab">Certificates <span id="subTabCertsBadge" class="tab-badge hidden"></span></button>
+      <button type="button" id="subTabClasses" class="sub-tab" role="tab">Classes <span id="subTabClassesBadge" class="tab-badge hidden"></span></button>
       <button type="button" id="subTabAccounts" class="sub-tab" role="tab">Accounts <span id="subTabAccountsBadge" class="tab-badge hidden"></span></button>
     </div>
 
@@ -294,6 +295,21 @@
         <div id="certApprovLoading" class="hint hidden">Loading&hellip;</div>
         <div id="certApprovEmpty" class="hint hidden">No certificates are waiting for review.</div>
         <ul id="certApprovList" class="approv-list"></ul>
+      </div>
+    </section>
+
+    <section id="classApprovPanel" class="hidden" aria-label="Class approvals">
+      <div id="classApprovPermBanner" class="sched-banner hidden" role="alert"></div>
+      <div class="card">
+        <h2>Classes awaiting approval</h2>
+        <p class="hint">Draft classes proposed by instructors. Publishing makes the class visible on the site.</p>
+        <div class="lookup-row">
+          <button type="button" id="classApprovRefresh" class="btn btn-secondary btn-small">Refresh</button>
+        </div>
+        <div id="classApprovError" class="error-summary hidden" role="alert"></div>
+        <div id="classApprovLoading" class="hint hidden">Loading&hellip;</div>
+        <div id="classApprovEmpty" class="hint hidden">No classes are waiting for approval.</div>
+        <ul id="classApprovList" class="approv-list"></ul>
       </div>
     </section>
 
@@ -645,6 +661,7 @@
   <script src="schedule.js"></script>
   <script src="approvals.js"></script>
   <script src="cert-approvals.js"></script>
+  <script src="class-approvals.js"></script>
   <script src="cert-tools.js"></script>
   <script src="startup-scan.js"></script>
   <script src="online-learning.js"></script>

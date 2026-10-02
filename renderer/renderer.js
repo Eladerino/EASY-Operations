@@ -5,8 +5,15 @@
 
   const S = window.EasyCertShared;
   // Must match BUILD_TAG in main.js; a mismatch means stale/mixed app files.
-  const EXPECTED_BUILD_TAG = 'ops-20261002x';
+  const EXPECTED_BUILD_TAG = 'ops-20261002ae';
   const $ = (id) => document.getElementById(id);
+
+  // Review privileges, resolved from getAppInfo during startup. Pam (proxy
+  // poster) and office-mode accounts see every approval queue; plain
+  // instructor accounts get the review UI trimmed (no Classes queue, no
+  // cert Publish button, no Accounts sub-tab). WordPress still enforces
+  // the actual actions, so this is presentation, not security.
+  window.EasyPerms = { privileged: true };
 
   const form = $('certForm');
   const postButton = $('postButton');
@@ -927,6 +934,15 @@
         return;
       }
       applyAppMode(info);
+      // Resolve review privileges and trim the approval UI for plain
+      // instructor accounts (Pam and office mode keep everything).
+      window.EasyPerms.privileged = Boolean(info.proxyPosting || info.mode === 'office');
+      if (!window.EasyPerms.privileged) {
+        for (const id of ['subTabClasses', 'subTabAccounts']) {
+          const el = $(id);
+          if (el) el.classList.add('hidden');
+        }
+      }
       // Background attention scan: populate the badge counts so nothing
       // needing review looks "all clear" on launch. Fire and forget —
       // the scan is silent and never blocks the UI.

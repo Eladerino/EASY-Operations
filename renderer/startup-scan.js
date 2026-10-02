@@ -45,6 +45,25 @@
     }
   }
 
+  async function scanClassApprovals() {
+    try {
+      // Instructors have no class queue (the sub-tab is hidden for them),
+      // so there is nothing to count.
+      if (window.EasyPerms && !window.EasyPerms.privileged) {
+        console.log('[startup-scan] class approvals skipped (not a reviewer)');
+        return;
+      }
+      if (window.EasyClassApprovals && window.EasyClassApprovals.primeBadge) {
+        await window.EasyClassApprovals.primeBadge();
+        console.log('[startup-scan] class approvals badge primed');
+      } else {
+        console.warn('[startup-scan] EasyClassApprovals.primeBadge not available');
+      }
+    } catch (err) {
+      console.warn('[startup-scan] class approvals probe failed:', err && err.message);
+    }
+  }
+
   async function run() {
     console.log('[startup-scan] starting');
     // The scan fires after an IPC round-trip, which can resolve before
@@ -55,7 +74,7 @@
         document.addEventListener('DOMContentLoaded', resolve, { once: true })
       );
     }
-    await Promise.allSettled([scanCertApprovals(), scanAccountApprovals(), scanExpiring()]);
+    await Promise.allSettled([scanCertApprovals(), scanAccountApprovals(), scanClassApprovals(), scanExpiring()]);
     console.log('[startup-scan] done');
   }
 
