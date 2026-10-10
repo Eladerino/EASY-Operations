@@ -5,7 +5,7 @@
 
   const S = window.EasyCertShared;
   // Must match BUILD_TAG in main.js; a mismatch means stale/mixed app files.
-  const EXPECTED_BUILD_TAG = 'ops-20261002ae';
+  const EXPECTED_BUILD_TAG = 'ops-20261010a';
   const $ = (id) => document.getElementById(id);
 
   // Review privileges, resolved from getAppInfo during startup. Pam (proxy
@@ -519,6 +519,14 @@
     // Confirm-email match.
     if (studentEmail.value !== confirmEmail.value) problems.push(confirmEmail);
 
+    // Company contact is optional, but when filled it must be a valid email
+    // (it feeds the employer certificate digest).
+    const companyContactField = $('companyContact');
+    const ccValue = companyContactField.value.trim();
+    if (ccValue !== '' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(ccValue)) {
+      problems.push(companyContactField);
+    }
+
     return problems;
   }
 
@@ -543,6 +551,13 @@
         setFieldError(confirmEmail, 'Emails do not match.');
       } else if (confirmEmail.checkValidity()) {
         setFieldError(confirmEmail, '');
+      }
+
+      const companyContactField = $('companyContact');
+      if (problems.includes(companyContactField)) {
+        setFieldError(companyContactField, 'Enter a valid email address, or leave this blank.');
+      } else {
+        setFieldError(companyContactField, '');
       }
 
       if (problems.length) {

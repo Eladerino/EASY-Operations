@@ -23,8 +23,12 @@ module.exports = {
       name: '@electron-forge/maker-squirrel',
       config: {
         name: 'easy-operations',
+        // Display name used for the desktop/Start Menu shortcuts and the
+        // Add/Remove Programs entry. (The old `shortcutName` key is not a
+        // real electron-winstaller option and was silently ignored, which is
+        // why shortcuts showed up as "easy-operations".)
+        title: 'EASY Operations',
         setupIcon: './icon.ico',
-        shortcutName: 'Easy Operations',
         setupExe: 'EasyOperationsInstaller.exe',
         createDesktopShortcut: true,
         createStartMenuShortcut: true,
