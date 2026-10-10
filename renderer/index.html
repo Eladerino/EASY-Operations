@@ -6,6 +6,7 @@
   <title>EASY Operations</title>
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="schedule.css">
+  <link rel="stylesheet" href="builder.css">
 </head>
 <body class="cert-form-mode">
   <div id="configBanner" class="banner hidden" role="alert"></div>
@@ -89,6 +90,7 @@
         <button type="button" id="tabApprovals" class="view-tab">Approvals <span id="tabApprovalsBadge" class="tab-badge hidden"></span></button>
         <button type="button" id="tabSchedule" class="view-tab">Schedule</button>
         <button type="button" id="tabOnlineLearning" class="view-tab">Online Learning <span id="tabOnlineLearningBadge" class="tab-badge hidden"></span></button>
+        <button type="button" id="tabCourseBuilder" class="view-tab">Course Builder <span id="tabCourseBuilderBadge" class="tab-badge hidden"></span></button>
       </nav>
       <button type="button" id="setupHeaderButton" class="btn btn-secondary btn-small" title="Settings">Setup</button>
     </div>
@@ -441,6 +443,13 @@
     </section>
   </main>
 
+  <main id="builderMain" class="hidden builder-main" aria-label="Course Builder">
+    <div class="concept-banner" role="note">
+      Courses are stored on this machine only until sent for review.
+    </div>
+    <div id="builderRoot"></div>
+  </main>
+
   <footer class="action-bar">
     <button type="button" id="clearButton" class="btn btn-secondary">Clear</button>
     <button type="button" id="postButton" class="btn btn-primary" disabled>
@@ -665,5 +674,6 @@
   <script src="cert-tools.js"></script>
   <script src="startup-scan.js"></script>
   <script src="online-learning.js"></script>
+  <script src="course-builder.js"></script>
 </body>
 </html>

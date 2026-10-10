@@ -387,7 +387,7 @@ async function printPdfBuffer(pdfBuffer, config) {
 /* Build tag — lets the renderer detect stale/mismatched app files      */
 /* ------------------------------------------------------------------ */
 
-const BUILD_TAG = 'ops-20261010a';
+const BUILD_TAG = 'ops-20261010b';
 
 // Instructors always connect here; the setup screen shows it read-only.
 const SETUP_SITE_URL = 'https://easysafety.ca';
@@ -1140,6 +1140,17 @@ ipcMain.handle('cert-approvals-probe', async () => {
   }
 });
 
+// ACF date picker may return "Y-m-d" or "Ymd" depending on field config;
+// normalize both to "Y-m-d" for comparisons.
+function toIsoDate(v) {
+  const s = String(v || '').trim();
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = s.match(/^(\d{4})(\d{2})(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  return '';
+}
+
 function normalizeDraftCert(c) {
   const acf = (c && c.acf) || {};
   // Title shape: "YYYY-MM-DD - Course Name - Student Name".
@@ -1399,8 +1410,9 @@ ipcMain.handle('cert-tools-expiring', async (_event, days = 90) => {
       if (!items.length) break;
       for (const c of items) {
         const n = normalizeDraftCert(c);
-        if (!n.expiryDate || !/^\d{4}-\d{2}-\d{2}/.test(n.expiryDate)) continue;
-        const exp = new Date(n.expiryDate.slice(0, 10) + 'T00:00:00');
+        const iso = toIsoDate(n.expiryDate);
+        if (!iso) continue;
+        const exp = new Date(iso + 'T00:00:00');
         if (Number.isNaN(exp.getTime()) || exp < today || exp > horizon) continue;
         n.daysLeft = Math.round((exp - today) / 86400000);
         out.push(n);
