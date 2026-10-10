@@ -387,7 +387,7 @@ async function printPdfBuffer(pdfBuffer, config) {
 /* Build tag — lets the renderer detect stale/mismatched app files      */
 /* ------------------------------------------------------------------ */
 
-const BUILD_TAG = 'ops-20261002ae';
+const BUILD_TAG = 'ops-20261010a';
 
 // Instructors always connect here; the setup screen shows it read-only.
 const SETUP_SITE_URL = 'https://easysafety.ca';
@@ -598,6 +598,9 @@ ipcMain.handle('submit-certificate', async (_event, payload) => {
     const pdfFile = new File([pdfBuffer], payload.filename, { type: 'application/pdf' });
     const uploadForm = new FormData();
     uploadForm.append('file', pdfFile, payload.filename);
+    // Marker for the server (EASY Core 1.5.0+): route cert PDFs into the
+    // private, gatekeeper-served folder instead of public uploads.
+    uploadForm.append('easy_cert_pdf', '1');
 
     const mediaRes = await fetch(`${base}/wp-json/wp/v2/media`, {
       method: 'POST',
@@ -1243,17 +1246,24 @@ ipcMain.handle('cert-approvals-preview', async (_event, id) => {
     if (!certRes.ok) {
       return { ok: false, error: 'Could not read this draft certificate.' };
     }
-    const ref = resolvePdfRef(certJson && certJson.acf);
+    const acf = certJson && certJson.acf;
+    const ref = resolvePdfRef(acf);
     if (!ref) {
       return { ok: false, error: 'No PDF is attached to this draft yet.' };
     }
-    let sourceUrl = ref.kind === 'url' ? ref.url : null;
-    if (ref.kind === 'id') {
-      const mediaRes = await fetch(`${base}/wp-json/wp/v2/media/${ref.id}?_fields=source_url`, { headers });
-      const mediaJson = await mediaRes.json().catch(() => ({}));
-      sourceUrl = mediaJson && mediaJson.source_url;
-      if (!mediaRes.ok || !sourceUrl) {
-        return { ok: false, error: 'Could not locate the certificate PDF.' };
+    // Prefer the authenticated gatekeeper (EASY Core 1.5.0+): cert PDFs are
+    // no longer web-accessible at their direct media URLs.
+    const certNumber = (acf && acf.certificate_number) || '';
+    let sourceUrl = certNumber ? `${base}/cert-pdf/${encodeURIComponent(certNumber)}/` : null;
+    if (!sourceUrl) {
+      sourceUrl = ref.kind === 'url' ? ref.url : null;
+      if (ref.kind === 'id') {
+        const mediaRes = await fetch(`${base}/wp-json/wp/v2/media/${ref.id}?_fields=source_url`, { headers });
+        const mediaJson = await mediaRes.json().catch(() => ({}));
+        sourceUrl = mediaJson && mediaJson.source_url;
+        if (!mediaRes.ok || !sourceUrl) {
+          return { ok: false, error: 'Could not locate the certificate PDF.' };
+        }
       }
     }
     const dlRes = await fetch(sourceUrl, { headers });
@@ -1320,14 +1330,21 @@ async function downloadCertPdf(config, numId) {
   const certRes = await fetch(`${base}/wp-json/wp/v2/cert/${numId}?_fields=acf`, { headers });
   const certJson = await certRes.json().catch(() => ({}));
   if (!certRes.ok) throw new Error('Could not read this certificate.');
-  const ref = resolvePdfRef(certJson && certJson.acf);
+  const acf = certJson && certJson.acf;
+  const ref = resolvePdfRef(acf);
   if (!ref) throw new Error('No PDF is attached to this certificate yet.');
-  let sourceUrl = ref.kind === 'url' ? ref.url : null;
-  if (ref.kind === 'id') {
-    const mediaRes = await fetch(`${base}/wp-json/wp/v2/media/${ref.id}?_fields=source_url`, { headers });
-    const mediaJson = await mediaRes.json().catch(() => ({}));
-    sourceUrl = mediaJson && mediaJson.source_url;
-    if (!mediaRes.ok || !sourceUrl) throw new Error('Could not locate the certificate PDF.');
+  // Prefer the authenticated gatekeeper (EASY Core 1.5.0+): cert PDFs are
+  // no longer web-accessible at their direct media URLs.
+  const certNumber = (acf && acf.certificate_number) || '';
+  let sourceUrl = certNumber ? `${base}/cert-pdf/${encodeURIComponent(certNumber)}/` : null;
+  if (!sourceUrl) {
+    sourceUrl = ref.kind === 'url' ? ref.url : null;
+    if (ref.kind === 'id') {
+      const mediaRes = await fetch(`${base}/wp-json/wp/v2/media/${ref.id}?_fields=source_url`, { headers });
+      const mediaJson = await mediaRes.json().catch(() => ({}));
+      sourceUrl = mediaJson && mediaJson.source_url;
+      if (!mediaRes.ok || !sourceUrl) throw new Error('Could not locate the certificate PDF.');
+    }
   }
   const dlRes = await fetch(sourceUrl, { headers });
   if (!dlRes.ok) throw new Error(`Could not download the PDF (HTTP ${dlRes.status}).`);
