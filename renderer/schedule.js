@@ -18,6 +18,11 @@
   const $ = (id) => document.getElementById(id);
   const api = () => window.easyCert.schedule;
 
+  // Course Builder access gate: renderer.js sets this true during startup for
+  // Brandon (author1) and Dad (sglynn) only. Defaults to false (fail closed)
+  // so the tab can never leak to other accounts.
+  window.EasyCourseBuilderAllowed = false;
+
   /* ---------------- small date helpers (wall-clock, DST-safe) ---------------- */
 
   const pad2 = (n) => String(n).padStart(2, '0');
@@ -119,18 +124,25 @@
   }
 
   function showView(name) {
+    // Course Builder is gated to Brandon & Dad — everyone else falls back.
+    if (name === 'builder' && window.EasyCourseBuilderAllowed !== true) {
+      name = 'certs';
+    }
     currentView = name;
     const sched = name === 'schedule';
     const appr = name === 'approvals';
     const online = name === 'online';
+    const builder = name === 'builder';
     $('certMain').classList.toggle('hidden', name !== 'certs');
     $('scheduleMain').classList.toggle('hidden', !sched);
     $('approvalsMain').classList.toggle('hidden', !appr);
     $('onlineMain').classList.toggle('hidden', !online);
+    $('builderMain').classList.toggle('hidden', !builder);
     $('tabCerts').classList.toggle('active', name === 'certs');
     $('tabSchedule').classList.toggle('active', sched);
     $('tabApprovals').classList.toggle('active', appr);
     $('tabOnlineLearning').classList.toggle('active', online);
+    $('tabCourseBuilder').classList.toggle('active', builder);
     updateFooter();
     if (sched) {
       if (!schedInitialized) {
@@ -143,6 +155,8 @@
       window.EasyApprovalTabs.show();
     } else if (online && window.EasyOnlineTabs) {
       window.EasyOnlineTabs.show();
+    } else if (builder && window.EasyCourseBuilder) {
+      window.EasyCourseBuilder.show();
     } else if (name === 'certs' && window.EasyCertTools) {
       window.EasyCertTools.onCertsTabShown();
     }
@@ -151,6 +165,7 @@
 
   $('tabCerts').addEventListener('click', () => showView('certs'));
   $('tabSchedule').addEventListener('click', () => showView('schedule'));
+  $('tabCourseBuilder').addEventListener('click', () => showView('builder'));
 
   /* ---------------- state ---------------- */
 

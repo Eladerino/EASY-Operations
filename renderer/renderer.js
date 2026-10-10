@@ -5,7 +5,7 @@
 
   const S = window.EasyCertShared;
   // Must match BUILD_TAG in main.js; a mismatch means stale/mixed app files.
-  const EXPECTED_BUILD_TAG = 'ops-20261010a';
+  const EXPECTED_BUILD_TAG = 'ops-20261010b';
   const $ = (id) => document.getElementById(id);
 
   // Review privileges, resolved from getAppInfo during startup. Pam (proxy
@@ -949,6 +949,13 @@
         return;
       }
       applyAppMode(info);
+      // Course Builder tab: only Brandon (author1) and Dad (sglynn) may see
+      // it. Everyone else gets the tab hidden; showView() also refuses the
+      // 'builder' view for them as a backstop.
+      const builderUser = (info && info.accountUser ? String(info.accountUser) : '').toLowerCase();
+      window.EasyCourseBuilderAllowed = builderUser === 'author1' || builderUser === 'sglynn';
+      const builderTab = $('tabCourseBuilder');
+      if (builderTab) builderTab.style.display = window.EasyCourseBuilderAllowed ? '' : 'none';
       // Resolve review privileges and trim the approval UI for plain
       // instructor accounts (Pam and office mode keep everything).
       window.EasyPerms.privileged = Boolean(info.proxyPosting || info.mode === 'office');
