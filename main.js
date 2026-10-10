@@ -387,7 +387,7 @@ async function printPdfBuffer(pdfBuffer, config) {
 /* Build tag — lets the renderer detect stale/mismatched app files      */
 /* ------------------------------------------------------------------ */
 
-const BUILD_TAG = 'ops-20261010b';
+const BUILD_TAG = 'ops-20261010c';
 
 // Instructors always connect here; the setup screen shows it read-only.
 const SETUP_SITE_URL = 'https://easysafety.ca';
@@ -1387,38 +1387,56 @@ ipcMain.handle('cert-tools-reprint', async (_event, id) => {
 });
 
 // Certificates expiring within the next `days` days (published only).
-// Filtered locally: WP REST cannot query ACF meta without a snippet.
+// Served by EASY Core 1.5.6+ via /wp-json/easy/v1/expiring-certs — the
+// server filters on expiry_date postmeta directly, so no pagination.
 ipcMain.handle('cert-tools-expiring', async (_event, days = 90) => {
   const config = getConfig();
   if (!config.ok) return { ok: false, error: config.error };
   const windowDays = Math.min(Math.max(parseInt(days, 10) || 90, 1), 365);
   try {
+    const auth = effectiveAuth(config).post;
+    const base = config.wpBaseUrl.replace(/\/+$/, '');
+    const url = `${base}/wp-json/easy/v1/expiring-certs?days=${windowDays}`;
+    const res = await fetch(url, { headers: { Authorization: basicAuth(auth) } });
+    if (res.status !== 200) {
+      const body = await res.json().catch(() => ({}));
+      return { ok: false, error: (body && body.message) || `WordPress returned HTTP ${res.status}.` };
+    }
+    const items = await res.json().catch(() => []);
+    const list = Array.isArray(items) ? items : [];
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const horizon = new Date(today.getTime() + windowDays * 86400000);
     const out = [];
-    let page = 1;
-    for (;;) {
-      const r = await certApprovalsRequest(
-        config,
-        `?status=publish&per_page=100&page=${page}&orderby=date&order=desc&_fields=id,date,title,acf`
-      );
-      if (r.status !== 200) {
-        return { ok: false, error: (r.json && r.json.message) || `WordPress returned HTTP ${r.status}.` };
+    for (const c of list) {
+      const iso = toIsoDate(c.expiry_date);
+      if (!iso) continue;
+      const exp = new Date(iso + 'T00:00:00');
+      if (Number.isNaN(exp.getTime())) continue;
+      const daysLeft = Math.round((exp - today) / 86400000);
+      // Title shape: "YYYY-MM-DD - Course Name - Student Name" (fallback).
+      let course = '', student = '';
+      const title = c.title ? String(c.title) : '';
+      const parts = title.split(' - ');
+      if (parts.length >= 3) {
+        student = parts.slice(2).join(' - ').trim();
+        course = parts.slice(1, -1).join(' - ').trim();
       }
-      const items = Array.isArray(r.json) ? r.json : [];
-      if (!items.length) break;
-      for (const c of items) {
-        const n = normalizeDraftCert(c);
-        const iso = toIsoDate(n.expiryDate);
-        if (!iso) continue;
-        const exp = new Date(iso + 'T00:00:00');
-        if (Number.isNaN(exp.getTime()) || exp < today || exp > horizon) continue;
-        n.daysLeft = Math.round((exp - today) / 86400000);
-        out.push(n);
-      }
-      if (items.length < 100 || page >= 5) break;
-      page += 1;
+      out.push({
+        id: c.id,
+        title,
+        student: c.student_name || student || '(no name)',
+        course: course || c.course_title || '',
+        completionDate: c.completion_date || '',
+        expiryDate: c.expiry_date || '',
+        certificateNumber: c.certificate_number || '',
+        instructor: c.instructor || '',
+        instructorEmail: c.instructor_email || '',
+        company: c.company || '',
+        companyContact: c.company_contact || '',
+        studentEmail: c.student_email || '',
+        studentPhone: '',
+        daysLeft,
+      });
     }
     out.sort((a, b) => a.daysLeft - b.daysLeft);
     return { ok: true, certs: out };
