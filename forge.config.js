@@ -22,7 +22,7 @@ module.exports = {
     {
       name: '@electron-forge/maker-squirrel',
       config: {
-        name: 'easy-operations',
+        name: 'EASYOperations',
         // Display name used for the desktop/Start Menu shortcuts and the
         // Add/Remove Programs entry. (The old `shortcutName` key is not a
         // real electron-winstaller option and was silently ignored, which is

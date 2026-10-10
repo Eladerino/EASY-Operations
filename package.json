@@ -18,14 +18,14 @@
     "electron": "^34.0.0"
   },
   "main": "main.js",
-  "name": "easy-operations",
+  "name": "EASYOperations",
   "scripts": {
     "make": "electron-forge make",
     "package": "electron-forge package",
     "start": "electron-forge start",
     "publish": "electron-forge publish"
   },
-  "version": "1.0.5",
+  "version": "1.0.6",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Eladerino/EASY-Operations.git"
