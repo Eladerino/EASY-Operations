@@ -106,6 +106,15 @@ Only publish when there's something users should receive — every published
 release triggers an update prompt. The updater only runs in the packaged app
 (`app.isPackaged` guard); dev builds never phone home.
 
+## Security
+
+- **Site URL is pinned:** the setup wizard only accepts `https://easysafety.ca`; anything else is rejected at save time.
+- **Passwords are encrypted:** WordPress application passwords are stored with the OS keychain (Electron `safeStorage`) when available. Older plaintext configs keep working and are migrated automatically on launch.
+- **Locked-down UI:** a Content Security Policy restricts the renderer to local files, and every window denies popups and non-local navigation.
+- **No orphaned files:** if certificate posting fails after the PDF upload, the uploaded file is deleted; saving over a draft deletes the superseded PDF.
+- **Unique certificate numbers:** the app scans recent certificates and auto-bumps the instance number on collision instead of posting duplicates.
+- **ACF allowlist:** only known certificate fields are forwarded to WordPress.
+
 ## Project layout
 
 | File | Purpose |
