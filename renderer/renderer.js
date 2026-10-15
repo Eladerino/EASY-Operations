@@ -8,8 +8,8 @@
   const EXPECTED_BUILD_TAG = 'ops-20261010c';
   const $ = (id) => document.getElementById(id);
 
-  // Review privileges, resolved from getAppInfo during startup. Pam (proxy
-  // poster) and office-mode accounts see every approval queue; plain
+  // Review privileges, resolved from getAppInfo during startup. Proxy-poster
+  // and office-mode accounts see every approval queue; plain
   // instructor accounts get the review UI trimmed (no Classes queue, no
   // cert Publish button, no Accounts sub-tab). WordPress still enforces
   // the actual actions, so this is presentation, not security.
@@ -141,7 +141,7 @@
     applyPrinterState(info.printerConfigured !== false);
   }
 
-  // Proxy-poster accounts (e.g. Pam): the instructor fields stay blank and
+  // Proxy-poster accounts (e.g. designated office accounts): the instructor fields stay blank and
   // editable so certificates can be posted for another instructor. The
   // fields are required, so nothing ships without an instructor on it.
   function applyProxyPostingNote() {
@@ -949,7 +949,7 @@
         return;
       }
       applyAppMode(info);
-      // Course Builder tab: only Brandon (author1) and Dad (sglynn) may see
+      // Course Builder tab: only allowlisted accounts may see
       // it. Everyone else gets the tab hidden; showView() also refuses the
       // 'builder' view for them as a backstop.
       const builderUser = (info && info.accountUser ? String(info.accountUser) : '').toLowerCase();
@@ -957,7 +957,7 @@
       const builderTab = $('tabCourseBuilder');
       if (builderTab) builderTab.style.display = window.EasyCourseBuilderAllowed ? '' : 'none';
       // Resolve review privileges and trim the approval UI for plain
-      // instructor accounts (Pam and office mode keep everything).
+      // instructor accounts (office mode keeps everything).
       window.EasyPerms.privileged = Boolean(info.proxyPosting || info.mode === 'office');
       if (!window.EasyPerms.privileged) {
         for (const id of ['subTabClasses', 'subTabAccounts']) {
