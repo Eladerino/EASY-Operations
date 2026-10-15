@@ -1,6 +1,6 @@
 // class-approvals.js — "Classes" queue under the Approvals tab.
 //
-// Pam's review inbox for draft/pending class events proposed by instructors.
+// Office review inbox for draft/pending class events proposed by instructors.
 // Edit reuses the Schedule tab's class editor (via window.EasySchedule);
 // Publish flips the event to published; "View on calendar" jumps to the
 // class's month for context. Publish rights are enforced by WordPress at
