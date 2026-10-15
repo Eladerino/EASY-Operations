@@ -803,6 +803,14 @@
         return;
       }
 
+      // The main process may have bumped the certificate number to avoid a
+      // collision — keep the form in sync for the "more students" flow.
+      if (result.certificateNumber) {
+        certificateNumber.value = result.certificateNumber;
+        const numMatch = /(\d{2})$/.exec(result.certificateNumber);
+        if (numMatch) instanceNumber = parseInt(numMatch[1], 10);
+      }
+
       if (result.updated) {
         toast('Draft updated.', 'success');
         cancelEdit();
