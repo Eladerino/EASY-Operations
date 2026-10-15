@@ -21,12 +21,12 @@ if (require('electron-squirrel-startup')) app.quit();
 // Self-updates via GitHub Releases (public repo Eladerino/EASY-Operations).
 // Only runs in the packaged app; in dev it would just be noise.
 //
-// Policy (per Brandon):
-// - An update found DURING operation just notifies — Pam can finish what
-//   she's doing and restart later.
+// Policy:
+// - An update found DURING operation just notifies — office staff can
+//   finish what they're doing and restart later.
 // - An update still uninstalled at the NEXT launch is mandatory: the app
 //   shows a blocking "Restart to update" prompt before the main window
-//   opens, so she can never run more than one session behind.
+//   opens, so staff can never run more than one session behind.
 const PENDING_UPDATE_FILE = () => path.join(app.getPath('userData'), 'pending-update.json');
 let gateCheckInFlight = false;
 
@@ -243,7 +243,7 @@ function configMode(config) {
 }
 
 // WordPress usernames allowed to post certificates on behalf of other
-// instructors (e.g. Pam posting for Brandon's dad). Matched
+// instructors (e.g. office staff posting for an instructor). Matched
 // case-insensitively against the saved sign-in. Everyone else in instructor
 // mode stays locked to their own identity, in the UI and at submit time.
 const PROXY_POSTER_USERNAMES = ['pevans'];
@@ -575,7 +575,7 @@ ipcMain.handle('submit-certificate', async (_event, payload) => {
 
   // Instructor mode: stamp the signed-in instructor's identity here in the
   // main process, so the posted record cannot be re-attributed from the UI.
-  // Proxy posters (e.g. Pam) are exempt — their form values flow through.
+  // Proxy posters (e.g. designated office accounts) are exempt — their form values flow through.
   if (configMode(config) === 'instructor' && config.instructor && !isProxyPoster(config)) {
     if (config.instructor.name) {
       payload.pdf.instructorName = config.instructor.name;
@@ -738,7 +738,7 @@ ipcMain.handle('open-pdf-external', async () => {
 /* Uses the stable legacy namespace /wp-json/tribe/events/v1, which    */
 /* exists on every TEC install since 4.6 (2017). Dates are sent as     */
 /* "YYYY-MM-DD HH:MM:SS" wall-clock strings; the API interprets them   */
-/* in the WordPress site's timezone, which is exactly what Pam types   */
+/* in the WordPress site's timezone, which is exactly what staff type  */
 /* in. No Date/TZ conversion happens in the app, so machine timezone   */
 /* never enters the picture.                                           */
 /*                                                                     */
@@ -987,7 +987,7 @@ ipcMain.handle('schedule-delete-event', async (_event, id) => {
   }
 });
 
-// Site timezone, shown in the scheduling UI so Pam knows which clock
+// Site timezone, shown in the scheduling UI so staff know which clock
 // the class times are on.
 ipcMain.handle('schedule-site-info', async () => {
   const config = getConfig();
