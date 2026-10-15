@@ -1,14 +1,14 @@
-// course-builder.js — Course Builder (Brandon & Dad only).
+// course-builder.js — Course Builder (gated accounts only).
 //
-// Dad (a course author) builds online-module courses chapter by chapter on
-// this machine. Courses live in localStorage until he sends a versioned
-// review snapshot to Brandon/Pam as a file. Approving a snapshot produces
+// A course author builds online-module courses chapter by chapter on
+// this machine. Courses live in localStorage until they send a versioned
+// review snapshot to the office as a file. Approving a snapshot produces
 // the final maker-framework content package the module player consumes.
 //
 // Authorship model: the signed-in WordPress username (from getAppInfo)
 // is compared against a small editable authors list (seeded with sglynn).
 // Authors can always edit. Everyone else gets read-only + the review inbox.
-// Editing after "send for review" never locks Dad out — it just marks the
+// Editing after "send for review" never locks the author out — it just marks the
 // live course as newer than the snapshot under review.
 (function () {
   'use strict';
@@ -1383,7 +1383,7 @@
       course: snapshotOf(course),
     });
     // The browser gives no reliable "download succeeded" signal, so confirm
-    // with Dad before marking anything sent — a failed download must not
+    // with the author before marking anything sent — a failed download must not
     // bump the version or flip the status.
     const saved = await modalShell({
       title: 'Did the file download?',
