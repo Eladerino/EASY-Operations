@@ -31,8 +31,8 @@ The **Approvals** tab has two queues, each with a pending-count badge:
   the `site-plugins/easy-approvals-bridge.php` snippet on the site (requires the
   `promote_users` capability).
 
-The workflow: instructors submit drafts (the app never publishes), Pam reviews
-the Certificates queue and publishes what checks out. Instructor accounts
+The workflow: instructors submit drafts (the app never publishes); office staff
+review the Certificates queue and publish what checks out. Instructor accounts
 should have create/edit-draft rights but *not* publish rights, so the queue
 can't be bypassed.
 
@@ -69,14 +69,13 @@ can't be bypassed.
    the saved sign-in; changing the sign-in requires full new credentials and
    a successful Test connection.
 
-3. **Posting on behalf of another instructor.** Pam's account (`pevans`) is
-   exempt from the identity lock: her instructor name/email fields stay blank
-   and editable (they're required, so nothing ships without an instructor),
-   and the main process does not stamp her identity over the form values —
-   so she can post certificates for other instructors (e.g. Brandon's dad).
-   Everyone else in instructor mode is locked to their own login, stamped
-   server-side on every submit. The exempted usernames live in
-   `PROXY_POSTER_USERNAMES` in `main.js`.
+3. **Posting on behalf of another instructor.** A designated office account
+   (listed in `PROXY_POSTER_USERNAMES` in `main.js`) is exempt from the identity
+   lock: its instructor name/email fields stay blank and editable (they're
+   required, so nothing ships without an instructor), and the main process does
+   not stamp its identity over the form values — so office staff can post
+   certificates on behalf of instructors. Everyone else in instructor mode is
+   locked to their own login, stamped server-side on every submit.
 
 4. **Card printing (Windows).**
    Place `SumatraPDF-3.4.6-32.exe` in the project root before running
