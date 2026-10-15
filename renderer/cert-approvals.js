@@ -56,8 +56,8 @@
     $('certApprovPanel').classList.toggle('hidden', !certs);
     $('classApprovPanel').classList.toggle('hidden', !classes);
     $('accountApprovPanel').classList.toggle('hidden', !accounts);
-    // Prime the classes badge even when another sub-tab is active, so Pam
-    // sees the full pending count on the Approvals tab. Skipped for plain
+    // Prime the classes badge even when another sub-tab is active, so office
+    // staff see the full pending count on the Approvals tab. Skipped for plain
     // instructor accounts (no queue, no badge needed).
     if (window.EasyClassApprovals && (!window.EasyPerms || window.EasyPerms.privileged)) {
       window.EasyClassApprovals.primeBadge();
@@ -198,7 +198,7 @@
         actions.appendChild(previewBtn);
       }
       // Publish is a reviewer action: instructors see the queue read-only
-      // (their own submissions' status); Pam and office accounts publish.
+      // (their own submissions' status); office accounts publish.
       const privileged = window.EasyPerms && window.EasyPerms.privileged;
       let publishBtn = null;
       if (privileged) {
