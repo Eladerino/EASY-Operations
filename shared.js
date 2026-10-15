@@ -444,6 +444,25 @@ Course chapters:
   const WPNL_CATEGORY = 'workplace-nl-approved-training';
   const FORKLIFT_VALUE = 'counter-balance-forklift';
 
+  // Given a candidate number and the taken numbers, bump the trailing
+  // 2-digit instance until free. Throws when the series is exhausted.
+  // e.g. ("260930COURSE01", ["260930COURSE01"]) -> "260930COURSE02"
+  function nextFreeCertificateNumber(candidate, existing) {
+    const number = String(candidate || '');
+    const m = /^(.*?)(\d{2})$/.exec(number);
+    if (!m) return number;
+    const prefix = m[1];
+    let n = parseInt(m[2], 10);
+    const taken = existing instanceof Set ? existing : new Set((existing || []).map(String));
+    let final = number;
+    while (taken.has(final)) {
+      n += 1;
+      if (n > 99) throw new Error('Certificate number series exhausted (all 99 instances taken).');
+      final = prefix + String(n).padStart(2, '0');
+    }
+    return final;
+  }
+
   // e.g. ("2026-09-30", "counter-balance-forklift", 1) -> "260930COUNTERBALANCEFORKLIFT01"
   function makeCertificateNumber(completionDate, courseTitleValue, instanceNumber) {
     const date = String(completionDate).replace(/-/g, '').slice(2);
@@ -469,17 +488,25 @@ Course chapters:
   }
 
   function makePdfFilename(studentName, filenameCoursePart, completionDate) {
-    return `${sanitizeFilename(studentName)}-${filenameCoursePart}-${completionDate}.pdf`;
+    return `${sanitizeFilename(studentName)}-${sanitizeFilename(filenameCoursePart)}-${completionDate}.pdf`;
   }
 
   function makePostTitle(completionDate, pdfCourseName, studentName) {
     return `${completionDate} - ${pdfCourseName} - ${studentName}`;
   }
 
-  // Certificates expire 3 years after completion.
+  // Certificates expire 3 years after completion. A Feb 29 completion
+  // clamps to Feb 28 of the expiry year so the result is always a real
+  // date and never lands past the 3-year validity.
   function expiryPlus3Years(completionDate) {
-    const [y, m, d] = String(completionDate).split('-');
-    return `${parseInt(y, 10) + 3}-${m}-${d}`;
+    const parts = String(completionDate).split('-').map((n) => parseInt(n, 10));
+    const targetYear = parts[0] + 3;
+    const month = parts[1];
+    // Day 0 of (1-indexed) month m+1 === last day of month m.
+    const lastDay = new Date(targetYear, month, 0).getDate();
+    const day = Math.min(parts[2], lastDay);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${targetYear}-${pad(month)}-${pad(day)}`;
   }
 
   const api = {
@@ -487,6 +514,7 @@ Course chapters:
     WPNL_CATEGORY,
     FORKLIFT_VALUE,
     makeCertificateNumber,
+    nextFreeCertificateNumber,
     sanitizeFilename,
     makePdfCourseName,
     makeFilenameCoursePart,
