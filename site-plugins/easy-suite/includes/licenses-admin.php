@@ -100,7 +100,9 @@ add_action('admin_post_easy_licenses_key', function () {
         if (is_wp_error($result)) {
             easy_licenses_admin_notice('error', $result->get_error_message());
         } else {
-            easy_licenses_admin_notice('success', $label . ' is revoked.' . ($result['suspended'] ? ' The learner\'s course is suspended until the key is restored.' : ''));
+            easy_licenses_admin_notice('success', $label . ' is revoked.'
+                . ($result['suspended'] ? ' The learner\'s course is suspended until the key is restored.' : '')
+                . ($result['kept'] ? ' The learner had already finished the course, so it and their certificate stay available.' : ''));
         }
     } elseif ($do === 'restore') {
         $result = easy_licenses_restore($id);
@@ -242,17 +244,50 @@ function easy_licenses_admin_keys_tab(array $form) {
         $rows = easy_licenses_batch_rows($batch);
         if ($rows) {
             $first = $rows[0];
+            $course_title = easy_licenses_course_title($first->course);
+            // Only keys someone can still use go in the copy box; the rest are counted below it.
+            $unused = [];
+            $other = ['redeemed' => 0, 'revoked' => 0, 'expired' => 0];
+            foreach ($rows as $r) {
+                $state = easy_licenses_key_status($r);
+                if ($state === 'issued') {
+                    $unused[] = $r;
+                } elseif (isset($other[$state])) {
+                    $other[$state]++;
+                }
+            }
+            $total = count($rows);
+            $left_out = [];
+            foreach (['redeemed' => 'used', 'revoked' => 'revoked', 'expired' => 'expired'] as $state => $word) {
+                if ($other[$state]) {
+                    $left_out[] = $other[$state] . ' ' . $word;
+                }
+            }
             echo '<div class="card" style="max-width:820px;padding:12px 20px 16px;">';
-            echo '<h2 style="margin-top:6px;">' . esc_html(count($rows) === 1 ? 'Key' : count($rows) . ' keys') . ' for ' . esc_html(easy_licenses_course_title($first->course)) . '</h2>';
+            $heading = count($unused) === $total
+                ? ($total === 1 ? 'Key' : $total . ' keys') . ' for ' . $course_title
+                : count($unused) . ' unused key' . (count($unused) === 1 ? '' : 's') . ' of ' . $total . ' for ' . $course_title;
+            echo '<h2 style="margin-top:6px;">' . esc_html($heading) . '</h2>';
             echo '<p>Issued ' . esc_html(easy_licenses_date($first->issued_at, true)) . ' for ' . esc_html(trim($first->buyer_name . ' <' . $first->buyer_email . '>'))
                 . ($first->company !== '' ? ', ' . esc_html($first->company) : '') . '. Unused keys expire ' . esc_html(easy_licenses_date($first->expires_at, true)) . '.</p>';
-            $lines = implode("\n", array_map(function ($r) { return easy_key_format($r->code); }, $rows));
-            echo '<textarea readonly rows="' . (int) min(10, count($rows)) . '" class="large-text code" style="font-size:15px;letter-spacing:1px;" onclick="this.select();">' . esc_textarea($lines) . '</textarea>';
-            echo '<p class="description">Click to select, then copy into an invoice or read out over the phone.</p>';
-            if ($can_email) {
-                echo easy_licenses_admin_button('easy_licenses_batch_email', 'easy_licenses_batch_' . $batch, ['batch' => $batch], 'Email these keys to ' . $first->buyer_email, '', 'button');
+            if ($unused) {
+                $lines = implode("\n", array_map(function ($r) { return easy_key_format($r->code); }, $unused));
+                echo '<textarea readonly rows="' . (int) min(10, count($unused)) . '" class="large-text code" style="font-size:15px;letter-spacing:1px;" onclick="this.select();">' . esc_textarea($lines) . '</textarea>';
+                echo '<p class="description">Click to select, then copy into an invoice or read out over the phone.'
+                    . ($left_out ? ' Not shown above: ' . esc_html(implode(', ', $left_out)) . '.' : '') . '</p>';
+            } else {
+                echo '<p><strong>None of these keys are still unused</strong>' . ($left_out ? ' (' . esc_html(implode(', ', $left_out)) . ')' : '') . '.</p>';
             }
-            echo ' <a href="' . esc_url(easy_licenses_admin_url()) . '">Back to all keys</a></div>';
+            if ($can_email && ($unused || $other['redeemed'])) {
+                echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" style="margin:8px 0;">'
+                    . '<input type="hidden" name="action" value="easy_licenses_batch_email"><input type="hidden" name="batch" value="' . esc_attr($batch) . '">'
+                    . wp_nonce_field('easy_licenses_batch_' . $batch, '_wpnonce', true, false)
+                    . '<label for="easy-batch-email">Email these keys to</label> '
+                    . '<input type="email" id="easy-batch-email" name="email" value="' . esc_attr($first->buyer_email) . '" class="regular-text" required> '
+                    . '<button type="submit" class="button">Send</button>'
+                    . '<p class="description">Used keys are marked as used in the email. Revoked and expired keys are left out.</p></form>';
+            }
+            echo '<a href="' . esc_url(easy_licenses_admin_url()) . '">Back to all keys</a></div>';
         }
     }
 
@@ -265,7 +300,8 @@ function easy_licenses_admin_keys_tab(array $form) {
     }
     if ($approved) {
         $v = function ($key, $default = '') use ($form) { return $form[$key] ?? $default; };
-        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" style="max-width:820px;">';
+        // A second click while the first is still sending would issue a second batch.
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" style="max-width:820px;" onsubmit="if(this.dataset.sent&&Date.now()-this.dataset.sent<15000){return false;}this.dataset.sent=Date.now();">';
         echo '<input type="hidden" name="action" value="easy_licenses_issue">';
         wp_nonce_field('easy_licenses_issue');
         echo '<table class="form-table"><tbody>';
@@ -308,7 +344,7 @@ function easy_licenses_admin_keys_tab(array $form) {
     echo '<h2 style="margin-top:28px;">Keys</h2>';
     echo '<form method="get" action="' . esc_url(admin_url('admin.php')) . '" style="margin-bottom:10px;">';
     echo '<input type="hidden" name="page" value="easy-online-courses">';
-    echo '<input type="search" name="s" value="' . esc_attr($search) . '" placeholder="Key, email, name, company or order #" style="width:300px;"> ';
+    echo '<input type="search" name="s" value="' . esc_attr($search) . '" placeholder="Key, email, name, company, invoice or order #" style="width:340px;"> ';
     echo '<select name="status"><option value="">Any status</option>';
     foreach (['issued' => 'Unused', 'redeemed' => 'Used', 'revoked' => 'Revoked', 'expired' => 'Expired'] as $value => $text) {
         echo '<option value="' . esc_attr($value) . '"' . selected($status, $value, false) . '>' . esc_html($text) . '</option>';
@@ -347,7 +383,7 @@ function easy_licenses_admin_keys_tab(array $form) {
         $actions = '';
         if ($state === 'issued' || $state === 'redeemed') {
             $confirm = $state === 'redeemed'
-                ? 'Revoke this key? The learner who used it loses access to the course until the key is restored.'
+                ? 'Revoke this key? The learner who used it loses access to the course until the key is restored. If they already finished it, their course and certificate stay available.'
                 : 'Revoke this key? Nobody will be able to use it.';
             $actions .= easy_licenses_admin_button('easy_licenses_key', 'easy_licenses_key_' . $row->id, ['id' => $row->id, 'do' => 'revoke'], 'Revoke', $confirm);
             if (easy_licenses_redeem_url() !== '') {
