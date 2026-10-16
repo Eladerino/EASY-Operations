@@ -91,20 +91,48 @@ can't be bypassed.
 
 ## Updates
 
-Installed apps self-update from GitHub Releases (public repo
-`Eladerino/EASY-Operations`) via `update-electron-app`: on launch and every 10
-minutes the app checks for a newer release, downloads it in the background,
-and prompts for a restart to install. Release flow:
+Installed apps self-update via `update-electron-app` from GitHub Releases on
+**`Eladerino/EASY-Operations-releases`**, a public repo that holds nothing but
+the release files. That lets this source repo stay private: the update service
+(update.electronjs.org) can only read public repos, and the app itself carries
+no token. On launch and every 10 minutes the app checks for a newer release,
+downloads it in the background, and prompts for a restart to install.
 
-1. Bump `version` in `package.json` — the updater compares this, not the
-   `ops-*` build tag. Bump it once per *published release*, not per build.
-2. `git add -A && git commit -m "…" && git push`
-3. `GITHUB_TOKEN=<token> npm run publish` (token: GitHub → Settings →
-   Developer settings → Personal access tokens (classic), `repo` scope)
+Release flow:
 
-Only publish when there's something users should receive — every published
+1. Bump `version` in `package.json` (the updater compares this, not the
+   `ops-*` build tag) and `BUILD_TAG` in `main.js`. Once per *published
+   release*, not per build.
+2. Commit and push.
+3. Publish with the release token in the environment (PowerShell):
+   `$env:GITHUB_TOKEN = "<token>"; npm run publish`
+
+**Release token:** a fine-grained personal access token (GitHub → Settings →
+Developer settings → Fine-grained tokens), resource owner `Eladerino`,
+repository access *only* `EASY-Operations-releases`, permission
+**Contents: Read and write**, with an expiry. Keep it on the build machine only
+(never in `config.json`, the repo, or the app) and recreate it when it expires.
+
+Only publish when there's something users should receive: every published
 release triggers an update prompt. The updater only runs in the packaged app
 (`app.isPackaged` guard); dev builds never phone home.
+
+### One-time switch to the private model
+
+Apps already installed (1.0.6 and older) look for updates on
+`Eladerino/EASY-Operations`, so they must receive one "bridge" release there
+before that repo goes private, or they stop updating for good.
+
+1. Create the public repo `Eladerino/EASY-Operations-releases` (empty, with a
+   README is fine) and the release token above, with access to **both** repos
+   for this one-time step.
+2. Merge this change, then publish the bridge release twice from the same
+   commit: `$env:EASY_RELEASE_REPO = "EASY-Operations"; npm run publish`, then
+   `Remove-Item Env:EASY_RELEASE_REPO; npm run publish`.
+3. Wait until the office machines and instructors have updated (Help/About shows
+   the new version), then make `Eladerino/EASY-Operations` private.
+4. Edit the token so it only has access to `EASY-Operations-releases`, and
+   revoke the old classic `repo`-scope token.
 
 ## Security
 
