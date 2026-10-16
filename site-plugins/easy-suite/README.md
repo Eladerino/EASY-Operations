@@ -8,11 +8,14 @@ of its theme and third-party plugins. It replaces:
 | EASY Core 1.5.10 (plugin) | Modules *Certificate data & privacy*, *PDF gatekeeper*, *App bridge: approvals & expiring certs*, *Shop*, *SEO*, plus the admin pages |
 | EASY Certificate Notifications 2.4.8 (plugin) | Module *Certificate emails* |
 | EASY Instructor Calendar Feed 1.0.4 (plugin) | Module *Instructor calendar feed* |
-| Code Snippets: course fallback, the two quiet-link snippets, certificates page redirect, branded email wrapper, UM checkbox HTML | One module each |
+| Code Snippets: course fallback, the two quiet-link snippets, certificates page redirect, branded email wrapper, UM checkbox HTML | One module each (the two quiet-link snippets share *Login & register form styling*) |
 
-Settings, sent-email records, the employer-digest cutoff, cron schedules and
-certificate PDFs carry over unchanged: the option names, meta keys, cron hooks,
-REST routes and URLs are the same ones the old plugins used.
+Settings, sent-email records, the employer-digest cutoff and certificate PDFs
+carry over unchanged: the option names, meta keys, cron hooks, REST routes and
+URLs are the same ones the old plugins used. Switching off the old
+notifications plugin clears its cron events; EASY Suite schedules the same
+hooks again on the next page load (the employer digest's twice-daily timing
+restarts from then).
 
 It also adds things the old plugins never had: Course Builder sync for the
 EASY Operations app (2.1.0) and online course license keys (2.2.0).
@@ -78,9 +81,10 @@ and snippets.
 
 ## Changes compared with the old plugins
 
-- The `acf` field on `/wp/v2/cert` only accepts the certificate fields the app
-  sends, validates emails, course choices and the PDF attachment, and rejects
-  anything else with a 400 instead of writing arbitrary meta.
+- The `acf` field on `/wp/v2/cert` only writes the certificate fields the app
+  sends and ignores any other key. It validates emails, course choices and the
+  PDF attachment, and refuses a bad value with a 400 (writing nothing) instead
+  of writing arbitrary meta.
 - Certificate titles (which carry student names) no longer leak to logged-out
   visitors through REST search, the media endpoints, the cert RSS feed, oEmbed,
   attachment pages, front-end search or core sitemaps.
@@ -110,9 +114,12 @@ and snippets.
   app reads the setting from `GET /easy/v1/app-config` (any signed-in user;
   returns `proxyPoster` and the EASY Suite `version`). `proxyPoster` only
   reflects the list, so in the app an admin who isn't listed is still locked
-  to their own name. If the site is older than 2.1.0 or doesn't answer (the
-  app waits at most 5 seconds), the app uses its built-in list, scans recent
-  certificates for numbers, and passes Course Builder reviews as files.
+  to their own name. If the site is older than 2.1.0, the app uses its
+  built-in list, scans the newest 100 published certificates for numbers, and
+  passes Course Builder reviews as files. If the site doesn't answer, the
+  proxy-poster check gives up after 5 seconds and uses the built-in list, and
+  Course Builder keeps edits on the computer until the site is back (it only
+  falls back to files on a computer that has never reached the site).
 - New module **App bridge: Course Builder sync** (`includes/module-courses.php`).
   Courses from the app's Course Builder are stored on the site (private
   `easy_course` posts, review snapshots as `easy_course_snap`), so every
@@ -122,8 +129,9 @@ and snippets.
   - Authors (`easy_course_authors`, default `sglynn`) and extra reviewers
     (`easy_course_reviewers`) are settings; admins and anyone who can publish
     certificates can review. Authors and admins can also change the author
-    list from the app. Every name must be an existing WordPress username, and
-    at least one author stays.
+    list from the app, where every name must be an existing WordPress
+    username. Settings doesn't check the names, so Overview flags an author
+    with no account. In both places at least one author stays.
   - Only one version of a course can wait for review at a time; the author
     withdraws it to send a newer one. Send back needs a note. A course over
     2 MB is refused.
