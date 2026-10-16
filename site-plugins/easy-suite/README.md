@@ -98,6 +98,9 @@ and snippets.
     until EASY decides on one (both are settings). A daily job at 3:15 AM
     St. John's time marks expired keys and closes enrollments that ran out.
   - Revoking a used key suspends the learner's course; restoring reopens it.
+    A course the learner already finished, and its certificate, stay put.
+  - A learner whose access ran out can use a new key right away; they don't
+    wait for the daily job.
   - Office routes under `/easy/v1/licenses` and `/easy/v1/enrollments` back the
     app's future Online Learning tab. Routes are listed at the top of the
     module file.

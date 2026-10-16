@@ -381,6 +381,24 @@ function easy_enrollment_open($user_id, $course) {
     ));
 }
 
+/**
+ * Close enrollments whose access ran out (all of them, or one learner's in
+ * one course) so they stop holding the learner's open slot. The daily job
+ * does this for everyone; redeem, restore and extend do it first for the
+ * learner they touch, so nobody waits on the job to start again.
+ */
+function easy_enrollments_close_lapsed($user_id = 0, $course = '') {
+    global $wpdb;
+    $sql = "UPDATE " . easy_licenses_table('enrollments') . " SET status = 'expired', open_slot = NULL WHERE status = 'active' AND access_until IS NOT NULL AND access_until <= %s";
+    $args = [easy_licenses_now()];
+    if ($user_id) {
+        $sql .= ' AND user_id = %d AND course = %s';
+        $args[] = (int) $user_id;
+        $args[] = (string) $course;
+    }
+    return (int) $wpdb->query($wpdb->prepare($sql, $args));
+}
+
 /** A key's status with the clock applied: unused keys past their date read as expired before the daily job catches up. */
 function easy_licenses_key_status($row) {
     if ($row->status === 'issued' && $row->expires_at <= easy_licenses_now()) {
@@ -584,6 +602,25 @@ function easy_licenses_redeem($user_id, $input) {
     if ($user_id < 1 || !get_userdata($user_id)) {
         return new WP_Error('easy_key_login', 'Sign in to add a key to your account.', ['status' => 401]);
     }
+    // One try at a time per learner, so tries sent all at once can't slip
+    // past the hourly cap between reading and recording it.
+    $lock = 'easy_redeem_' . substr(md5($wpdb->prefix), 0, 8) . '_' . $user_id;
+    $locked = $wpdb->get_var($wpdb->prepare('SELECT GET_LOCK(%s, 5)', $lock));
+    if ((string) $locked === '0') {
+        return new WP_Error('easy_key_busy', 'Another try from your account is still going. Please try again in a moment.', ['status' => 429]);
+    }
+    try {
+        return easy_licenses_redeem_one($user_id, $input);
+    } finally {
+        if ((string) $locked === '1') {
+            $wpdb->query($wpdb->prepare('SELECT RELEASE_LOCK(%s)', $lock));
+        }
+    }
+}
+
+/** The body of easy_licenses_redeem, run while holding the learner's lock. */
+function easy_licenses_redeem_one($user_id, $input) {
+    global $wpdb;
     if (easy_licenses_fail_count($user_id) >= EASY_REDEEM_MAX_FAILS) {
         return new WP_Error('easy_key_rate_limited', 'Too many tries. Please wait an hour and try again, or contact EASY.', ['status' => 429]);
     }
@@ -600,6 +637,7 @@ function easy_licenses_redeem($user_id, $input) {
     if (!$course || $course['version'] < 1) {
         return new WP_Error('easy_key_course_closed', 'This course isn\'t open yet. Contact EASY and we\'ll sort it out.', ['status' => 409]);
     }
+    easy_enrollments_close_lapsed($user_id, $row->course);
     if (easy_enrollment_open($user_id, $row->course)) {
         return new WP_Error('easy_key_already_enrolled', 'You already have ' . $course['title'] . ' in My Courses, so this key is still free for someone else.', ['status' => 409]);
     }
@@ -672,7 +710,10 @@ function easy_enrollment_set_status($row, $status, array $extra = []) {
     return $done !== false;
 }
 
-/** Revoke a key. A redeemed key's enrollment is suspended unless already completed. */
+/**
+ * Revoke a key. A redeemed key's enrollment is suspended; one the learner
+ * already completed is left alone and counted in 'kept'.
+ */
 function easy_licenses_revoke($id, $note = '') {
     global $wpdb;
     $row = easy_licenses_get($id);
@@ -690,14 +731,18 @@ function easy_licenses_revoke($id, $note = '') {
         'note'       => trim($row->note . ($note !== '' ? "\n" . 'Revoked: ' . $note : '')),
     ], ['id' => (int) $row->id]);
     $suspended = 0;
+    $kept = 0;
     foreach (easy_enrollments_for_license($row->id) as $enrollment) {
         if (in_array($enrollment->status, EASY_ENROLLMENT_OPEN, true) || $enrollment->status === 'expired') {
             easy_enrollment_set_status($enrollment, 'suspended', ['suspended_from' => $enrollment->status]);
             $suspended++;
+        } elseif ($enrollment->status === 'completed') {
+            // A finished course and its certificate stay with the learner.
+            $kept++;
         }
     }
     do_action('easy_license_revoked', (int) $row->id, $suspended);
-    return ['key' => easy_licenses_get($row->id), 'suspended' => $suspended];
+    return ['key' => easy_licenses_get($row->id), 'suspended' => $suspended, 'kept' => $kept];
 }
 
 /** Undo a revoke: back to redeemed (and the enrollment reopened) or to issued. */
@@ -715,6 +760,12 @@ function easy_licenses_restore($id) {
             continue;
         }
         $back = in_array($enrollment->suspended_from, array_merge(EASY_ENROLLMENT_OPEN, ['expired']), true) ? $enrollment->suspended_from : 'active';
+        if ($back === 'active' && $enrollment->access_until && $enrollment->access_until <= easy_licenses_now()) {
+            $back = 'expired';
+        }
+        if (in_array($back, EASY_ENROLLMENT_OPEN, true)) {
+            easy_enrollments_close_lapsed($enrollment->user_id, $enrollment->course);
+        }
         if (!easy_enrollment_set_status($enrollment, $back, ['suspended_from' => ''])) {
             $person = easy_licenses_person($enrollment->user_id);
             return new WP_Error('easy_key_restore_clash', ($person ? $person['name'] : 'The learner') . ' has since started this course with another key, so this one can\'t be restored.', ['status' => 409]);
@@ -751,6 +802,7 @@ function easy_enrollment_extend($id, $days) {
     $now = easy_licenses_now();
     $from = ($row->access_until && $row->access_until > $now) ? $row->access_until : $now;
     $until = easy_licenses_utc_plus('+' . $days . ' days', $from);
+    easy_enrollments_close_lapsed($row->user_id, $row->course);
     if (!easy_enrollment_set_status($row, 'active', ['access_until' => $until])) {
         return new WP_Error('easy_enrollment_clash', 'This learner has since started the course again with another key, so this enrollment can\'t be reopened.', ['status' => 409]);
     }
@@ -881,18 +933,22 @@ function easy_licenses_query(array $args) {
 
     $search = trim((string) ($args['search'] ?? ''));
     if ($search !== '') {
+        // A number is an order # or an invoice number in the office note.
+        // Anything else matches people and notes, and also the key itself
+        // when it could be one (so a 12-letter word still finds a company).
+        $like = '%' . $wpdb->esc_like($search) . '%';
+        $text = '(l.buyer_email LIKE %s OR l.buyer_name LIKE %s OR l.company LIKE %s OR l.note LIKE %s OR u.user_email LIKE %s OR u.display_name LIKE %s)';
         $code = easy_key_normalize($search);
-        if ($code !== '') {
-            $where[] = 'l.code = %s';
-            $params[] = $code;
-        } elseif (preg_match('/^#?(\d{1,10})$/', $search, $m)) {
-            $where[] = '(l.order_id = %d OR l.id = %d)';
+        if (preg_match('/^#?(\d{1,10})$/', $search, $m)) {
+            $where[] = '(l.order_id = %d OR l.note LIKE %s)';
             $params[] = (int) $m[1];
-            $params[] = (int) $m[1];
+            $params[] = '%' . $wpdb->esc_like($m[1]) . '%';
+        } elseif ($code !== '') {
+            $where[] = "(l.code = %s OR $text)";
+            array_push($params, $code, $like, $like, $like, $like, $like, $like);
         } else {
-            $like = '%' . $wpdb->esc_like($search) . '%';
-            $where[] = '(l.buyer_email LIKE %s OR l.buyer_name LIKE %s OR l.company LIKE %s OR u.user_email LIKE %s OR u.display_name LIKE %s)';
-            array_push($params, $like, $like, $like, $like, $like);
+            $where[] = $text;
+            array_push($params, $like, $like, $like, $like, $like, $like);
         }
     }
     $status = (string) ($args['status'] ?? '');
@@ -978,10 +1034,7 @@ function easy_licenses_run_daily() {
         "UPDATE " . easy_licenses_table('licenses') . " SET status = 'expired' WHERE status = 'issued' AND expires_at <= %s",
         $now
     ));
-    $enrollments = (int) $wpdb->query($wpdb->prepare(
-        "UPDATE " . easy_licenses_table('enrollments') . " SET status = 'expired', open_slot = NULL WHERE status = 'active' AND access_until IS NOT NULL AND access_until <= %s",
-        $now
-    ));
+    $enrollments = easy_enrollments_close_lapsed();
     update_option('easy_licenses_last_run', ['at' => time(), 'keys' => $keys, 'enrollments' => $enrollments], false);
     return ['keys' => $keys, 'enrollments' => $enrollments];
 }
@@ -1016,7 +1069,10 @@ function easy_licenses_health() {
         "SELECT COUNT(*) FROM $keys WHERE status = 'issued' AND expires_at > %s AND expires_at <= %s",
         $now, easy_licenses_utc_plus('+30 days', $now)
     ));
-    $open = (int) $wpdb->get_var("SELECT COUNT(*) FROM " . easy_licenses_table('enrollments') . " WHERE open_slot = 1");
+    $open = (int) $wpdb->get_var($wpdb->prepare(
+        "SELECT COUNT(*) FROM " . easy_licenses_table('enrollments') . " WHERE open_slot = 1 AND (status <> 'active' OR access_until IS NULL OR access_until > %s)",
+        $now
+    ));
     $next = function_exists('easy_suite_next_run') ? easy_suite_next_run(EASY_LICENSES_CRON) : (wp_next_scheduled(EASY_LICENSES_CRON) ? 'scheduled' : null);
     $courses = easy_licenses_courses();
     $approved = count(array_filter($courses, function ($c) { return $c['version'] > 0; }));
@@ -1032,9 +1088,6 @@ function easy_licenses_health() {
     if (!$next) {
         $state = 'warn';
         $notes[] = 'The daily expiry job is not scheduled.';
-    }
-    if ($soon) {
-        $state = 'warn';
     }
     $access = easy_licenses_access_days();
     return [
@@ -1134,7 +1187,7 @@ add_action('rest_api_init', function () {
             switch ($request['action']) {
                 case 'revoke':
                     $result = easy_licenses_revoke($id, (string) $request->get_param('note'));
-                    return is_wp_error($result) ? $result : ['key' => easy_licenses_export_key($result['key']), 'suspended' => $result['suspended']];
+                    return is_wp_error($result) ? $result : ['key' => easy_licenses_export_key($result['key']), 'suspended' => $result['suspended'], 'kept' => $result['kept']];
                 case 'restore':
                     $result = easy_licenses_restore($id);
                     return is_wp_error($result) ? $result : ['key' => easy_licenses_export_key($result['key'])];
