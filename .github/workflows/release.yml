@@ -1,0 +1,136 @@
+# Builds the Windows installer on GitHub's own Windows machine.
+#
+# - Actions → Release → "Run workflow" (on main) builds, checks and publishes
+#   release v<package.json version>. Installed apps pick it up through the
+#   auto-updater, exactly as with `npm run publish`.
+# - Every pull request runs the same build and checks without publishing, so a
+#   broken build shows up before it is merged.
+name: Release
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - 'site-plugins/**'
+      - '**/*.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || 'publish' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      # Windows checkouts default to CRLF line endings; keep every file
+      # byte-for-byte as committed, like the releases built so far.
+      - run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - id: version
+        shell: bash
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      # Fail in seconds rather than after the build: a version can only be
+      # released once (installed apps compare version numbers).
+      - name: Check this version isn't released yet
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V: ${{ steps.version.outputs.version }}
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Run the release from the main branch."; exit 1
+          fi
+          if gh release view "v$V" >/dev/null 2>&1; then
+            echo "::error::v$V is already released. Bump \"version\" in package.json, then run this again."; exit 1
+          fi
+          tag=$(git ls-remote --tags origin "refs/tags/v$V" | cut -f1)
+          if [ -n "$tag" ] && [ "$tag" != "$GITHUB_SHA" ]; then
+            echo "::error::Tag v$V already exists on a different commit. Bump the version, or delete that tag if a failed release left it behind."; exit 1
+          fi
+
+      - run: npm ci
+
+      - run: npm run make
+
+      - name: Check the package
+        shell: bash
+        env:
+          V: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          res=out/EASYOperations-win32-x64/resources
+          # Card printing runs SumatraPDF, which can't execute from inside app.asar.
+          test -f "$res/app.asar.unpacked/SumatraPDF-3.4.6-32.exe"
+          test -f "$res/app.asar.unpacked/node_modules/pdf-to-printer/dist/SumatraPDF-3.4.6-32.exe"
+          # The WordPress plugin source and tests stay out of the app.
+          npx asar list "$res/app.asar" > "$RUNNER_TEMP/asar-files.txt"
+          grep -qE '^[\\/]main\.js$' "$RUNNER_TEMP/asar-files.txt"
+          if grep -E '^[\\/](site-plugins|test)([\\/]|$)' "$RUNNER_TEMP/asar-files.txt"; then
+            echo "::error::site-plugins/ or test/ ended up in app.asar"; exit 1
+          fi
+          # Installed apps reject the update unless RELEASES names the update
+          # package with its exact SHA1 and size.
+          sq=out/make/squirrel.windows/x64
+          pkg="EASYOperations-$V-full.nupkg"
+          test -f "$sq/EasyOperationsInstaller.exe"
+          test -f "out/make/zip/win32/x64/EASYOperations-win32-x64-$V.zip"
+          expected="$(sha1sum "$sq/$pkg" | cut -d' ' -f1 | tr a-f A-F) $pkg $(stat -c %s "$sq/$pkg")"
+          actual="$(sed '1s/^\xEF\xBB\xBF//' "$sq/RELEASES")"
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::RELEASES doesn't match $pkg (got '$actual', expected '$expected')"; exit 1
+          fi
+          echo "Package OK: $expected"
+
+      - if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-files
+          path: |
+            out/make/squirrel.windows/x64/*
+            out/make/zip/win32/x64/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+  publish:
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-files
+          path: dist
+
+      # gh keeps the release a draft until every file is uploaded, so installed
+      # apps never see a half-finished release. The tag is created on the
+      # commit that was built.
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V: ${{ needs.build.outputs.version }}
+        run: |
+          mapfile -t files < <(find dist -type f | sort)
+          printf '%s\n' "${files[@]}"
+          gh release create "v$V" "${files[@]}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "v$V" \
+            --generate-notes
