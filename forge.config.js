@@ -17,6 +17,9 @@ module.exports = {
     asar: { unpack: 'SumatraPDF-3.4.6-32.exe' },
     executableName: 'Easy Operations',
     icon: './icon',
+    // The WordPress plugin source and tests live in this repo but aren't
+    // part of the app, so they stay out of the installer.
+    ignore: [/^\/site-plugins(\/|$)/, /^\/test(\/|$)/],
   },
   rebuildConfig: {},
   makers: [

@@ -295,6 +295,8 @@ async function isProxyPoster(config) {
     const base = config.wpBaseUrl.replace(/\/+$/, '');
     const res = await fetch(`${base}/wp-json/easy/v1/app-config`, {
       headers: { Authorization: basicAuth(effectiveAuth(config).post) },
+      // Startup waits on this, so a slow site mustn't hold the app up.
+      signal: AbortSignal.timeout(5000),
     });
     if (res.ok) {
       const json = await res.json().catch(() => ({}));
