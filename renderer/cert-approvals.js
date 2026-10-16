@@ -175,9 +175,18 @@
         c.instructor && `Instructor ${c.instructor}`,
         c.date && `submitted ${fmtDate(c.date)}`,
       ].filter(Boolean).join(' · ');
+      // Publishing emails the student, and the employer digest goes to the
+      // company contact, so the reviewer sees both addresses before approving.
+      const meta3 = document.createElement('div');
+      meta3.className = 'hint';
+      meta3.textContent = [
+        c.studentEmail ? `Emails ${c.studentEmail}` : 'No student email',
+        c.companyContact && `employer copy to ${c.companyContact}${c.company ? ` (${c.company})` : ''}`,
+      ].filter(Boolean).join(' · ');
       info.appendChild(name);
       info.appendChild(meta1);
       info.appendChild(meta2);
+      info.appendChild(meta3);
       if (c.certificateNumber) {
         const certNo = document.createElement('div');
         certNo.className = 'cert-no';
