@@ -57,6 +57,15 @@ and snippets.
   module version is fixed, so site emails are wrapped from switch-over on.
 - "List a Product" usernames are a setting instead of a hardcoded list.
 
+## 2.1.0
+
+- `GET /easy/v1/cert-number?candidate=…&exclude=…` returns the next free
+  certificate number checked against every certificate (drafts included), and
+  the site refuses (409) a create or update that would duplicate a number.
+- "Can post certificates for other instructors" is a setting (EASY Suite →
+  Settings, default `pevans`). The site honours it, and the app reads it from
+  `GET /easy/v1/app-config`.
+
 ## Development
 
 Each module is `includes/module-<key>.php`; the registry is in

@@ -187,8 +187,8 @@ function easy_core_enforce_cert_identity($post, $request, $creating) {
     }
     $pto = get_post_type_object('cert');
     $publish_cap = ($pto && !empty($pto->cap->publish_posts)) ? $pto->cap->publish_posts : 'publish_posts';
-    if (current_user_can($publish_cap)) {
-        return; // Office/admins may post on behalf of any instructor.
+    if (current_user_can($publish_cap) || easy_suite_is_proxy_poster()) {
+        return; // Office/admins and listed proxy posters may post for any instructor.
     }
     $user = wp_get_current_user();
     if (!$user || !$user->ID) {
@@ -375,3 +375,124 @@ add_action('updated_post_meta', function ($meta_id, $object_id, $meta_key, $meta
     }
     wp_delete_attachment($old, true);
 }, 10, 4);
+
+/* ==========================================================================
+ * EASY Suite: unique certificate numbers, checked against every certificate
+ * --------------------------------------------------------------------------
+ * The app used to check a new number against the newest 100 published
+ * certificates only, so it could not see older certificates or anyone
+ * else's drafts in the review queue. Now the app asks the site for the next
+ * free number (all statuses except trash), and the site refuses a save that
+ * would duplicate an existing number, as a backstop for two instructors
+ * posting the same course and date at the same moment.
+ * ========================================================================== */
+
+/** Is $number used by a certificate other than $exclude_id? */
+function easy_suite_cert_number_taken($number, $exclude_id = 0) {
+    global $wpdb;
+    $number = trim((string) $number);
+    if ($number === '') {
+        return false;
+    }
+    // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+    $id = $wpdb->get_var($wpdb->prepare(
+        "SELECT p.ID FROM {$wpdb->posts} p
+         JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key = 'certificate_number'
+         WHERE p.post_type = 'cert' AND p.post_status NOT IN ('trash', 'auto-draft')
+           AND pm.meta_value = %s AND p.ID <> %d
+         LIMIT 1",
+        $number,
+        (int) $exclude_id
+    ));
+    return (bool) $id;
+}
+
+/**
+ * Bump the trailing two-digit instance until the number is free, the same
+ * rule as the app's shared.nextFreeCertificateNumber(). Returns a WP_Error
+ * when all 99 instances are taken.
+ */
+function easy_suite_next_free_cert_number($candidate, $exclude_id = 0) {
+    $candidate = trim((string) $candidate);
+    if (!preg_match('/^(.*?)(\d{2})$/', $candidate, $m)) {
+        return $candidate;
+    }
+    $prefix = $m[1];
+    $n = (int) $m[2];
+    $number = $candidate;
+    while (easy_suite_cert_number_taken($number, $exclude_id)) {
+        $n++;
+        if ($n > 99) {
+            return new WP_Error('easy_cert_number_exhausted', 'All 99 certificate numbers for this course and date are taken.', ['status' => 409]);
+        }
+        $number = $prefix . str_pad((string) $n, 2, '0', STR_PAD_LEFT);
+    }
+    return $number;
+}
+
+/* Backstop: refuse a create/update that would duplicate a number. Runs
+ * before the post is written, so a refused create leaves nothing behind. */
+add_filter('rest_pre_insert_cert', function ($prepared, $request) {
+    $acf = $request->get_param('acf');
+    if (!is_array($acf) || !isset($acf['certificate_number']) || is_array($acf['certificate_number'])) {
+        return $prepared;
+    }
+    $number = trim((string) $acf['certificate_number']);
+    if ($number !== '' && easy_suite_cert_number_taken($number, (int) $request->get_param('id'))) {
+        return new WP_Error(
+            'easy_cert_number_taken',
+            sprintf('Certificate number %s is already used by another certificate. Submit again to get the next free number.', $number),
+            ['status' => 409]
+        );
+    }
+    return $prepared;
+}, 10, 2);
+
+/* ==========================================================================
+ * EASY Suite: proxy posters
+ * --------------------------------------------------------------------------
+ * WordPress usernames allowed to post certificates on behalf of other
+ * instructors without publish rights (e.g. office staff). Set under
+ * EASY Suite → Settings (option easy_proxy_posters); the app reads it from
+ * /easy/v1/app-config instead of a list hardcoded in each install.
+ * ========================================================================== */
+
+function easy_suite_proxy_posters() {
+    $raw = get_option('easy_proxy_posters', false);
+    if ($raw === false) {
+        return ['pevans']; // The list the app shipped with.
+    }
+    return array_values(array_filter(array_map('strtolower', array_map('trim', preg_split('/[\s,]+/', (string) $raw)))));
+}
+
+function easy_suite_is_proxy_poster($user = null) {
+    $user = $user ?: wp_get_current_user();
+    return $user && $user->ID && in_array(strtolower($user->user_login), easy_suite_proxy_posters(), true);
+}
+
+add_action('rest_api_init', function () {
+    // Next free certificate number for a candidate (all statuses).
+    register_rest_route('easy/v1', '/cert-number', [
+        'methods'             => 'GET',
+        'callback'            => function (WP_REST_Request $request) {
+            $next = easy_suite_next_free_cert_number($request->get_param('candidate'), (int) $request->get_param('exclude'));
+            return is_wp_error($next) ? $next : ['number' => $next];
+        },
+        'permission_callback' => 'easy_cert_rest_can_access',
+        'args'                => [
+            'candidate' => ['required' => true, 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field'],
+            'exclude'   => ['type' => 'integer', 'default' => 0],
+        ],
+    ]);
+    // Per-user app settings that live on the site rather than in each install.
+    register_rest_route('easy/v1', '/app-config', [
+        'methods'             => 'GET',
+        'callback'            => function () {
+            return [
+                'proxyPoster' => easy_suite_is_proxy_poster(),
+                'version'     => EASY_SUITE_VERSION,
+            ];
+        },
+        'permission_callback' => 'is_user_logged_in',
+    ]);
+});
