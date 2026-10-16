@@ -28,13 +28,31 @@ The **Approvals** tab has two queues, each with a pending-count badge:
   endpoints; no site snippet needed. Accounts without certificate edit rights
   see an explanatory banner instead of the queue.
 - **Accounts** — new student/member accounts awaiting admin review, served by
-  the `site-plugins/easy-approvals-bridge.php` snippet on the site (requires the
+  the EASY Suite plugin on the site (`site-plugins/easy-suite/`; requires the
   `promote_users` capability).
 
-The workflow: instructors submit drafts (the app never publishes), Pam reviews
-the Certificates queue and publishes what checks out. Instructor accounts
+The workflow: instructors submit drafts (the app never publishes); office staff
+review the Certificates queue and publish what checks out. Instructor accounts
 should have create/edit-draft rights but *not* publish rights, so the queue
 can't be bypassed.
+
+## Course Builder
+
+Course authors (WordPress usernames set in EASY Suite → Settings, default
+`sglynn`) build online-module courses chapter by chapter in the **Course
+Builder** tab; reviewers (admins and anyone who can publish certificates)
+get read-only access plus the **Review inbox**.
+
+When the site runs EASY Suite 2.1 or later, courses are saved to the site as
+the author works, so they're the same on every computer, and "Send for
+review", approve and send back all happen in the app. Each computer keeps a
+cached copy, so editing still works while the site can't be reached; edits
+upload when it's back. If two computers change the same course, the site's
+version is kept and the other computer's edits become a separate copy, so
+nothing is lost. The app also writes automatic backup files of every course
+(newest 20, "Open backups folder" in the tab). Against an older site the
+builder falls back to keeping courses on one computer and passing review
+files around.
 
 ## First-time setup
 
@@ -69,14 +87,13 @@ can't be bypassed.
    the saved sign-in; changing the sign-in requires full new credentials and
    a successful Test connection.
 
-3. **Posting on behalf of another instructor.** Pam's account (`pevans`) is
-   exempt from the identity lock: her instructor name/email fields stay blank
-   and editable (they're required, so nothing ships without an instructor),
-   and the main process does not stamp her identity over the form values —
-   so she can post certificates for other instructors (e.g. Brandon's dad).
-   Everyone else in instructor mode is locked to their own login, stamped
-   server-side on every submit. The exempted usernames live in
-   `PROXY_POSTER_USERNAMES` in `main.js`.
+3. **Posting on behalf of another instructor.** A designated office account
+   (listed in `PROXY_POSTER_USERNAMES` in `main.js`) is exempt from the identity
+   lock: its instructor name/email fields stay blank and editable (they're
+   required, so nothing ships without an instructor), and the main process does
+   not stamp its identity over the form values — so office staff can post
+   certificates on behalf of instructors. Everyone else in instructor mode is
+   locked to their own login, stamped server-side on every submit.
 
 4. **Card printing (Windows).**
    Place `SumatraPDF-3.4.6-32.exe` in the project root before running
@@ -107,6 +124,15 @@ Only publish when there's something users should receive — every published
 release triggers an update prompt. The updater only runs in the packaged app
 (`app.isPackaged` guard); dev builds never phone home.
 
+## Security
+
+- **Site URL is pinned:** the setup wizard only accepts `https://easysafety.ca`; anything else is rejected at save time.
+- **Passwords are encrypted:** WordPress application passwords are stored with the OS keychain (Electron `safeStorage`) when available. Older plaintext configs keep working and are migrated automatically on launch.
+- **Locked-down UI:** a Content Security Policy restricts the renderer to local files, and every window denies popups and non-local navigation.
+- **No orphaned files:** if certificate posting fails after the PDF upload, the uploaded file is deleted; saving over a draft deletes the superseded PDF.
+- **Unique certificate numbers:** the app scans recent certificates and auto-bumps the instance number on collision instead of posting duplicates.
+- **ACF allowlist:** only known certificate fields are forwarded to WordPress.
+
 ## Project layout
 
 | File | Purpose |
@@ -115,7 +141,7 @@ release triggers an update prompt. The updater only runs in the packaged app
 | `preload.js` | Locked-down bridge: `easyCert.submit()`, `getAppInfo()`, `printPdf()`, `savePdfCopy()` |
 | `pdfgen.js` | Certificate PDF generation from `EASY_CertTemplate.pdf` (no Electron deps, unit-testable) |
 | `shared.js` | Pure form logic: cert numbers, filenames, course catalogue |
-| `renderer/` | UI: `index.html`, `styles.css`, `renderer.js`, `schedule.js`, `approvals.js`, `cert-approvals.js` |
+| `renderer/` | UI: `index.html`, `styles.css`, `renderer.js`, `schedule.js`, `approvals.js`, `cert-approvals.js`, `course-builder.js` |
 | `config.example.json` | Template for `config.json` |
 
 ## What changed from the old version

@@ -1,14 +1,17 @@
-// course-builder.js — Course Builder (Brandon & Dad only).
+// course-builder.js — Course Builder (gated accounts only).
 //
-// Dad (a course author) builds online-module courses chapter by chapter on
-// this machine. Courses live in localStorage until he sends a versioned
-// review snapshot to Brandon/Pam as a file. Approving a snapshot produces
-// the final maker-framework content package the module player consumes.
+// A course author builds online-module courses chapter by chapter.
+// When the site runs EASY Suite's Course Builder module, courses are saved
+// to the site as the author works (so every computer sees the same copy)
+// and reviews go through the in-app Review inbox. Without it, courses stay
+// in this machine's localStorage and reviews travel as files. Approving a
+// snapshot produces the final maker-framework content package the module
+// player consumes.
 //
 // Authorship model: the signed-in WordPress username (from getAppInfo)
 // is compared against a small editable authors list (seeded with sglynn).
 // Authors can always edit. Everyone else gets read-only + the review inbox.
-// Editing after "send for review" never locks Dad out — it just marks the
+// Editing after "send for review" never locks the author out — it just marks the
 // live course as newer than the snapshot under review.
 (function () {
   'use strict';
@@ -121,7 +124,9 @@
   let inbox = loadJSON(LS_INBOX, []);
   let authors = loadJSON(LS_AUTHORS, ['sglynn']);
 
-  const persistCourses = () => saveJSON(LS_COURSES, courses);
+  // Every local save also queues an upload to the site (when synced) and a
+  // file backup on this computer.
+  const persistCourses = () => { saveJSON(LS_COURSES, courses); scheduleBackup(); schedulePush(); paintSync(); };
   const persistInbox = () => saveJSON(LS_INBOX, inbox);
   const persistAuthors = () => saveJSON(LS_AUTHORS, authors);
 
@@ -143,7 +148,269 @@
   // Authors can always edit — no locks, no gates. Reviewers get read-only
   // plus the review inbox. Managing the authors list itself requires author
   // rights, like every other mutating action.
-  const isAuthor = () => identityLoaded && !!accountUser && authors.includes(accountUser);
+  // With site sync the site decides; otherwise the local authors list does.
+  const lc = (s) => String(s || '').toLowerCase();
+  const isAuthor = () => {
+    if (sync.roles && onSite()) return !!sync.roles.isAuthor;
+    return identityLoaded && !!accountUser && authors.map(lc).includes(lc(accountUser));
+  };
+  const isReviewer = () => !(sync.roles && onSite()) || !!sync.roles.isReviewer;
+
+  /* ---------------- site sync ----------------
+   * The site holds the shared copy of every course and the review queue;
+   * localStorage stays as this computer's cache so editing keeps working
+   * when the site can't be reached. If the site has no Course Builder
+   * module, the builder works as before (this computer + files).
+   *
+   * Cached courses carry private fields that never leave this computer:
+   *   _rev        the site's save counter this copy is based on (0 = not on the site yet)
+   *   _syncedSig  content fingerprint at that save; a different fingerprint
+   *               means local edits are still waiting to upload. */
+
+  const LS_SYNC = 'easyBuilder.sync.v1';
+  const WORKFLOW_KEYS = ['status', 'reviewVersion', 'approvedVersion', 'liveEditedSinceReview', 'reviewNote'];
+  // mode: 'unknown' before the first check, 'local' (no site module: files),
+  // 'site' (connected), 'offline' (site has the module but can't be reached).
+  const sync = {
+    mode: 'unknown', roles: null, error: '', reviews: [],
+    pushing: false, again: false, timer: null, pulling: null,
+    siteSeen: !!(loadJSON(LS_SYNC, {}) || {}).siteSeen,
+  };
+  const courseApi = () => (window.easyCert && window.easyCert.courses) || null;
+  const onSite = () => sync.mode === 'site' || sync.mode === 'offline';
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  function cleanCourse(c) {
+    const out = {};
+    Object.keys(c || {}).forEach((k) => { if (k.charAt(0) !== '_') out[k] = c[k]; });
+    return deepCopy(out);
+  }
+  function contentSig(c) {
+    const o = cleanCourse(c);
+    WORKFLOW_KEYS.forEach((k) => { delete o[k]; });
+    delete o.updatedAt;
+    delete o.createdAt;
+    return JSON.stringify(o);
+  }
+  const isDirty = (c) => !c._rev || contentSig(c) !== c._syncedSig;
+
+  function fromSite(entry) {
+    const c = normalizeCourse(deepCopy(entry.course));
+    c._rev = entry.rev || 0;
+    c._syncedSig = contentSig(c);
+    c._siteBy = entry.updatedBy || '';
+    return c;
+  }
+  function applyWorkflow(c, siteCourse) {
+    if (!c || !siteCourse) return;
+    WORKFLOW_KEYS.forEach((k) => { if (k in siteCourse) c[k] = siteCourse[k]; });
+  }
+  function conflictCopy(local) {
+    const copy = cleanCourse(local);
+    copy.id = uid('c');
+    copy.title = (local.title || 'Untitled course') + ' (edits from this computer)';
+    copy.status = 'draft';
+    copy.reviewVersion = 0;
+    copy.approvedVersion = 0;
+    copy.liveEditedSinceReview = false;
+    copy.reviewNote = '';
+    copy._rev = 0;
+    copy._syncedSig = '';
+    return copy;
+  }
+
+  // The site rejected a save because another computer saved first. Nothing
+  // is thrown away: the site's version takes the course's place and this
+  // computer's edits become a separate course.
+  function keepBoth(local, entry) {
+    const idx = courses.indexOf(local);
+    if (idx < 0 || !entry || !entry.course) return;
+    const site = fromSite(entry);
+    if (contentSig(local) === site._syncedSig) { courses[idx] = site; return; }
+    const copy = conflictCopy(local);
+    courses.splice(idx, 1, site, copy);
+    if (ui.courseId === local.id) ui.courseId = copy.id;
+    sync.again = true;
+    toast('"' + site.title + '" was also changed on another computer. Both versions are kept: the site\'s, and your edits as "' + copy.title + '".', 'info', 12000);
+  }
+
+  function mergeFromSite(list) {
+    const seen = new Set();
+    const fromSiteList = [];
+    const localOnly = [];
+    list.forEach((entry) => {
+      if (!entry || !entry.course || !entry.course.id) return;
+      seen.add(entry.course.id);
+      const site = fromSite(entry);
+      const local = getCourse(site.id);
+      if (!local || !isDirty(local) || contentSig(local) === site._syncedSig) { fromSiteList.push(site); return; }
+      if (local._rev === site._rev) { applyWorkflow(local, entry.course); fromSiteList.push(local); return; }
+      fromSiteList.push(site);
+      if (isAuthor()) {
+        const copy = conflictCopy(local);
+        localOnly.push(copy);
+        toast('"' + site.title + '" was changed on another computer while this one had unsaved edits. Your edits are kept as "' + copy.title + '".', 'info', 12000);
+      }
+    });
+    courses.forEach((c) => {
+      if (seen.has(c.id)) return;
+      if (c._rev && !isDirty(c)) return; // deleted on another computer
+      if (c._rev) { c._rev = 0; c._syncedSig = ''; } // deleted elsewhere but edited here: upload again
+      localOnly.push(c);
+    });
+    courses = localOnly.concat(fromSiteList);
+  }
+
+  function setReviews(list) {
+    sync.reviews = (Array.isArray(list) ? list : []).map((r) => {
+      try { r.course = normalizeCourse(r.course); } catch (e) { /* preview guards handle it */ }
+      return r;
+    });
+  }
+
+  async function waitForPush() {
+    clearTimeout(sync.timer);
+    sync.timer = null;
+    for (let i = 0; sync.pushing && i < 150; i++) await sleep(200);
+  }
+
+  async function pullFromSite() {
+    if (sync.pulling) return sync.pulling;
+    sync.pulling = (async () => {
+      const api = courseApi();
+      if (!api) { sync.mode = 'local'; return; }
+      const me = await api.sync('me');
+      if (!me.ok) {
+        if (me.missing) { sync.mode = 'local'; sync.error = ''; }
+        else { sync.mode = me.offline && sync.siteSeen ? 'offline' : 'local'; sync.error = me.error || ''; }
+        return;
+      }
+      sync.roles = me.data || {};
+      if (!sync.siteSeen) { sync.siteSeen = true; saveJSON(LS_SYNC, { siteSeen: true }); }
+      if (Array.isArray(sync.roles.authors) && sync.roles.authors.length) {
+        authors = sync.roles.authors.slice();
+        persistAuthors();
+      }
+      sync.mode = 'site';
+      if (!sync.roles.isAuthor && !sync.roles.isReviewer) {
+        sync.error = 'Your WordPress account has no Course Builder access on the site.';
+        setReviews([]);
+        return;
+      }
+      await waitForPush();
+      const [list, reviews] = await Promise.all([api.sync('list'), api.sync('reviews')]);
+      if (!list.ok) {
+        if (list.offline) sync.mode = 'offline';
+        sync.error = list.error || '';
+        return;
+      }
+      sync.error = '';
+      mergeFromSite((list.data && list.data.courses) || []);
+      if (reviews.ok) setReviews(reviews.data && reviews.data.reviews);
+      saveJSON(LS_COURSES, courses);
+      schedulePush(0);
+    })();
+    try { await sync.pulling; } finally { sync.pulling = null; }
+  }
+
+  async function refreshReviews() {
+    if (!onSite() || !courseApi()) return;
+    const r = await courseApi().sync('reviews');
+    if (r.ok) setReviews(r.data && r.data.reviews);
+  }
+
+  function schedulePush(delay) {
+    if (!onSite() || !courseApi() || !isAuthor()) return;
+    clearTimeout(sync.timer);
+    sync.timer = setTimeout(pushDirty, delay == null ? 1500 : delay);
+  }
+
+  async function pushDirty() {
+    sync.timer = null;
+    if (sync.pushing) { sync.again = true; return; }
+    const dirty = courses.filter(isDirty);
+    if (!dirty.length) { paintSync(); return; }
+    sync.pushing = true;
+    paintSync();
+    let rerender = false;
+    try {
+      for (const c of dirty) {
+        const result = await pushOne(c, false);
+        if (result === 'conflict') rerender = true;
+        if (result === 'offline') break;
+      }
+    } finally {
+      sync.pushing = false;
+      saveJSON(LS_COURSES, courses);
+      if (sync.again) { sync.again = false; schedulePush(300); }
+      if (rerender) render(); else paintSync();
+    }
+  }
+
+  async function pushOne(c, retried) {
+    if (!courses.includes(c)) return 'gone';
+    const sig = contentSig(c);
+    const r = await courseApi().sync('save', { id: c.id, course: cleanCourse(c), baseRev: c._rev || 0 });
+    if (r.ok && r.data) {
+      c._rev = r.data.rev;
+      c._syncedSig = sig;
+      c._siteBy = r.data.updatedBy || '';
+      applyWorkflow(c, r.data.course);
+      sync.mode = 'site';
+      sync.error = '';
+      return 'ok';
+    }
+    if (r.offline) {
+      sync.mode = 'offline';
+      sync.error = r.error || '';
+      clearTimeout(sync.timer);
+      sync.timer = setTimeout(pushDirty, 30000);
+      return 'offline';
+    }
+    if (r.status === 409 && r.data && r.data.current) { keepBoth(c, r.data.current); return 'conflict'; }
+    if (r.status === 410 && !retried) { c._rev = 0; c._syncedSig = ''; return pushOne(c, true); }
+    if (r.missing) { sync.mode = 'local'; sync.error = ''; return 'offline'; }
+    if (sync.error !== r.error) toast('Could not save "' + (c.title || 'Untitled course') + '" to the site: ' + r.error, 'error', 9000);
+    sync.error = r.error || 'Unknown error.';
+    return 'error';
+  }
+
+  function syncState() {
+    if (!onSite()) return sync.error ? 'warn' : 'local';
+    if (sync.mode === 'offline') return 'warn';
+    if (sync.pushing || (isAuthor() && courses.some(isDirty) && !sync.error)) return 'busy';
+    return sync.error ? 'warn' : 'ok';
+  }
+  function syncLabel() {
+    const st = syncState();
+    if (!onSite()) return sync.error ? 'Not syncing with the site: ' + sync.error : 'On this computer only';
+    if (sync.mode === 'offline') return 'Can\'t reach the site. Edits are kept on this computer and upload when it\'s back.';
+    if (st === 'busy') return 'Saving to the site…';
+    if (sync.error) return sync.error;
+    return 'Saved to the site';
+  }
+  function syncChip() {
+    return '<span id="bSyncChip" class="b-sync b-sync-' + syncState() + '">' + esc(syncLabel()) + '</span>';
+  }
+  function paintSync() {
+    const el = $('bSyncChip');
+    if (el) { el.className = 'b-sync b-sync-' + syncState(); el.textContent = syncLabel(); }
+    paintBadge();
+  }
+
+  // Timestamped file backups on this computer (main process keeps the
+  // newest 20), at most once a minute.
+  let backupAt = 0;
+  let backupTimer = null;
+  function scheduleBackup() {
+    const api = courseApi();
+    if (!api || !api.backup || backupTimer) return;
+    backupTimer = setTimeout(() => {
+      backupTimer = null;
+      backupAt = Date.now();
+      api.backup({ courses: courses.map(cleanCourse), inbox, authors }).catch(() => {});
+    }, Math.max(2000, backupAt + 60000 - Date.now()));
+  }
 
   /* ---------------- time estimates ---------------- */
 
@@ -332,6 +599,7 @@
     // marks the live course as newer than the frozen snapshot.
     if (course.status === 'in_review' || course.status === 'approved') course.liveEditedSinceReview = true;
     persistCoursesSoon();
+    paintSync();
   }
   function statusBadge(course) {
     let cls = 'b-status-' + course.status;
@@ -357,9 +625,12 @@
   }
 
   function renderLibrary() {
-    const pending = inbox.filter((i) => !i.handled).length;
+    const pending = allInbox().filter((i) => !i.handled).length;
     let html = '<div class="b-lib-head"><h2>Course Builder</h2>';
-    html += '<span class="b-time-chip">' + courses.length + ' course' + (courses.length === 1 ? '' : 's') + ' on this machine</span></div>';
+    html += '<span class="b-time-chip">' + courses.length + ' course' + (courses.length === 1 ? '' : 's') + (onSite() ? '' : ' on this machine') + '</span>';
+    html += syncChip();
+    if (onSite()) html += '<button type="button" class="btn btn-secondary btn-small" data-act="sync-refresh">Refresh</button>';
+    html += '</div>';
     html += identityLine();
     html += '<div class="sub-tabs" role="tablist" aria-label="Course Builder sections">';
     html += '<button type="button" class="sub-tab' + (ui.sub === 'courses' ? ' active' : '') + '" data-bsub="courses" role="tab">My courses</button>';
@@ -371,7 +642,9 @@
       html += renderInbox();
     } else {
       html += '<div class="b-lib-head" style="margin-top:14px">';
-      html += '<span class="b-kv">Courses are stored <strong>on this machine only</strong> until sent for review.</span>';
+      html += onSite()
+        ? '<span class="b-kv">Courses are saved to <strong>the site</strong> as you work, so they\'re the same on every computer.</span>'
+        : '<span class="b-kv">Courses are stored <strong>on this machine only</strong> until sent for review.</span>';
       if (isAuthor()) html += '<button type="button" class="btn btn-primary" data-act="new-course">+ New course</button>';
       html += '</div>';
 
@@ -393,12 +666,14 @@
           if (c.reviewNote) html += '<div class="b-review-note"><strong>Reviewer note:</strong> ' + esc(c.reviewNote) + '</div>';
           if (c.status === 'in_review') html += '<div class="b-kv">Snapshot v' + c.reviewVersion + ' is with the reviewer.</div>';
           if (c.status === 'approved' && c.approvedVersion) html += '<div class="b-kv">Approved snapshot: v' + c.approvedVersion + '.</div>';
+          if (onSite() && !c._rev) html += '<div class="b-kv">' + (isAuthor() ? 'Not on the site yet. It uploads automatically.' : 'Only on this computer.') + '</div>';
           html += '<div class="b-course-actions">';
           html += '<button type="button" class="btn btn-secondary btn-small" data-act="open" data-id="' + c.id + '">' + (isAuthor() ? 'Edit' : 'View') + '</button>';
           html += '<button type="button" class="btn btn-secondary btn-small" data-act="preview" data-id="' + c.id + '">Preview</button>';
           if (isAuthor() && c.status !== 'in_review') html += '<button type="button" class="btn btn-secondary btn-small" data-act="send-review" data-id="' + c.id + '">Send for review</button>';
           if (isAuthor() && c.status === 'in_review') html += '<button type="button" class="btn btn-secondary btn-small" data-act="withdraw" data-id="' + c.id + '">Withdraw</button>';
           html += '<button type="button" class="btn btn-secondary btn-small" data-act="export" data-id="' + c.id + '">Export</button>';
+          if (onSite() && c._rev && c.approvedVersion) html += '<button type="button" class="btn btn-secondary btn-small" data-act="download-final" data-id="' + c.id + '">Download approved v' + c.approvedVersion + '</button>';
           if (isAuthor()) html += '<button type="button" class="btn btn-secondary btn-small" data-act="delete" data-id="' + c.id + '" style="color:var(--error)">Delete</button>';
           html += '</div></div>';
         });
@@ -409,7 +684,8 @@
       // controls are only rendered for authors).
       const canManageAuthors = isAuthor();
       html += '<div class="card b-authors"><h2>Course authors</h2>'
-        + '<p class="hint">Only these WordPress usernames can create and edit courses. Everyone else gets read-only access plus the review inbox.</p>'
+        + '<p class="hint">Only these WordPress usernames can create and edit courses. Everyone else gets read-only access plus the review inbox.'
+        + (onSite() ? ' This list is kept on the site, so it applies on every computer.' : '') + '</p>'
         + '<div id="bAuthorList">'
         + authors.map((a) => '<div class="b-author-row"><span><strong>' + esc(a) + '</strong></span>'
           + (a === accountUser ? '<span class="b-author-you">you</span>' : '')
@@ -422,6 +698,10 @@
             + '<button type="button" class="btn btn-secondary btn-small" data-act="author-add">Add</button></div>'
           : '')
         + '</div>';
+      if (courseApi() && courseApi().openBackups) {
+        html += '<p class="hint">This computer also keeps automatic backup files of every course. '
+          + '<button type="button" class="btn btn-secondary btn-small" data-act="open-backups">Open backups folder</button></p>';
+      }
     }
 
     $('builderRoot').innerHTML = html;
@@ -443,13 +723,30 @@
     }
   }
 
-  function addAuthor(name) {
+  // On the site the list is shared (and checked against real accounts);
+  // otherwise it only applies on this computer.
+  async function saveAuthors(next) {
+    if (onSite()) {
+      const r = await courseApi().sync('setAuthors', { authors: next });
+      if (!r.ok) { toast(r.error || 'Could not update the authors list.', 'error'); return false; }
+      authors = (r.data && r.data.authors) || next;
+      if (sync.roles) {
+        sync.roles.authors = authors.slice();
+        sync.roles.isAuthor = authors.map(lc).includes(lc(accountUser));
+      }
+    } else {
+      authors = next;
+    }
+    persistAuthors();
+    return true;
+  }
+
+  async function addAuthor(name) {
     if (!requireAuthor()) return;
     name = String(name || '').trim();
     if (!name) return;
-    if (authors.includes(name)) { toast('Already an author.', 'info'); return; }
-    authors.push(name);
-    persistAuthors();
+    if (authors.map(lc).includes(lc(name))) { toast('Already an author.', 'info'); return; }
+    if (!(await saveAuthors(authors.concat([name])))) return;
     toast(name + ' can now edit courses.', 'success');
     render();
   }
@@ -471,6 +768,7 @@
       : esc(course.title)) + '</h2>';
     html += statusBadge(course);
     html += '<span class="b-time-chip" data-timefor="course">' + esc(fmtEst(courseSeconds(course))) + ' learner time</span>';
+    html += syncChip();
     html += '</div><div class="b-builder-sub">';
     if (course.status === 'in_review') html += '<span>Snapshot v' + course.reviewVersion + ' is with the reviewer.' + (course.liveEditedSinceReview ? ' You have edited since sending — those edits are not in the snapshot.' : '') + '</span>';
     if (course.status === 'approved' && course.approvedVersion) html += '<span>Approved snapshot: v' + course.approvedVersion + '.' + (course.liveEditedSinceReview ? ' Newer edits exist.' : '') + '</span>';
@@ -516,13 +814,15 @@
     if (author && course.status === 'in_review') html += '<button type="button" class="btn btn-secondary" data-act="withdraw" data-id="' + course.id + '">Withdraw from review</button>';
     html += '<button type="button" class="btn btn-secondary" data-act="export" data-id="' + course.id + '">Export backup</button>';
     html += '</div>';
-    html += '<p class="hint" style="margin-bottom:0">Sending for review freezes a versioned snapshot and downloads a review file — send that file to Brandon/Pam. You can keep editing afterwards; new edits won\'t touch the snapshot under review.</p>';
+    html += onSite()
+      ? '<p class="hint" style="margin-bottom:0">Sending for review freezes a versioned snapshot and puts it in the reviewers\' Review inbox here in the app. You can keep editing afterwards; new edits won\'t touch the snapshot under review.</p>'
+      : '<p class="hint" style="margin-bottom:0">Sending for review freezes a versioned snapshot and downloads a review file — send that file to Brandon/Pam. You can keep editing afterwards; new edits won\'t touch the snapshot under review.</p>';
     html += '</div>';
 
     // Data view
     html += '<details class="card"><summary style="cursor:pointer;font-weight:650">Underlying data (what the module player will read)</summary>'
       + '<p class="hint">This is the maker-framework content block. The final approved package has exactly this shape.</p>'
-      + '<pre style="max-height:320px;overflow:auto;background:#f7f9fc;border:1px solid var(--line);border-radius:8px;padding:12px;font-size:11.5px">' + esc(JSON.stringify(course, null, 2)) + '</pre></details>';
+      + '<pre style="max-height:320px;overflow:auto;background:#f7f9fc;border:1px solid var(--line);border-radius:8px;padding:12px;font-size:11.5px">' + esc(JSON.stringify(cleanCourse(course), null, 2)) + '</pre></details>';
 
     $('builderRoot').innerHTML = html;
     wireBuilder(course, author);
@@ -916,12 +1216,21 @@
         if (!requireAuthor()) break;
         const c = getCourse(id);
         if (!c) break;
+        const fromSiteToo = onSite() && !!c._rev;
         const yes = await modalShell({
           title: 'Delete course?',
-          bodyHtml: '<p><strong>' + esc(c.title) + '</strong> and all its chapters will be deleted from this machine. Export a backup first if you might want it back.</p>',
+          bodyHtml: '<p><strong>' + esc(c.title) + '</strong> and all its chapters will be deleted '
+            + (fromSiteToo ? 'from the site and from every computer, along with its reviews.' : 'from this machine.')
+            + ' Export a backup first if you might want it back.</p>',
           okText: 'Delete', cancelText: 'Keep it',
         });
         if (yes) {
+          if (fromSiteToo) {
+            await waitForPush();
+            const r = await courseApi().sync('delete', { id: c.id });
+            if (!r.ok && r.status !== 404) { toast('Could not delete it from the site: ' + r.error, 'error'); schedulePush(); break; }
+            await refreshReviews();
+          }
           courses = courses.filter((x) => x.id !== id);
           persistCourses();
           if (ui.courseId === id) { ui.view = 'library'; ui.courseId = null; }
@@ -1066,12 +1375,26 @@
         if (!requireAuthor()) break;
         const c = getCourse(id) || course;
         if (!c) break;
+        const viaSite = onSite() && !!c._rev;
         const yes = await modalShell({
           title: 'Withdraw from review?',
-          bodyHtml: '<p>The snapshot already sent stays with the reviewer, but this course goes back to <strong>Draft</strong> on your machine.</p>',
+          bodyHtml: viaSite
+            ? '<p>The version with the reviewer comes out of the Review inbox and this course goes back to <strong>' + (c.approvedVersion ? 'Approved (v' + c.approvedVersion + ')' : 'Draft') + '</strong>.</p>'
+            : '<p>The snapshot already sent stays with the reviewer, but this course goes back to <strong>Draft</strong> on your machine.</p>',
           okText: 'Withdraw', cancelText: 'Keep it under review',
         });
-        if (yes) { c.status = 'draft'; persistCourses(); toast('Back to draft.', 'info'); render(); }
+        if (!yes) break;
+        if (viaSite) {
+          const r = await courseApi().sync('withdraw', { id: c.id });
+          if (!r.ok) { toast('Could not withdraw it: ' + r.error, 'error'); break; }
+          applyWorkflow(c, r.data && r.data.course);
+          await refreshReviews();
+        } else {
+          c.status = 'draft';
+        }
+        persistCourses();
+        toast(c.status === 'approved' ? 'Withdrawn. The approved v' + c.approvedVersion + ' still stands.' : 'Back to draft.', 'info');
+        render();
         break;
       }
 
@@ -1081,11 +1404,30 @@
         download(slug(c.title) + '.draft.json', {
           package: 'easy-course-backup', format: 1, kind: 'backup',
           exportedAt: new Date().toISOString(), exportedBy: accountUser,
-          course: deepCopy(c),
+          course: cleanCourse(c),
         });
         toast('Backup downloaded.', 'success');
         break;
       }
+
+      case 'download-final': {
+        const c = getCourse(id);
+        if (!c) break;
+        const r = await courseApi().sync('final', { id: c.id });
+        if (!r.ok || !r.data) { toast('Could not get the approved version: ' + (r.error || 'no data'), 'error'); break; }
+        download(slug(c.title) + '-v' + r.data.version + '.final.json', r.data);
+        toast('Approved v' + r.data.version + ' downloaded.', 'success');
+        break;
+      }
+
+      case 'sync-refresh':
+        await pullFromSite();
+        render();
+        break;
+
+      case 'open-backups':
+        if (courseApi() && courseApi().openBackups) await courseApi().openBackups();
+        break;
 
       case 'author-add': {
         const inp = $('bAuthorAdd');
@@ -1097,13 +1439,13 @@
         const u = el.getAttribute('data-u');
         const yes = await modalShell({
           title: 'Remove author?',
-          bodyHtml: '<p><strong>' + esc(u) + '</strong> will lose editing rights on this machine.</p>',
+          bodyHtml: '<p><strong>' + esc(u) + '</strong> will lose editing rights' + (onSite() ? '.' : ' on this machine.') + '</p>',
           okText: 'Remove', cancelText: 'Keep',
         });
         if (yes) {
-          authors = authors.filter((a) => a !== u);
-          if (!authors.length) authors = ['sglynn'];
-          persistAuthors(); render();
+          const next = authors.filter((a) => a !== u);
+          if (!next.length) { toast('Keep at least one course author.', 'error'); break; }
+          if (await saveAuthors(next)) render();
         }
         break;
       }
@@ -1121,7 +1463,7 @@
         break;
 
       case 'inbox-preview': {
-        const item = inbox.find((x) => x.id === id);
+        const item = allInbox().find((x) => x.id === id);
         if (!item) break;
         ui.returnTo = ui.view;
         ui.view = 'preview';
@@ -1131,13 +1473,13 @@
       }
 
       case 'inbox-approve': {
-        const item = inbox.find((x) => x.id === id);
+        const item = allInbox().find((x) => x.id === id);
         if (item) await approveSnapshot(item);
         break;
       }
 
       case 'inbox-sendback': {
-        const item = inbox.find((x) => x.id === id);
+        const item = allInbox().find((x) => x.id === id);
         if (item) await sendBack(item);
         break;
       }
@@ -1160,7 +1502,7 @@
       const c = getCourse(ui.preview.id);
       return c ? { course: c, label: 'Live course', frozen: false } : null;
     }
-    const item = inbox.find((x) => x.id === ui.preview.id);
+    const item = allInbox().find((x) => x.id === ui.preview.id);
     if (!item || !item.payload || !item.payload.course) return null;
     return { course: item.payload.course, label: 'Review snapshot v' + item.version, frozen: true };
   }
@@ -1358,8 +1700,9 @@
       okText: hard.length ? 'Back to editing' : 'Send for review',
       cancelText: hard.length ? null : 'Keep editing',
     });
-    // The checklist gates sending; doSendReview itself confirms the file
-    // downloaded before marking anything sent.
+    // The checklist gates sending. doSendReview then sends to the site, or
+    // (without site sync) confirms the review file downloaded before
+    // marking anything sent.
     if (go && !hard.length) doSendReview(course);
   }
 
@@ -1374,6 +1717,7 @@
   }
 
   async function doSendReview(course) {
+    if (onSite()) return sendReviewToSite(course);
     const version = course.reviewVersion + 1;
     const now = new Date().toISOString();
     const filename = slug(course.title) + '-v' + version + '.review.json';
@@ -1383,7 +1727,7 @@
       course: snapshotOf(course),
     });
     // The browser gives no reliable "download succeeded" signal, so confirm
-    // with Dad before marking anything sent — a failed download must not
+    // with the author before marking anything sent — a failed download must not
     // bump the version or flip the status.
     const saved = await modalShell({
       title: 'Did the file download?',
@@ -1403,7 +1747,77 @@
     render();
   }
 
+  async function sendReviewToSite(course) {
+    if (sync.mode === 'offline') {
+      toast('Can\'t reach the site right now, so this can\'t be sent yet. Your edits are safe on this computer.', 'error', 8000);
+      return;
+    }
+    await waitForPush();
+    const sig = contentSig(course);
+    const r = await courseApi().sync('submit', { id: course.id, course: cleanCourse(course), baseRev: course._rev || 0 });
+    if (!r.ok) {
+      if (r.status === 409 && r.data && r.data.current) {
+        keepBoth(course, r.data.current);
+        saveJSON(LS_COURSES, courses);
+        toast('Nothing was sent, because this course changed on another computer. Check both versions, then send again.', 'error', 10000);
+        render();
+      } else {
+        toast('Could not send it for review: ' + (r.error || 'unknown error'), 'error', 8000);
+      }
+      return;
+    }
+    course._rev = r.data.rev;
+    course._syncedSig = sig;
+    applyWorkflow(course, r.data.course);
+    saveJSON(LS_COURSES, courses);
+    await refreshReviews();
+    toast('Sent v' + course.reviewVersion + ' for review. It is in the reviewers\' inbox now.', 'success', 8000);
+    render();
+  }
+
+  async function approveOnSite(item) {
+    const c = item.payload && item.payload.course;
+    const yes = await modalShell({
+      title: 'Approve this version?',
+      bodyHtml: '<p>Approving marks <strong>v' + item.version + ' of "' + esc((c && c.title) || 'untitled') + '"</strong> as final. '
+        + 'The approved version is stored on the site as the content package the module player is built from, and the author sees it as approved.</p>',
+      okText: 'Approve', cancelText: 'Not yet',
+    });
+    if (!yes) return;
+    const r = await courseApi().sync('approve', { reviewId: item.reviewId });
+    if (!r.ok) toast('Could not approve it: ' + r.error, 'error');
+    else {
+      applyWorkflow(getCourse(item.courseId), r.data && r.data.course);
+      saveJSON(LS_COURSES, courses);
+      toast('Approved v' + item.version + '.', 'success', 6000);
+    }
+    await refreshReviews();
+    render();
+  }
+
+  async function sendBackOnSite(item) {
+    const c = item.payload && item.payload.course;
+    const note = await modalPrompt({
+      title: 'Send back with a note',
+      bodyHtml: '<p>Tell the author what needs fixing in v' + item.version + ' of "' + esc((c && c.title) || 'untitled') + '". They\'ll see the note on the course.</p>',
+      placeholder: 'e.g. Chapter 2\'s quiz needs an answer marked on question 3…',
+      okText: 'Send back',
+    });
+    if (note === null) return;
+    if (!note) { toast('A short note helps the author know what to fix.', 'error'); return; }
+    const r = await courseApi().sync('sendBack', { reviewId: item.reviewId, note });
+    if (!r.ok) toast('Could not send it back: ' + r.error, 'error');
+    else {
+      applyWorkflow(getCourse(item.courseId), r.data && r.data.course);
+      saveJSON(LS_COURSES, courses);
+      toast('Sent back with your note.', 'success', 6000);
+    }
+    await refreshReviews();
+    render();
+  }
+
   async function approveSnapshot(item) {
+    if (item.site) return approveOnSite(item);
     const c = item.payload && item.payload.course;
     const yes = await modalShell({
       title: 'Approve this snapshot?',
@@ -1433,6 +1847,7 @@
   }
 
   async function sendBack(item) {
+    if (item.site) return sendBackOnSite(item);
     const c = item.payload && item.payload.course;
     const note = await modalPrompt({
       title: 'Send back with a note',
@@ -1498,7 +1913,7 @@
       }
     } else if (kind === 'backup' || kind === 'final') {
       if (!hasCourse) { toast('That package has no course data to import.', 'error'); return; }
-      const c = normalizeCourse(deepCopy(obj.course));
+      const c = normalizeCourse(cleanCourse(obj.course));
       const now = new Date().toISOString();
       c.id = uid('c');
       c.reviewNote = '';
@@ -1520,14 +1935,31 @@
 
   /* ---------------- review inbox ---------------- */
 
+  // Site reviews in the same shape as file-imported inbox items.
+  const REVIEW_RESULT = { approved: 'approved', sent_back: 'sent back', withdrawn: 'withdrawn' };
+  function siteInboxItems() {
+    return sync.reviews.map((r) => ({
+      id: 'site_' + r.id, reviewId: r.id, site: true, kind: 'review',
+      courseId: r.courseId, version: r.version, from: r.by, at: r.at,
+      note: r.state === 'sent_back' ? r.note : '',
+      handled: r.state !== 'pending', result: REVIEW_RESULT[r.state] || r.state,
+      decidedBy: r.decidedBy || '', payload: { course: r.course },
+    }));
+  }
+  const allInbox = () => (onSite() ? siteInboxItems() : []).concat(inbox);
+
   function renderInbox() {
-    let html = '<div class="b-lib-head" style="margin-top:14px"><span class="b-kv">Import a review snapshot file to review it here. '
-      + 'Approving downloads the <strong>final maker-framework package</strong> — the content block the module player is built from.</span>'
-      + '<span><button type="button" class="btn btn-secondary btn-small" data-act="inbox-import">Import package…</button></span></div>';
-    const items = inbox.slice(); // inbox is unshifted newest-first; keep that order
+    let html = '<div class="b-lib-head" style="margin-top:14px"><span class="b-kv">'
+      + (onSite()
+        ? 'Courses sent for review show up here on their own. You can still import a review file from someone working without the site.'
+        : 'Import a review snapshot file to review it here. Approving downloads the <strong>final maker-framework package</strong> — the content block the module player is built from.')
+      + '</span><span><button type="button" class="btn btn-secondary btn-small" data-act="inbox-import">Import ' + (onSite() ? 'a review file' : 'package') + '…</button></span></div>';
+    const items = allInbox(); // newest first within site reviews and within imported files
     if (!items.length) {
       html += '<div class="card b-empty"><h3>Inbox is empty</h3>'
-        + '<p>When Dad sends a course for review, its snapshot file lands here once you import it. Preview it as the learner would see it, then approve it or send it back with a note.</p></div>';
+        + (onSite()
+          ? '<p>When an author sends a course for review, it appears here. Preview it as the learner would see it, then approve it or send it back with a note.</p></div>'
+          : '<p>When Dad sends a course for review, its snapshot file lands here once you import it. Preview it as the learner would see it, then approve it or send it back with a note.</p></div>');
     } else {
       items.forEach((item) => {
         const c = item.payload && item.payload.course;
@@ -1535,18 +1967,18 @@
         html += '<div class="b-inbox-head"><h3>' + esc((c && c.title) || 'Untitled') + '</h3>';
         html += '<span class="b-status ' + (item.kind === 'review' ? 'b-status-in_review' : 'b-status-changes') + '">'
           + (item.kind === 'review' ? 'Review requested' : 'Changes requested') + '</span>';
-        if (item.handled) html += '<span class="b-status b-status-draft">handled</span>';
+        if (item.handled) html += '<span class="b-status b-status-draft">' + esc(item.result || 'handled') + (item.decidedBy ? ' by ' + esc(item.decidedBy) : '') + '</span>';
         html += '<span class="b-time-chip">v' + item.version + '</span></div>';
         html += '<div class="b-course-meta" style="margin:8px 0"><span>From ' + esc(item.from || 'unknown') + '</span>'
           + '<span>' + esc(item.at ? new Date(item.at).toLocaleString() : '') + '</span></div>';
         if (item.note) html += '<div class="b-review-note"><strong>Note:</strong> ' + esc(item.note) + '</div>';
         html += '<div class="b-course-actions">';
         html += '<button type="button" class="btn btn-secondary btn-small" data-act="inbox-preview" data-id="' + item.id + '">Preview snapshot</button>';
-        if (!item.handled && item.kind === 'review') {
+        if (!item.handled && item.kind === 'review' && (!item.site || isReviewer())) {
           html += '<button type="button" class="btn btn-primary btn-small" data-act="inbox-approve" data-id="' + item.id + '">Approve</button>';
           html += '<button type="button" class="btn btn-secondary btn-small" data-act="inbox-sendback" data-id="' + item.id + '">Send back with note</button>';
         }
-        html += '<button type="button" class="btn btn-secondary btn-small" data-act="inbox-remove" data-id="' + item.id + '">Remove</button>';
+        if (!item.site) html += '<button type="button" class="btn btn-secondary btn-small" data-act="inbox-remove" data-id="' + item.id + '">Remove</button>';
         html += '</div></div>';
       });
     }
@@ -1556,7 +1988,7 @@
   /* ---------------- render root ---------------- */
 
   function paintBadge() {
-    const n = inbox.filter((i) => !i.handled).length;
+    const n = allInbox().filter((i) => !i.handled && (!i.site || isReviewer())).length;
     const el = $('tabCourseBuilderBadge');
     if (el) { el.textContent = n; el.classList.toggle('hidden', !n); }
   }
@@ -1579,11 +2011,18 @@
     if (!identityLoaded) await loadIdentity();
     if (ui.view === 'builder' && !getCourse(ui.courseId)) { ui.view = 'library'; ui.courseId = null; }
     render();
+    // Then bring in the site's copy. If the course open in the builder was
+    // left as it was, only the sync chip updates, so typing isn't interrupted.
+    if (persistTimer) { clearTimeout(persistTimer); persistTimer = null; saveJSON(LS_COURSES, courses); }
+    const open = ui.view === 'builder' ? getCourse(ui.courseId) : null;
+    await pullFromSite();
+    if (open && ui.view === 'builder' && getCourse(ui.courseId) === open) paintSync();
+    else render();
   }
 
   // Flush any debounced localStorage write if the window closes mid-typing.
   window.addEventListener('beforeunload', () => {
-    if (persistTimer) { clearTimeout(persistTimer); persistTimer = null; persistCourses(); }
+    if (persistTimer) { clearTimeout(persistTimer); persistTimer = null; saveJSON(LS_COURSES, courses); }
   });
 
   window.EasyCourseBuilder = { show };
