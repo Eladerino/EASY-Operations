@@ -36,6 +36,24 @@ review the Certificates queue and publish what checks out. Instructor accounts
 should have create/edit-draft rights but *not* publish rights, so the queue
 can't be bypassed.
 
+## Course Builder
+
+Course authors (WordPress usernames set in EASY Suite → Settings, default
+`sglynn`) build online-module courses chapter by chapter in the **Course
+Builder** tab; reviewers (admins and anyone who can publish certificates)
+get read-only access plus the **Review inbox**.
+
+When the site runs EASY Suite 2.1 or later, courses are saved to the site as
+the author works, so they're the same on every computer, and "Send for
+review", approve and send back all happen in the app. Each computer keeps a
+cached copy, so editing still works while the site can't be reached; edits
+upload when it's back. If two computers change the same course, the site's
+version is kept and the other computer's edits become a separate copy, so
+nothing is lost. The app also writes automatic backup files of every course
+(newest 20, "Open backups folder" in the tab). Against an older site the
+builder falls back to keeping courses on one computer and passing review
+files around.
+
 ## First-time setup
 
 1. **Install dependencies**
@@ -123,7 +141,7 @@ release triggers an update prompt. The updater only runs in the packaged app
 | `preload.js` | Locked-down bridge: `easyCert.submit()`, `getAppInfo()`, `printPdf()`, `savePdfCopy()` |
 | `pdfgen.js` | Certificate PDF generation from `EASY_CertTemplate.pdf` (no Electron deps, unit-testable) |
 | `shared.js` | Pure form logic: cert numbers, filenames, course catalogue |
-| `renderer/` | UI: `index.html`, `styles.css`, `renderer.js`, `schedule.js`, `approvals.js`, `cert-approvals.js` |
+| `renderer/` | UI: `index.html`, `styles.css`, `renderer.js`, `schedule.js`, `approvals.js`, `cert-approvals.js`, `course-builder.js` |
 | `config.example.json` | Template for `config.json` |
 
 ## What changed from the old version

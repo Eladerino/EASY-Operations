@@ -964,6 +964,19 @@
       window.EasyCourseBuilderAllowed = builderUser === 'bglynn' || builderUser === 'sglynn';
       const builderTab = $('tabCourseBuilder');
       if (builderTab) builderTab.style.display = window.EasyCourseBuilderAllowed ? '' : 'none';
+      // When the site runs EASY Suite's Course Builder module, it decides
+      // instead: every course author and reviewer gets the tab, and
+      // reviewers see how many courses are waiting for them.
+      if (window.easyCert.courses) {
+        window.easyCert.courses.sync('me').then((r) => {
+          if (!r || !r.ok || !r.data) return;
+          window.EasyCourseBuilderAllowed = Boolean(r.data.isAuthor || r.data.isReviewer);
+          if (builderTab) builderTab.style.display = window.EasyCourseBuilderAllowed ? '' : 'none';
+          const badge = $('tabCourseBuilderBadge');
+          const n = r.data.isReviewer ? (r.data.pendingReviews | 0) : 0;
+          if (badge) { badge.textContent = n; badge.classList.toggle('hidden', !n); }
+        }).catch(() => {});
+      }
       // Resolve review privileges and trim the approval UI for plain
       // instructor accounts (office mode keeps everything).
       window.EasyPerms.privileged = Boolean(info.proxyPosting || info.mode === 'office');
