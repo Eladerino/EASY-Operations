@@ -745,13 +745,18 @@ ipcMain.handle('submit-certificate', async (_event, payload) => {
       // Draft updated: delete the superseded PDF so it doesn't orphan.
       // No card print, no "posted" dialog — the reviewer stays in the
       // approval workflow.
+      // (EASY Suite also deletes it server-side when the certificate field
+      // changes, so a 404 here just means the site got there first.)
       if (oldMediaId && oldMediaId !== mediaJson.id) {
         try {
-          await fetch(`${base}/wp-json/wp/v2/media/${oldMediaId}?force=true`, {
+          const delRes = await fetch(`${base}/wp-json/wp/v2/media/${oldMediaId}?force=true`, {
             method: 'DELETE',
             headers: { Authorization: basicAuth(auth.media) },
           });
-        } catch (e) { /* best-effort cleanup */ }
+          if (!delRes.ok && delRes.status !== 404) {
+            console.warn(`Superseded certificate PDF ${oldMediaId} was not deleted (HTTP ${delRes.status}).`);
+          }
+        } catch (e) { console.warn('Superseded certificate PDF cleanup failed:', e.message); }
       }
       return { ok: true, updated: true, postId: postJson.id, mediaId: mediaJson.id, pdfPath: previewPath, certificateNumber: finalNumber };
     }
@@ -768,11 +773,14 @@ ipcMain.handle('submit-certificate', async (_event, payload) => {
     // rather than leaving it in the media library.
     if (uploadedMediaId && !postSucceeded) {
       try {
-        await fetch(`${base}/wp-json/wp/v2/media/${uploadedMediaId}?force=true`, {
+        const delRes = await fetch(`${base}/wp-json/wp/v2/media/${uploadedMediaId}?force=true`, {
           method: 'DELETE',
           headers: { Authorization: basicAuth(auth.media) },
         });
-      } catch (e) { /* best-effort cleanup */ }
+        if (!delRes.ok) {
+          console.warn(`Orphaned certificate PDF ${uploadedMediaId} was not deleted (HTTP ${delRes.status}).`);
+        }
+      } catch (e) { console.warn('Orphaned certificate PDF cleanup failed:', e.message); }
     }
     console.error('submit-certificate failed:', err);
     return { ok: false, error: err.message };
