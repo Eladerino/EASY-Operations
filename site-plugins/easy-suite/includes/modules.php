@@ -37,6 +37,12 @@ function easy_suite_module_registry() {
             'default'     => true,
             'locked'      => false,
         ],
+        'licenses' => [
+            'label'       => 'Online courses: license keys',
+            'description' => 'Single-use course keys (EASY-XXXX-XXXX-XXXX), the route learners redeem them through, and EASY Suite → Online courses for issuing, looking up, revoking and resending keys. Creates three database tables the first time it runs. Needs Course Builder sync for its course list.',
+            'default'     => true,
+            'locked'      => false,
+        ],
         'notifications' => [
             'label'       => 'Certificate emails',
             'description' => 'Student email on publish, 30/7-day and expired reminders, and the twice-daily employer digest with certificate PDFs.',
