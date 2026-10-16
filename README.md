@@ -23,9 +23,10 @@ Desktop operations hub for EASY Safety Training. It has five tabs:
 
 After posting, a result dialog previews the generated certificate PDF with
 **Print…** (the normal system print dialog), **Save a copy…** and **Open in
-viewer…** (the computer's default PDF app). It can also silent-print a
-physical ID card on the NISCA PR5350 if that printer is connected and picked
-in Setup.
+viewer…** (the computer's default PDF app). If **Print physical ID card now**
+was ticked on the form, posting also silent-prints a physical ID card on the
+NISCA PR5350 (the box can only be ticked once a card printer is picked in
+Setup).
 
 The app relies on **EASY Suite**, the site's WordPress plugin, kept in this
 repo under `site-plugins/easy-suite/`. It provides the certificate fields,
@@ -65,8 +66,9 @@ are right before anyone opens the tab.
   dates and times, location, instructor and status, with **Edit** (opens the
   Schedule tab's class editor), **Calendar** (jumps to that month) and
   **Publish** (makes the class visible on the site). Uses The Events
-  Calendar's REST API. Accounts without event publishing rights see an
-  explanatory banner instead of the queue.
+  Calendar's REST API. Accounts that can't create events see an explanatory
+  banner instead of the queue; publish rights are checked when Publish is
+  clicked.
 - **Accounts**: new student/member accounts (Ultimate Member) awaiting admin
   review, with **Approve** and **Reject**. Served by EASY Suite's "App bridge:
   approvals & expiring certs" module, which also feeds Expiring soon.
@@ -79,8 +81,8 @@ the queue can't be bypassed. Instructors see their own drafts with Preview
 and Edit, but no Publish, and don't see the Classes and Accounts queues. In
 the app, Publish and those two queues are only shown to reviewer accounts:
 the ones listed under EASY Suite → Settings → "Can post certificates for
-other instructors" (see First-time setup, step 3). Publishing also needs
-WordPress publish rights.
+other instructors" (see First-time setup, step 3), plus installs still on the
+legacy shared office config. Publishing also needs WordPress publish rights.
 
 ## Course Builder
 
@@ -94,8 +96,9 @@ least one author.
 Reviewers are admins, anyone who can publish certificates, and any extra
 usernames under EASY Suite → Settings → **Extra Course Builder reviewers**.
 They get read-only access to every course, plus **Approve** and **Send back
-with note** in the **Review inbox**. Authors see the inbox too, as a history
-of what happened to their reviews. Reviewers also get a badge on the tab
+with note** in the **Review inbox**. Authors see the inbox too (the newest 50
+reviews across all courses, pending first), without the Approve and Send back
+buttons. Reviewers also get a badge on the tab
 with the number of courses waiting for them.
 
 Who sees the tab is decided when the app starts, so restart it after
@@ -116,16 +119,18 @@ review", approve and send back all happen in the app:
 - If two computers change the same course, the site's version is kept and the
   other computer's edits become a separate copy, so nothing is lost.
 - **Send for review** runs a readiness check first, then freezes a numbered
-  snapshot; the author can keep editing without touching it. It waits until
-  the site can be reached.
+  snapshot; the author can keep editing without touching it. It needs the
+  site: if the site can't be reached, nothing is sent, and the author sends
+  it again once the site is back.
 - Only one version can be with the reviewers at a time. **Withdraw** it to
   send a newer one.
 - **Send back** needs a note, which the author sees on the course.
   **Approve** stores that version on the site as the final package
   (**Download approved vN** in the course list). Online course keys can only
   be issued for a course with an approved version.
-- Deleting a synced course removes it, and its reviews, from the site and
-  every computer.
+- Deleting a synced course moves it, and its reviews, to the site's trash,
+  and every computer drops it on its next refresh. A computer that still has
+  unsaved edits to it uploads it again instead.
 - A course can't be bigger than 2 MB (media files aren't stored in it).
 
 Against an older site, or with that module switched off, the builder keeps
@@ -157,13 +162,11 @@ the tab opens it.
    for you. Under Application Passwords, add one named "EASY Operations" and
    paste it into the wizard. (The site URL is fixed to easysafety.ca.)
    **Test connection** verifies the login against WordPress and pulls your
-   display name and email from your profile. It also checks the account's
+   display name from your profile, then asks you to type your email (it's
+   what gets stamped on your certificates). It also checks the account's
    rights by listing media in edit mode, which only accounts with editing
-   rights can do (if that check can't run, it falls back to the
-   `upload_files` capability on your profile). If the check fails, the result
-   warns that posting will fail, but it doesn't stop you saving. If the site
-   withholds the email from the REST API (some security plugins filter it),
-   the wizard asks you to type it instead. The setup screen also has an
+   rights can do. If that check fails, or can't run, the result warns that
+   posting will fail, but it doesn't stop you saving. The setup screen also has an
    optional **Card printer** picker; card printing stays off until one is
    picked. **Save & start** writes `config.json` to your per-user app folder
    (`%APPDATA%\EASYOperations\` on Windows), with the application password
@@ -195,8 +198,8 @@ the tab opens it.
    doesn't answer, or runs EASY Suite older than 2.1, the app uses its
    built-in list (`PROXY_POSTER_FALLBACK` in `main.js`) and asks again the
    next time it checks. Everyone else in instructor mode is locked to their
-   own login and stamped on every submit, and the site enforces the same
-   rule.
+   own login and stamped on every submit. The site enforces this too, but
+   there anyone who can publish certificates is also exempt (see Security).
 
 4. **Card printing (Windows).** SumatraPDF (`SumatraPDF-3.4.6-32.exe`) is
    committed in the project root, so there's nothing to add.
@@ -208,8 +211,11 @@ the tab opens it.
 
 ## Running / building
 
-- `npm start` — run in development (no auto-updates; uses a `config.json` in
-  the project root if you haven't signed in through the wizard)
+- `npm start` — run in development (no auto-updates). It uses a
+  `config.json` in the project root only when there's none in
+  `%APPDATA%\EASYOperations\`. A launch with no config anywhere puts the
+  template there, so delete that copy if you add a project-root one later.
+  Signing out in development deletes both.
 - `node --test` — run the unit tests in `test/` (the pure helpers in
   `shared.js`). There's no `npm test` script, and the GitHub build doesn't
   run them, so run them before opening a pull request.
@@ -270,8 +276,8 @@ release triggers an update prompt. The updater only runs in the packaged app
 - **Instructor identity is enforced on the site too:** for accounts that can't publish certificates and aren't on the "post for other instructors" list, EASY Suite replaces the instructor name and email on every certificate saved through the API with the account's own profile.
 - **No orphaned files:** if certificate posting fails after the PDF upload, the uploaded file is deleted, and saving over a draft deletes the superseded PDF. EASY Suite lets instructors delete their own unused certificate PDFs, so this cleanup works for them too, and it deletes a replaced PDF on the site as well. A delete the site refuses is logged, not shown.
 - **Unique certificate numbers:** before generating the PDF, the app asks the site (EASY Suite 2.1+, `/wp-json/easy/v1/cert-number`) for the next free number, checked against every certificate including drafts, and the form switches to the number actually used. If all 99 numbers for that course and date are taken, posting stops. On an older site, or if the check can't be reached, the app falls back to scanning the newest 100 published certificates; if that fails too, it posts the number as is. EASY Suite also refuses to save a duplicate number ("Submit again to get the next free number").
-- **ACF allowlist:** only known certificate fields are forwarded to WordPress. EASY Suite enforces the same list on the site and checks the values (valid emails, known courses, an uploaded PDF), refusing anything else with a 400.
-- **Downloaded certificates are checked:** Preview and Find & reprint never follow a redirect and only open a file that really is a PDF. If WordPress no longer accepts the saved application password, they say to run Setup and sign in again instead of opening the WordPress login page as the certificate.
+- **ACF allowlist:** only known certificate fields are forwarded to WordPress. EASY Suite applies the same list on the site (other fields are dropped) and checks the values (valid emails, known courses, an uploaded PDF). A bad value gets a 400 and none of the fields are written; on a new certificate WordPress has already created the post by then, so an empty draft can be left in the queue to delete.
+- **Downloaded certificates are checked:** Preview and Find & reprint never follow a redirect and only open a file that really is a PDF, so a rejected sign-in can't open the WordPress login page as the certificate. A revoked application password usually fails earlier, at the certificate lookup ("Could not read this certificate."); the "run Setup and sign in again" message shows when the PDF link itself sends the app to the login page.
 - **Course Builder sync is fenced in:** the window can only ask for a fixed list of Course Builder operations, each mapped to one `/wp-json/easy/v1/course-builder/` route with its ids checked, so it can't send requests anywhere else.
 
 ## Project layout
@@ -337,10 +343,10 @@ fall back to the old behaviour on an older site.
 - **Course Builder saved on the site (EASY Suite 2.1+):** courses, reviews
   and the authors list are shared through the site, with the Review inbox in
   the app instead of files. See Course Builder.
-- **Revoked sign-ins caught on preview and reprint:** if WordPress no longer
-  accepts the saved application password, previewing or reprinting a
-  certificate says to run Setup and sign in again. It used to save the
-  WordPress login page as the PDF and open a broken viewer.
+- **Preview and reprint only open real PDFs:** if the site answers a
+  certificate download with its login page (for example after a sign-in was
+  revoked), the app shows an error instead. It used to save the WordPress
+  login page as the PDF and open a broken viewer.
 - **Setup upload check fixed:** Test connection now really checks whether
   the account can upload files. The old check read the public media list, so
   every account passed.
