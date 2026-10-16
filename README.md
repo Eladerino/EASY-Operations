@@ -28,7 +28,7 @@ The **Approvals** tab has two queues, each with a pending-count badge:
   endpoints; no site snippet needed. Accounts without certificate edit rights
   see an explanatory banner instead of the queue.
 - **Accounts** — new student/member accounts awaiting admin review, served by
-  the `site-plugins/easy-approvals-bridge.php` snippet on the site (requires the
+  the EASY Suite plugin on the site (`site-plugins/easy-suite/`; requires the
   `promote_users` capability).
 
 The workflow: instructors submit drafts (the app never publishes); office staff
