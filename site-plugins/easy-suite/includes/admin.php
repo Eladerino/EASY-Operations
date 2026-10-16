@@ -122,6 +122,25 @@ function easy_suite_health_rows() {
         $rows[] = ['App bridge', 'off', 'Switched off. The app\'s Accounts approval queue and expiring list will not load.'];
     }
 
+    // Course Builder sync.
+    if (!empty($on['courses']) && function_exists('easy_course_authors')) {
+        $ok = in_array('/easy/v1/course-builder/me', $routes, true);
+        $counts = wp_count_posts('easy_course');
+        $total = (int) ($counts->private ?? 0);
+        $pending = easy_course_pending_review_count();
+        $authors = easy_course_authors();
+        $missing = array_values(array_filter($authors, function ($login) { return !get_user_by('login', $login); }));
+        $rows[] = [
+            'Course Builder sync',
+            !$ok ? 'error' : ($missing ? 'warn' : 'ok'),
+            !$ok ? 'Routes are missing; the app falls back to passing course files around.'
+                : sprintf('%d course(s) on the site, %d waiting for review. Authors: %s.', $total, $pending, implode(', ', $authors))
+                    . ($missing ? ' No account found for: ' . implode(', ', $missing) . '.' : ''),
+        ];
+    } else {
+        $rows[] = ['Course Builder sync', 'off', 'Switched off. The app\'s Course Builder keeps courses on each computer and passes reviews as files.'];
+    }
+
     // Notifications.
     if ($on['notifications'] && class_exists('Easy_Safety_Cert_Notifications', false)) {
         $daily = easy_suite_next_run('easy_safety_daily_expiry_check');
@@ -336,6 +355,23 @@ function easy_suite_settings_page() {
         }
         update_option('easy_proxy_posters', implode("\n", array_unique($proxies)), false);
 
+        foreach (['easy_course_authors', 'easy_course_reviewers'] as $opt) {
+            if (!isset($_POST[$opt])) {
+                continue;
+            }
+            $names = [];
+            foreach (preg_split('/[\s,]+/', (string) wp_unslash($_POST[$opt])) as $u) {
+                $u = strtolower(sanitize_user($u, true));
+                if ($u !== '') {
+                    $names[] = $u;
+                }
+            }
+            if ($opt === 'easy_course_authors' && !$names) {
+                continue; // Keep at least one author; an empty box leaves the list as it was.
+            }
+            update_option($opt, implode("\n", array_unique($names)), false);
+        }
+
         echo '<div class="notice notice-success is-dismissible"><p><strong>Settings saved.</strong></p></div>';
     }
 
@@ -372,6 +408,16 @@ function easy_suite_settings_page() {
         . '<td><textarea id="easy_proxy_posters" name="easy_proxy_posters" rows="4" class="regular-text code">'
         . esc_textarea(implode("\n", function_exists('easy_suite_proxy_posters') ? easy_suite_proxy_posters() : [])) . '</textarea>'
         . '<p class="description">WordPress usernames, one per line. Everyone else posts under their own name. Admins and anyone who can publish certificates can always post for others.</p></td></tr>';
+    if (function_exists('easy_course_authors')) {
+        echo '<tr><th scope="row"><label for="easy_course_authors">Course Builder authors</label></th>'
+            . '<td><textarea id="easy_course_authors" name="easy_course_authors" rows="3" class="regular-text code">'
+            . esc_textarea(implode("\n", easy_course_authors())) . '</textarea>'
+            . '<p class="description">WordPress usernames, one per line. Authors create and edit courses in the app. Authors can also change this list from the app.</p></td></tr>';
+        echo '<tr><th scope="row"><label for="easy_course_reviewers">Extra Course Builder reviewers</label></th>'
+            . '<td><textarea id="easy_course_reviewers" name="easy_course_reviewers" rows="3" class="regular-text code">'
+            . esc_textarea(implode("\n", easy_course_extra_reviewers())) . '</textarea>'
+            . '<p class="description">Admins and anyone who can publish certificates can already review, approve and send back courses. Add other usernames here, one per line.</p></td></tr>';
+    }
     echo '</tbody></table>';
 
     echo '<h2>Shop</h2><table class="form-table"><tbody>';
