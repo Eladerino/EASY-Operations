@@ -327,6 +327,15 @@ function easy_suite_settings_page() {
         }
         update_option('easy_product_form_allowed_users', implode("\n", array_unique($users)), false);
 
+        $proxies = [];
+        foreach (preg_split('/[\s,]+/', (string) wp_unslash($_POST['easy_proxy_posters'] ?? '')) as $u) {
+            $u = sanitize_user($u, true);
+            if ($u !== '') {
+                $proxies[] = $u;
+            }
+        }
+        update_option('easy_proxy_posters', implode("\n", array_unique($proxies)), false);
+
         echo '<div class="notice notice-success is-dismissible"><p><strong>Settings saved.</strong></p></div>';
     }
 
@@ -356,6 +365,13 @@ function easy_suite_settings_page() {
         . '<td><textarea id="easy_noindex_paths" name="easy_noindex_paths" rows="10" class="large-text code">'
         . esc_textarea(implode("\n", easy_core_get_noindex_paths())) . '</textarea>'
         . '<p class="description">One page slug per line. Everything under <code>instructor-portal/</code> is always excluded.</p></td></tr>';
+    echo '</tbody></table>';
+
+    echo '<h2>EASY Operations app</h2><table class="form-table"><tbody>';
+    echo '<tr><th scope="row"><label for="easy_proxy_posters">Can post certificates for other instructors</label></th>'
+        . '<td><textarea id="easy_proxy_posters" name="easy_proxy_posters" rows="4" class="regular-text code">'
+        . esc_textarea(implode("\n", function_exists('easy_suite_proxy_posters') ? easy_suite_proxy_posters() : [])) . '</textarea>'
+        . '<p class="description">WordPress usernames, one per line. Everyone else posts under their own name. Admins and anyone who can publish certificates can always post for others.</p></td></tr>';
     echo '</tbody></table>';
 
     echo '<h2>Shop</h2><table class="form-table"><tbody>';

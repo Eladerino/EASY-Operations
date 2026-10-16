@@ -277,15 +277,32 @@ function configMode(config) {
   return config.wpUser && config.wpUser.user ? 'instructor' : 'office';
 }
 
-// WordPress usernames allowed to post certificates on behalf of other
-// instructors (e.g. office staff posting for an instructor). Matched
-// case-insensitively against the saved sign-in. Everyone else in instructor
-// mode stays locked to their own identity, in the UI and at submit time.
-const PROXY_POSTER_USERNAMES = ['pevans'];
+// Accounts allowed to post certificates on behalf of other instructors
+// (e.g. office staff). The list lives on the site (EASY Suite → Settings)
+// and is read from /easy/v1/app-config; PROXY_POSTER_FALLBACK only applies
+// when the site is older than EASY Suite 2.1 or can't be reached. Everyone
+// else in instructor mode stays locked to their own identity, in the UI and
+// at submit time (and the site enforces the same rule).
+const PROXY_POSTER_FALLBACK = ['pevans'];
+let proxyPosterCache = null; // { user, value }
 
-function isProxyPoster(config) {
+async function isProxyPoster(config) {
   const u = config && config.ok && config.wpUser && config.wpUser.user;
-  return !!u && PROXY_POSTER_USERNAMES.includes(String(u).trim().toLowerCase());
+  if (!u) return false;
+  if (proxyPosterCache && proxyPosterCache.user === u) return proxyPosterCache.value;
+  let value = PROXY_POSTER_FALLBACK.includes(String(u).trim().toLowerCase());
+  try {
+    const base = config.wpBaseUrl.replace(/\/+$/, '');
+    const res = await fetch(`${base}/wp-json/easy/v1/app-config`, {
+      headers: { Authorization: basicAuth(effectiveAuth(config).post) },
+    });
+    if (res.ok) {
+      const json = await res.json().catch(() => ({}));
+      if (typeof json.proxyPoster === 'boolean') value = json.proxyPoster;
+      proxyPosterCache = { user: u, value };
+    }
+  } catch (e) { /* offline: use the fallback, and ask again next time */ }
+  return value;
 }
 
 /* ------------------------------------------------------------------ */
@@ -592,13 +609,14 @@ ipcMain.handle('reset-setup', async () => {
     if (!app.isPackaged && fs.existsSync(devPath)) fs.unlinkSync(devPath);
     cachedConfig = null;
     printerCache = null;
+    proxyPosterCache = null;
     return { ok: true };
   } catch (err) {
     return { ok: false, error: `Could not reset the setup: ${err.message}` };
   }
 });
 
-ipcMain.handle('get-app-info', () => {
+ipcMain.handle('get-app-info', async () => {
   const config = getConfig();
   const mode = config.ok ? configMode(config) : null;
   const instructor =
@@ -616,7 +634,7 @@ ipcMain.handle('get-app-info', () => {
     printerConfigured: config.ok ? Boolean(config.printerName || config.printerNameContains) : false,
     printerName: config.ok ? config.printerName || null : null,
     accountUser: config.ok && config.wpUser ? config.wpUser.user || null : null,
-    proxyPosting: isProxyPoster(config),
+    proxyPosting: config.ok ? await isProxyPoster(config) : false,
   };
 });
 
@@ -629,11 +647,26 @@ const ALLOWED_ACF_KEYS = new Set([
   'certificate_number', 'wpnl', 'certificate',
 ]);
 
-// Ensure a certificate number isn't already taken: scan recent certs and
-// auto-bump the 2-digit instance until free. Fails open (keeps the
-// candidate) when the check itself can't run, so a WP hiccup never blocks
-// posting.
+// Ensure a certificate number isn't already taken. EASY Suite 2.1+ answers
+// from every certificate on the site (drafts included); older sites fall
+// back to scanning the newest 100 published certs. Fails open (keeps the
+// candidate) when no check can run, so a WP hiccup never blocks posting;
+// the site still refuses a duplicate at save time.
 async function resolveUniqueCertificateNumber(base, auth, candidate, excludePostId) {
+  if (candidate) {
+    try {
+      const q = new URLSearchParams({ candidate: String(candidate), exclude: String(excludePostId || 0) });
+      const r = await fetch(`${base}/wp-json/easy/v1/cert-number?${q}`, {
+        headers: { Authorization: basicAuth(auth) },
+      });
+      const json = await r.json().catch(() => ({}));
+      if (r.ok && json.number) return String(json.number);
+      if (r.status === 409) throw new Error(json.message || 'No free certificate number is left for this course and date.');
+    } catch (e) {
+      if (/certificate number/i.test(e.message)) throw e;
+      /* network error: fall through to the scan */
+    }
+  }
   let existing = [];
   try {
     const r = await fetch(`${base}/wp-json/wp/v2/cert?per_page=100&orderby=date&order=desc&_fields=id,acf`, {
@@ -660,7 +693,7 @@ ipcMain.handle('submit-certificate', async (_event, payload) => {
   // Instructor mode: stamp the signed-in instructor's identity here in the
   // main process, so the posted record cannot be re-attributed from the UI.
   // Proxy posters (e.g. designated office accounts) are exempt — their form values flow through.
-  if (configMode(config) === 'instructor' && config.instructor && !isProxyPoster(config)) {
+  if (configMode(config) === 'instructor' && config.instructor && !(await isProxyPoster(config))) {
     if (config.instructor.name) {
       payload.pdf.instructorName = config.instructor.name;
       payload.acf.instructor = config.instructor.name;
