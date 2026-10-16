@@ -5,7 +5,7 @@
 
   const S = window.EasyCertShared;
   // Must match BUILD_TAG in main.js; a mismatch means stale/mixed app files.
-  const EXPECTED_BUILD_TAG = 'ops-20261016a';
+  const EXPECTED_BUILD_TAG = 'ops-20261010c';
   const $ = (id) => document.getElementById(id);
 
   // Review privileges, resolved from getAppInfo during startup. Proxy-poster
