@@ -1,7 +1,7 @@
-// schedule.js — Pam's class-scheduling tab.
+// schedule.js — class-scheduling tab.
 //
 // A month calendar populated from The Events Calendar (legacy v1 REST API).
-// Pam drags a course from the palette onto a day (or clicks a day) to open
+// Staff drag a course from the palette onto a day (or click a day) to open
 // the class editor: title, date(s), times, location, instructor, cost,
 // publish/draft. Existing classes can be edited in place or dragged to
 // another day to reschedule. All API traffic goes through the main process
@@ -19,7 +19,7 @@
   const api = () => window.easyCert.schedule;
 
   // Course Builder access gate: renderer.js sets this true during startup for
-  // Brandon (bglynn) and Dad (sglynn) only. Defaults to false (fail closed)
+  // Allowlisted accounts only. Defaults to false (fail closed)
   // so the tab can never leak to other accounts.
   window.EasyCourseBuilderAllowed = false;
 
@@ -124,7 +124,7 @@
   }
 
   function showView(name) {
-    // Course Builder is gated to Brandon & Dad — everyone else falls back.
+    // Course Builder is gated to allowlisted accounts — everyone else falls back.
     if (name === 'builder' && window.EasyCourseBuilderAllowed !== true) {
       name = 'certs';
     }
@@ -273,7 +273,7 @@
   }
 
   // Preset course description (adapted from the site's training-courses
-  // outlines). Fills the editor's description box when it is empty — Pam
+  // outlines). Fills the editor's description box when it is empty — staff
   // can edit or clear it before saving; an existing description is never
   // clobbered. This also repairs old barren events: opening one whose
   // course is recognized fills in the preset on save.
@@ -500,7 +500,7 @@
     if (ev.allDay) chip.classList.add('ev-allday');
     if (ev.status !== 'publish') chip.classList.add('ev-draft');
     if (day > ev.startDate) chip.classList.add('ev-continue');
-    // On days with more than one class, show the venue so Pam can tell
+    // On days with more than one class, show the venue so staff can tell
     // "which room is which" at a glance. Chips ellipsis on overflow.
     const venueTag = dayCount > 1 && ev.venueName ? ` @ ${ev.venueName}` : '';
     chip.textContent = ev.allDay ? ev.title + venueTag : `${ev.startTime} ${ev.title}${venueTag}`;

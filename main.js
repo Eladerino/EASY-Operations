@@ -7,13 +7,14 @@
 //   - upload the PDF + create the cert post via the WP REST API
 //   - silently print ID cards on the NISCA PR5350
 
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const crypto = require('crypto');
 const printer = require('pdf-to-printer');
 const { fillCertificatePdf } = require('./pdfgen');
+const shared = require('./shared');
 
 // Standard Squirrel.Windows startup handling (install / update / uninstall).
 if (require('electron-squirrel-startup')) app.quit();
@@ -21,12 +22,12 @@ if (require('electron-squirrel-startup')) app.quit();
 // Self-updates via GitHub Releases (public repo Eladerino/EASY-Operations).
 // Only runs in the packaged app; in dev it would just be noise.
 //
-// Policy (per Brandon):
-// - An update found DURING operation just notifies — Pam can finish what
-//   she's doing and restart later.
+// Policy:
+// - An update found DURING operation just notifies — office staff can
+//   finish what they're doing and restart later.
 // - An update still uninstalled at the NEXT launch is mandatory: the app
 //   shows a blocking "Restart to update" prompt before the main window
-//   opens, so she can never run more than one session behind.
+//   opens, so staff can never run more than one session behind.
 const PENDING_UPDATE_FILE = () => path.join(app.getPath('userData'), 'pending-update.json');
 let gateCheckInFlight = false;
 
@@ -197,7 +198,7 @@ function loadConfig() {
 
   const missing = [];
   if (!raw.wpBaseUrl) missing.push('wpBaseUrl');
-  const hasInstructorAuth = raw.wpUser && raw.wpUser.user && raw.wpUser.appPassword;
+  const hasInstructorAuth = raw.wpUser && raw.wpUser.user && (raw.wpUser.appPassword || raw.wpUser.appPasswordEnc);
   const hasLegacyAuth =
     raw.mediaAuth && raw.mediaAuth.user && raw.mediaAuth.appPassword &&
     raw.postAuth && raw.postAuth.user && raw.postAuth.appPassword;
@@ -222,11 +223,45 @@ function basicAuth({ user, appPassword }) {
   return 'Basic ' + Buffer.from(`${user}:${clean}`, 'utf8').toString('base64');
 }
 
+// Application passwords are encrypted with the OS keychain (safeStorage)
+// when available. A plaintext wpUser.appPassword is still read as a
+// fallback for configs written before encryption, and migrated on launch.
+function encryptionAvailable() {
+  try { return safeStorage.isEncryptionAvailable(); } catch (e) { return false; }
+}
+function encryptPassword(plain) {
+  if (!encryptionAvailable()) return null;
+  try { return safeStorage.encryptString(String(plain)).toString('base64'); }
+  catch (e) { return null; }
+}
+function decryptPassword(enc) {
+  if (!enc || !encryptionAvailable()) return '';
+  try { return safeStorage.decryptString(Buffer.from(String(enc), 'base64')); }
+  catch (e) { return ''; }
+}
+function wpAppPassword(wpUser) {
+  return decryptPassword(wpUser.appPasswordEnc) || wpUser.appPassword || '';
+}
+// Migrate a plaintext stored password to OS-keychain encryption, once.
+function maybeMigratePasswordEncryption(config) {
+  if (!config.ok || !config.wpUser || !config.wpUser.appPassword || config.wpUser.appPasswordEnc) return;
+  if (!encryptionAvailable()) return;
+  const enc = encryptPassword(config.wpUser.appPassword);
+  if (!enc) return;
+  try {
+    const raw = JSON.parse(fs.readFileSync(config.path, 'utf8'));
+    raw.wpUser.appPasswordEnc = enc;
+    delete raw.wpUser.appPassword;
+    fs.writeFileSync(config.path, JSON.stringify(raw, null, 2) + '\n');
+    cachedConfig = null;
+  } catch (e) { /* keep the plaintext config rather than breaking sign-in */ }
+}
+
 // Effective WordPress credentials: the per-instructor login when the setup
 // wizard wrote the config, otherwise the legacy shared mediaAuth/postAuth.
 function effectiveAuth(config) {
-  if (config.wpUser && config.wpUser.user && config.wpUser.appPassword) {
-    const creds = { user: config.wpUser.user, appPassword: config.wpUser.appPassword };
+  if (config.wpUser && config.wpUser.user && (config.wpUser.appPassword || config.wpUser.appPasswordEnc)) {
+    const creds = { user: config.wpUser.user, appPassword: wpAppPassword(config.wpUser) };
     return { media: creds, post: creds };
   }
   return {
@@ -242,20 +277,46 @@ function configMode(config) {
   return config.wpUser && config.wpUser.user ? 'instructor' : 'office';
 }
 
-// WordPress usernames allowed to post certificates on behalf of other
-// instructors (e.g. Pam posting for Brandon's dad). Matched
-// case-insensitively against the saved sign-in. Everyone else in instructor
-// mode stays locked to their own identity, in the UI and at submit time.
-const PROXY_POSTER_USERNAMES = ['pevans'];
+// Accounts allowed to post certificates on behalf of other instructors
+// (e.g. office staff). The list lives on the site (EASY Suite → Settings)
+// and is read from /easy/v1/app-config; PROXY_POSTER_FALLBACK only applies
+// when the site is older than EASY Suite 2.1 or can't be reached. Everyone
+// else in instructor mode stays locked to their own identity, in the UI and
+// at submit time (and the site enforces the same rule).
+const PROXY_POSTER_FALLBACK = ['pevans'];
+let proxyPosterCache = null; // { user, value }
 
-function isProxyPoster(config) {
+async function isProxyPoster(config) {
   const u = config && config.ok && config.wpUser && config.wpUser.user;
-  return !!u && PROXY_POSTER_USERNAMES.includes(String(u).trim().toLowerCase());
+  if (!u) return false;
+  if (proxyPosterCache && proxyPosterCache.user === u) return proxyPosterCache.value;
+  let value = PROXY_POSTER_FALLBACK.includes(String(u).trim().toLowerCase());
+  try {
+    const base = config.wpBaseUrl.replace(/\/+$/, '');
+    const res = await fetch(`${base}/wp-json/easy/v1/app-config`, {
+      headers: { Authorization: basicAuth(effectiveAuth(config).post) },
+    });
+    if (res.ok) {
+      const json = await res.json().catch(() => ({}));
+      if (typeof json.proxyPoster === 'boolean') value = json.proxyPoster;
+      proxyPosterCache = { user: u, value };
+    }
+  } catch (e) { /* offline: use the fallback, and ask again next time */ }
+  return value;
 }
 
 /* ------------------------------------------------------------------ */
 /* Window + app lifecycle                                              */
 /* ------------------------------------------------------------------ */
+
+// Deny in-window navigation and popups: the app only ever shows local
+// files. Anything external goes through shell.openExternal explicitly.
+function lockDownWindow(win) {
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('will-navigate', (e, url) => {
+    if (!String(url).startsWith('file://')) e.preventDefault();
+  });
+}
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -272,6 +333,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
     },
   });
+  lockDownWindow(win);
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 }
 
@@ -288,6 +350,7 @@ if (!singleInstance) {
   });
 
   app.whenReady().then(async () => {
+    maybeMigratePasswordEncryption(getConfig());
     const config = getConfig();
     if (!config.ok) {
       dialog.showErrorBox('EASY Operations — setup needed', `${config.error}\n\nFile: ${config.path}`);
@@ -444,17 +507,19 @@ ipcMain.handle('test-connection', async (_event, args = {}) => {
       }
       return { ok: false, error: json.message || `WordPress returned HTTP ${res.status}.` };
     }
-    // Probe the real upload permission: listing media requires the
-    // upload_files capability. (The capabilities field on users/me can be
+    // Probe the real upload permission: listing media in edit context
+    // requires editing rights. (The capabilities field on users/me can be
     // filtered out of REST responses by security plugins, so it is only a
     // fallback here, never the primary signal.)
     let canUpload = null;
     try {
-      const probe = await fetch(`${base}/wp-json/wp/v2/media?per_page=1`, {
+      // context=edit: the plain media list is public, so without it every
+      // account passed this check, upload rights or not.
+      const probe = await fetch(`${base}/wp-json/wp/v2/media?per_page=1&context=edit`, {
         headers: { Authorization: basicAuth({ user, appPassword }) },
       });
       if (probe.ok) canUpload = true;
-      else if (probe.status === 401 || probe.status === 403) canUpload = false;
+      else if (probe.status === 400 || probe.status === 401 || probe.status === 403) canUpload = false;
     } catch {
       canUpload = null;
     }
@@ -493,15 +558,22 @@ ipcMain.handle('get-printers', async () => {
 ipcMain.handle('save-setup', async (_event, setup = {}) => {
   try {
     const { userPath } = configPaths();
+    const rawBase = String(setup.baseUrl || '').replace(/\/+$/, '');
+    if (rawBase.toLowerCase() !== SETUP_SITE_URL) {
+      return { ok: false, error: `This app only connects to ${SETUP_SITE_URL}.` };
+    }
+    const encPassword = encryptPassword(setup.appPassword || '');
     const config = {
-      wpBaseUrl: String(setup.baseUrl || '').replace(/\/+$/, ''),
+      wpBaseUrl: SETUP_SITE_URL,
       mode: 'instructor',
-      wpUser: { user: String(setup.user || '').trim(), appPassword: String(setup.appPassword || '') },
+      wpUser: encPassword
+        ? { user: String(setup.user || '').trim(), appPasswordEnc: encPassword }
+        : { user: String(setup.user || '').trim(), appPassword: String(setup.appPassword || '') },
       instructor: { name: setup.name || '', email: setup.email || '' },
       printerName: setup.printerName || null,
       sumatraExe: 'SumatraPDF-3.4.6-32.exe',
     };
-    if (!config.wpBaseUrl || !config.wpUser.user || !config.wpUser.appPassword) {
+    if (!config.wpBaseUrl || !config.wpUser.user || !(config.wpUser.appPassword || config.wpUser.appPasswordEnc)) {
       return { ok: false, error: 'Site URL, username and application password are required.' };
     }
     fs.mkdirSync(path.dirname(userPath), { recursive: true });
@@ -537,13 +609,14 @@ ipcMain.handle('reset-setup', async () => {
     if (!app.isPackaged && fs.existsSync(devPath)) fs.unlinkSync(devPath);
     cachedConfig = null;
     printerCache = null;
+    proxyPosterCache = null;
     return { ok: true };
   } catch (err) {
     return { ok: false, error: `Could not reset the setup: ${err.message}` };
   }
 });
 
-ipcMain.handle('get-app-info', () => {
+ipcMain.handle('get-app-info', async () => {
   const config = getConfig();
   const mode = config.ok ? configMode(config) : null;
   const instructor =
@@ -561,9 +634,53 @@ ipcMain.handle('get-app-info', () => {
     printerConfigured: config.ok ? Boolean(config.printerName || config.printerNameContains) : false,
     printerName: config.ok ? config.printerName || null : null,
     accountUser: config.ok && config.wpUser ? config.wpUser.user || null : null,
-    proxyPosting: isProxyPoster(config),
+    proxyPosting: config.ok ? await isProxyPoster(config) : false,
   };
 });
+
+// Only these ACF fields are ever forwarded to WordPress — anything else in
+// the payload is dropped rather than written.
+const ALLOWED_ACF_KEYS = new Set([
+  'student_name', 'student_email', 'student_phone',
+  'course_category', 'course_title', 'completion_date', 'expiry_date',
+  'instructor', 'instructor_email', 'company', 'company_contact',
+  'certificate_number', 'wpnl', 'certificate',
+]);
+
+// Ensure a certificate number isn't already taken. EASY Suite 2.1+ answers
+// from every certificate on the site (drafts included); older sites fall
+// back to scanning the newest 100 published certs. Fails open (keeps the
+// candidate) when no check can run, so a WP hiccup never blocks posting;
+// the site still refuses a duplicate at save time.
+async function resolveUniqueCertificateNumber(base, auth, candidate, excludePostId) {
+  if (candidate) {
+    try {
+      const q = new URLSearchParams({ candidate: String(candidate), exclude: String(excludePostId || 0) });
+      const r = await fetch(`${base}/wp-json/easy/v1/cert-number?${q}`, {
+        headers: { Authorization: basicAuth(auth) },
+      });
+      const json = await r.json().catch(() => ({}));
+      if (r.ok && json.number) return String(json.number);
+      if (r.status === 409) throw new Error(json.message || 'No free certificate number is left for this course and date.');
+    } catch (e) {
+      if (/certificate number/i.test(e.message)) throw e;
+      /* network error: fall through to the scan */
+    }
+  }
+  let existing = [];
+  try {
+    const r = await fetch(`${base}/wp-json/wp/v2/cert?per_page=100&orderby=date&order=desc&_fields=id,acf`, {
+      headers: { Authorization: basicAuth(auth) },
+    });
+    const arr = await r.json().catch(() => []);
+    for (const c of (Array.isArray(arr) ? arr : [])) {
+      if (excludePostId && c.id === excludePostId) continue;
+      const num = c.acf && c.acf.certificate_number;
+      if (num) existing.push(String(num));
+    }
+  } catch (e) { return String(candidate || ''); }
+  return shared.nextFreeCertificateNumber(candidate, existing);
+}
 
 ipcMain.handle('submit-certificate', async (_event, payload) => {
   const config = getConfig();
@@ -575,8 +692,8 @@ ipcMain.handle('submit-certificate', async (_event, payload) => {
 
   // Instructor mode: stamp the signed-in instructor's identity here in the
   // main process, so the posted record cannot be re-attributed from the UI.
-  // Proxy posters (e.g. Pam) are exempt — their form values flow through.
-  if (configMode(config) === 'instructor' && config.instructor && !isProxyPoster(config)) {
+  // Proxy posters (e.g. designated office accounts) are exempt — their form values flow through.
+  if (configMode(config) === 'instructor' && config.instructor && !(await isProxyPoster(config))) {
     if (config.instructor.name) {
       payload.pdf.instructorName = config.instructor.name;
       payload.acf.instructor = config.instructor.name;
@@ -586,13 +703,36 @@ ipcMain.handle('submit-certificate', async (_event, payload) => {
     }
   }
 
+  const base = config.wpBaseUrl.replace(/\/+$/, '');
+  const updateId = parseInt(payload.updateId, 10) || 0;
+  let uploadedMediaId = 0;
+  let postSucceeded = false;
+
   try {
+    // 0. Guarantee a unique certificate number before anything is generated:
+    // scan recent certs and auto-bump the instance on collision.
+    const finalNumber = await resolveUniqueCertificateNumber(
+      base, auth.post, payload.acf && payload.acf.certificate_number, updateId);
+    if (payload.acf) payload.acf.certificate_number = finalNumber;
+    if (payload.pdf) payload.pdf.certificateNumber = finalNumber;
+
+    // On draft updates, note the current PDF so it can be removed once the
+    // replacement is live (no orphaned media).
+    let oldMediaId = 0;
+    if (updateId) {
+      try {
+        const curRes = await fetch(`${base}/wp-json/wp/v2/cert/${updateId}?_fields=acf`, {
+          headers: { Authorization: basicAuth(auth.post) },
+        });
+        const curJson = await curRes.json().catch(() => ({}));
+        oldMediaId = parseInt(curJson.acf && curJson.acf.certificate, 10) || 0;
+      } catch (e) { /* best-effort: cleanup just won't happen */ }
+    }
+
     // 1. Generate the certificate PDF from the template.
     const templateBytes = fs.readFileSync(path.join(__dirname, 'EASY_CertTemplate.pdf'));
     const pdfBuffer = await fillCertificatePdf(templateBytes, payload.pdf);
     const previewPath = await storePreviewPdf(pdfBuffer, payload.filename);
-
-    const base = config.wpBaseUrl.replace(/\/+$/, '');
 
     // 2. Upload the PDF to the WordPress media library.
     const pdfFile = new File([pdfBuffer], payload.filename, { type: 'application/pdf' });
@@ -611,17 +751,18 @@ ipcMain.handle('submit-certificate', async (_event, payload) => {
     if (!mediaRes.ok || !mediaJson.id) {
       throw new Error(mediaJson.message || 'PDF upload to WordPress failed.');
     }
+    uploadedMediaId = mediaJson.id;
 
     // 3. Create the cert post with its ACF fields — or update an existing
     // draft when the renderer is editing one (fix-before-publish).
     const postForm = new FormData();
     postForm.append('title', payload.title);
-    for (const [key, value] of Object.entries(payload.acf)) {
+    for (const [key, value] of Object.entries(payload.acf || {})) {
+      if (!ALLOWED_ACF_KEYS.has(key)) continue;
       postForm.append(`acf[${key}]`, value ?? '');
     }
     postForm.append('acf[certificate]', String(mediaJson.id));
 
-    const updateId = parseInt(payload.updateId, 10) || 0;
     const postUrl = updateId
       ? `${base}/wp-json/wp/v2/cert/${updateId}`
       : `${base}/wp-json/wp/v2/cert`;
@@ -634,10 +775,25 @@ ipcMain.handle('submit-certificate', async (_event, payload) => {
     if (!postRes.ok || !postJson.id) {
       throw new Error(postJson.message || (updateId ? 'Certificate draft update failed.' : 'Certificate post creation failed.'));
     }
+    postSucceeded = true;
     if (updateId) {
-      // Draft updated: no card print, no "posted" dialog — the reviewer
-      // stays in the approval workflow.
-      return { ok: true, updated: true, postId: postJson.id, mediaId: mediaJson.id, pdfPath: previewPath };
+      // Draft updated: delete the superseded PDF so it doesn't orphan.
+      // No card print, no "posted" dialog — the reviewer stays in the
+      // approval workflow.
+      // (EASY Suite also deletes it server-side when the certificate field
+      // changes, so a 404 here just means the site got there first.)
+      if (oldMediaId && oldMediaId !== mediaJson.id) {
+        try {
+          const delRes = await fetch(`${base}/wp-json/wp/v2/media/${oldMediaId}?force=true`, {
+            method: 'DELETE',
+            headers: { Authorization: basicAuth(auth.media) },
+          });
+          if (!delRes.ok && delRes.status !== 404) {
+            console.warn(`Superseded certificate PDF ${oldMediaId} was not deleted (HTTP ${delRes.status}).`);
+          }
+        } catch (e) { console.warn('Superseded certificate PDF cleanup failed:', e.message); }
+      }
+      return { ok: true, updated: true, postId: postJson.id, mediaId: mediaJson.id, pdfPath: previewPath, certificateNumber: finalNumber };
     }
 
     // 4. Optionally print the physical ID card.
@@ -646,8 +802,21 @@ ipcMain.handle('submit-certificate', async (_event, payload) => {
       print = await printPdfBuffer(pdfBuffer, config);
     }
 
-    return { ok: true, postId: postJson.id, mediaId: mediaJson.id, print, pdfPath: previewPath };
+    return { ok: true, postId: postJson.id, mediaId: mediaJson.id, print, pdfPath: previewPath, certificateNumber: finalNumber };
   } catch (err) {
+    // The post failed after a successful upload: delete the orphaned PDF
+    // rather than leaving it in the media library.
+    if (uploadedMediaId && !postSucceeded) {
+      try {
+        const delRes = await fetch(`${base}/wp-json/wp/v2/media/${uploadedMediaId}?force=true`, {
+          method: 'DELETE',
+          headers: { Authorization: basicAuth(auth.media) },
+        });
+        if (!delRes.ok) {
+          console.warn(`Orphaned certificate PDF ${uploadedMediaId} was not deleted (HTTP ${delRes.status}).`);
+        }
+      } catch (e) { console.warn('Orphaned certificate PDF cleanup failed:', e.message); }
+    }
     console.error('submit-certificate failed:', err);
     return { ok: false, error: err.message };
   }
@@ -666,6 +835,7 @@ async function printPdfFile(pdfPath) {
     show: false,
     webPreferences: { contextIsolation: true },
   });
+  lockDownWindow(printWin);
 
   try {
     await printWin.loadURL(pathToFileURL(pdfPath).href);
@@ -733,12 +903,146 @@ ipcMain.handle('open-pdf-external', async () => {
 });
 
 /* ------------------------------------------------------------------ */
+/* Course Builder — automatic file backups                              */
+/*                                                                     */
+/* The builder keeps course content in localStorage, so a             */
+/* profile wipe or reinstall would lose it. The renderer sends a       */
+/* debounced snapshot after local saves; we write it to                */
+/* <userData>/course-builder-backups/ as a timestamped JSON file plus  */
+/* a rolling latest.json, keeping the newest 20 snapshots.             */
+/* ------------------------------------------------------------------ */
+
+const BUILDER_BACKUP_DIR = () => path.join(app.getPath('userData'), 'course-builder-backups');
+const BUILDER_BACKUP_KEEP = 20;
+
+function builderBackupStamp(d) {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
+
+ipcMain.handle('course-builder-backup', async (_event, snapshot) => {
+  try {
+    if (!snapshot || typeof snapshot !== 'object') return { ok: false, error: 'Invalid snapshot.' };
+    const payload = {
+      app: 'EASYOperations-course-builder',
+      savedAt: new Date().toISOString(),
+      courses: Array.isArray(snapshot.courses) ? snapshot.courses : [],
+      inbox: Array.isArray(snapshot.inbox) ? snapshot.inbox : [],
+      authors: Array.isArray(snapshot.authors) ? snapshot.authors : [],
+    };
+    const dir = BUILDER_BACKUP_DIR();
+    await fs.promises.mkdir(dir, { recursive: true });
+    const body = JSON.stringify(payload, null, 2);
+    const file = path.join(dir, `backup-${builderBackupStamp(new Date())}.json`);
+    await fs.promises.writeFile(file, body, 'utf8');
+    await fs.promises.writeFile(path.join(dir, 'latest.json'), body, 'utf8');
+    const entries = (await fs.promises.readdir(dir))
+      .filter((n) => /^backup-\d{8}-\d{6}\.json$/.test(n))
+      .sort()
+      .reverse();
+    for (const old of entries.slice(BUILDER_BACKUP_KEEP)) {
+      await fs.promises.unlink(path.join(dir, old)).catch(() => {});
+    }
+    return { ok: true, path: file, dir };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('course-builder-backup-folder', async () => {
+  try {
+    const dir = BUILDER_BACKUP_DIR();
+    await fs.promises.mkdir(dir, { recursive: true });
+    await shell.openPath(dir);
+    return { ok: true, dir };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+/* ------------------------------------------------------------------ */
+/* Course Builder — site sync (EASY Suite "courses" module)             */
+/*                                                                     */
+/* One channel with a fixed set of operations, each mapped to one      */
+/* route under /wp-json/easy/v1/course-builder/. Ids are checked here  */
+/* so the renderer can't steer requests anywhere else. Results:        */
+/*   { ok: true, status, data }                                        */
+/*   { ok: false, status, code, error, data, missing }  site answered  */
+/*   { ok: false, offline: true, error }                 no answer      */
+/* `missing` means the site has no courses module (older EASY Suite or  */
+/* switched off), so the builder falls back to passing files around.   */
+/* ------------------------------------------------------------------ */
+
+const COURSE_ID_RE = /^[a-z0-9_-]{1,64}$/;
+
+function courseSyncRoute(op, args) {
+  const cid = () => {
+    const id = String(args.id || '');
+    if (!COURSE_ID_RE.test(id)) throw new Error('Invalid course id.');
+    return id;
+  };
+  const sid = () => {
+    const id = parseInt(args.reviewId, 10);
+    if (!(id > 0)) throw new Error('Invalid review id.');
+    return id;
+  };
+  const content = () => ({
+    course: args.course && typeof args.course === 'object' ? args.course : null,
+    baseRev: Number.isInteger(args.baseRev) && args.baseRev > 0 ? args.baseRev : 0,
+  });
+  switch (op) {
+    case 'me': return ['GET', '/course-builder/me'];
+    case 'list': return ['GET', '/course-builder/courses'];
+    case 'save': return ['POST', `/course-builder/courses/${cid()}`, content()];
+    case 'delete': return ['DELETE', `/course-builder/courses/${cid()}`];
+    case 'submit': return ['POST', `/course-builder/courses/${cid()}/review`, content()];
+    case 'withdraw': return ['POST', `/course-builder/courses/${cid()}/withdraw`, {}];
+    case 'final': return ['GET', `/course-builder/courses/${cid()}/final`];
+    case 'reviews': return ['GET', '/course-builder/reviews'];
+    case 'approve': return ['POST', `/course-builder/reviews/${sid()}/approve`, {}];
+    case 'sendBack': return ['POST', `/course-builder/reviews/${sid()}/send-back`, { note: String(args.note || '').slice(0, 2000) }];
+    case 'setAuthors': {
+      const list = Array.isArray(args.authors) ? args.authors.map((a) => String(a).trim()).filter(Boolean).slice(0, 50) : [];
+      return ['POST', '/course-builder/authors', { authors: list }];
+    }
+    default: throw new Error('Unknown Course Builder operation.');
+  }
+}
+
+ipcMain.handle('course-sync', async (_event, { op, args = {} } = {}) => {
+  const config = getConfig();
+  if (!config.ok) return { ok: false, error: config.error };
+  let route;
+  try {
+    route = courseSyncRoute(String(op || ''), args || {});
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+  const [method, endpoint, body] = route;
+  try {
+    const r = await easyRequest(config, method, endpoint, { body, timeoutMs: 30000 });
+    if (r.status >= 200 && r.status < 300) return { ok: true, status: r.status, data: r.json };
+    const code = r.json && r.json.code;
+    return {
+      ok: false,
+      status: r.status,
+      code,
+      missing: r.status === 404 && code === 'rest_no_route',
+      error: (r.json && r.json.message) || `WordPress returned HTTP ${r.status}.`,
+      data: r.json && r.json.data,
+    };
+  } catch (err) {
+    return { ok: false, offline: true, error: `Could not reach the site: ${err.message}` };
+  }
+});
+
+/* ------------------------------------------------------------------ */
 /* Schedule tab — The Events Calendar REST API (legacy v1)              */
 /*                                                                     */
 /* Uses the stable legacy namespace /wp-json/tribe/events/v1, which    */
 /* exists on every TEC install since 4.6 (2017). Dates are sent as     */
 /* "YYYY-MM-DD HH:MM:SS" wall-clock strings; the API interprets them   */
-/* in the WordPress site's timezone, which is exactly what Pam types   */
+/* in the WordPress site's timezone, which is exactly what staff type  */
 /* in. No Date/TZ conversion happens in the app, so machine timezone   */
 /* never enters the picture.                                           */
 /*                                                                     */
@@ -987,7 +1291,7 @@ ipcMain.handle('schedule-delete-event', async (_event, id) => {
   }
 });
 
-// Site timezone, shown in the scheduling UI so Pam knows which clock
+// Site timezone, shown in the scheduling UI so staff know which clock
 // the class times are on.
 ipcMain.handle('schedule-site-info', async () => {
   const config = getConfig();
@@ -1023,7 +1327,7 @@ function easyBase(config) {
   return config.wpBaseUrl.replace(/\/+$/, '') + '/wp-json/easy/v1';
 }
 
-async function easyRequest(config, method, endpoint, { body } = {}) {
+async function easyRequest(config, method, endpoint, { body, timeoutMs } = {}) {
   const auth = effectiveAuth(config);
   const res = await fetch(easyBase(config) + endpoint, {
     method,
@@ -1032,6 +1336,7 @@ async function easyRequest(config, method, endpoint, { body } = {}) {
       ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined,
   });
   const json = await res.json().catch(() => ({}));
   return { status: res.status, json };
@@ -1248,45 +1553,16 @@ ipcMain.handle('cert-approvals-preview', async (_event, id) => {
   if (!config.ok) return { ok: false, error: config.error };
   const numId = parseInt(id, 10);
   if (!numId) return { ok: false, error: 'Invalid certificate id.' };
-  const auth = effectiveAuth(config).post;
-  const base = config.wpBaseUrl.replace(/\/+$/, '');
-  const headers = { Authorization: basicAuth(auth) };
+  let tmpPath = null;
   try {
-    const certRes = await fetch(`${base}/wp-json/wp/v2/cert/${numId}?_fields=acf`, { headers });
-    const certJson = await certRes.json().catch(() => ({}));
-    if (!certRes.ok) {
-      return { ok: false, error: 'Could not read this draft certificate.' };
-    }
-    const acf = certJson && certJson.acf;
-    const ref = resolvePdfRef(acf);
-    if (!ref) {
-      return { ok: false, error: 'No PDF is attached to this draft yet.' };
-    }
-    // Prefer the authenticated gatekeeper (EASY Core 1.5.0+): cert PDFs are
-    // no longer web-accessible at their direct media URLs.
-    const certNumber = (acf && acf.certificate_number) || '';
-    let sourceUrl = certNumber ? `${base}/cert-pdf/${encodeURIComponent(certNumber)}/` : null;
-    if (!sourceUrl) {
-      sourceUrl = ref.kind === 'url' ? ref.url : null;
-      if (ref.kind === 'id') {
-        const mediaRes = await fetch(`${base}/wp-json/wp/v2/media/${ref.id}?_fields=source_url`, { headers });
-        const mediaJson = await mediaRes.json().catch(() => ({}));
-        sourceUrl = mediaJson && mediaJson.source_url;
-        if (!mediaRes.ok || !sourceUrl) {
-          return { ok: false, error: 'Could not locate the certificate PDF.' };
-        }
-      }
-    }
-    const dlRes = await fetch(sourceUrl, { headers });
-    if (!dlRes.ok) return { ok: false, error: `Could not download the PDF (HTTP ${dlRes.status}).` };
-    const buf = Buffer.from(await dlRes.arrayBuffer());
-    const tmpPath = path.join(os.tmpdir(), `easy-cert-preview-${numId}-${Date.now()}.pdf`);
-    await fs.promises.writeFile(tmpPath, buf);
-
+    tmpPath = await downloadCertPdf(config, numId, 'preview');
     await openPdfViewerWindow(tmpPath, 'Certificate preview');
+    tmpPath = null; // the viewer owns the temp file now
     return { ok: true };
   } catch (err) {
     return { ok: false, error: `Could not open the preview: ${err.message}` };
+  } finally {
+    if (tmpPath) fs.unlink(tmpPath, () => {});
   }
 });
 
@@ -1302,6 +1578,7 @@ async function openPdfViewerWindow(tmpPath, title) {
     autoHideMenuBar: true,
     webPreferences: { contextIsolation: true },
   });
+  lockDownWindow(viewer);
   viewer.on('closed', () => fs.unlink(tmpPath, () => {}));
   await viewer.loadURL(pathToFileURL(tmpPath).href);
 }
@@ -1333,8 +1610,8 @@ ipcMain.handle('cert-tools-search', async (_event, query = '') => {
 });
 
 // Download the stored PDF for a certificate (any status) so the caller
-// can print or save it. Shared by reprint; preview has its own viewer.
-async function downloadCertPdf(config, numId) {
+// can print or save it. Shared by reprint and draft preview.
+async function downloadCertPdf(config, numId, prefix = 'reprint') {
   const auth = effectiveAuth(config).post;
   const base = config.wpBaseUrl.replace(/\/+$/, '');
   const headers = { Authorization: basicAuth(auth) };
@@ -1357,10 +1634,19 @@ async function downloadCertPdf(config, numId) {
       if (!mediaRes.ok || !sourceUrl) throw new Error('Could not locate the certificate PDF.');
     }
   }
-  const dlRes = await fetch(sourceUrl, { headers });
+  // No redirect following: when the saved login is rejected, the
+  // gatekeeper redirects to the WordPress login page, and following it
+  // would save that HTML page as the "PDF".
+  const dlRes = await fetch(sourceUrl, { headers, redirect: 'manual' });
+  if (dlRes.status >= 300 && dlRes.status < 400) {
+    throw new Error('WordPress asked to sign in again. The saved application password may have been revoked; run Setup to sign in.');
+  }
   if (!dlRes.ok) throw new Error(`Could not download the PDF (HTTP ${dlRes.status}).`);
   const buf = Buffer.from(await dlRes.arrayBuffer());
-  const tmpPath = path.join(os.tmpdir(), `easy-cert-reprint-${numId}-${Date.now()}.pdf`);
+  if (buf.subarray(0, 5).toString('latin1') !== '%PDF-') {
+    throw new Error('The site did not return a PDF file for this certificate.');
+  }
+  const tmpPath = path.join(os.tmpdir(), `easy-cert-${prefix}-${numId}-${Date.now()}.pdf`);
   await fs.promises.writeFile(tmpPath, buf);
   return tmpPath;
 }

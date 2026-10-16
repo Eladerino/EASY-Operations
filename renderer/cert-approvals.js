@@ -56,8 +56,8 @@
     $('certApprovPanel').classList.toggle('hidden', !certs);
     $('classApprovPanel').classList.toggle('hidden', !classes);
     $('accountApprovPanel').classList.toggle('hidden', !accounts);
-    // Prime the classes badge even when another sub-tab is active, so Pam
-    // sees the full pending count on the Approvals tab. Skipped for plain
+    // Prime the classes badge even when another sub-tab is active, so office
+    // staff see the full pending count on the Approvals tab. Skipped for plain
     // instructor accounts (no queue, no badge needed).
     if (window.EasyClassApprovals && (!window.EasyPerms || window.EasyPerms.privileged)) {
       window.EasyClassApprovals.primeBadge();
@@ -175,9 +175,18 @@
         c.instructor && `Instructor ${c.instructor}`,
         c.date && `submitted ${fmtDate(c.date)}`,
       ].filter(Boolean).join(' · ');
+      // Publishing emails the student, and the employer digest goes to the
+      // company contact, so the reviewer sees both addresses before approving.
+      const meta3 = document.createElement('div');
+      meta3.className = 'hint';
+      meta3.textContent = [
+        c.studentEmail ? `Emails ${c.studentEmail}` : 'No student email',
+        c.companyContact && `employer copy to ${c.companyContact}${c.company ? ` (${c.company})` : ''}`,
+      ].filter(Boolean).join(' · ');
       info.appendChild(name);
       info.appendChild(meta1);
       info.appendChild(meta2);
+      info.appendChild(meta3);
       if (c.certificateNumber) {
         const certNo = document.createElement('div');
         certNo.className = 'cert-no';
@@ -198,7 +207,7 @@
         actions.appendChild(previewBtn);
       }
       // Publish is a reviewer action: instructors see the queue read-only
-      // (their own submissions' status); Pam and office accounts publish.
+      // (their own submissions' status); office accounts publish.
       const privileged = window.EasyPerms && window.EasyPerms.privileged;
       let publishBtn = null;
       if (privileged) {

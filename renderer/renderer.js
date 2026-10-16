@@ -8,8 +8,8 @@
   const EXPECTED_BUILD_TAG = 'ops-20261010c';
   const $ = (id) => document.getElementById(id);
 
-  // Review privileges, resolved from getAppInfo during startup. Pam (proxy
-  // poster) and office-mode accounts see every approval queue; plain
+  // Review privileges, resolved from getAppInfo during startup. Proxy-poster
+  // and office-mode accounts see every approval queue; plain
   // instructor accounts get the review UI trimmed (no Classes queue, no
   // cert Publish button, no Accounts sub-tab). WordPress still enforces
   // the actual actions, so this is presentation, not security.
@@ -141,7 +141,7 @@
     applyPrinterState(info.printerConfigured !== false);
   }
 
-  // Proxy-poster accounts (e.g. Pam): the instructor fields stay blank and
+  // Proxy-poster accounts (e.g. designated office accounts): the instructor fields stay blank and
   // editable so certificates can be posted for another instructor. The
   // fields are required, so nothing ships without an instructor on it.
   function applyProxyPostingNote() {
@@ -803,6 +803,14 @@
         return;
       }
 
+      // The main process may have bumped the certificate number to avoid a
+      // collision — keep the form in sync for the "more students" flow.
+      if (result.certificateNumber) {
+        certificateNumber.value = result.certificateNumber;
+        const numMatch = /(\d{2})$/.exec(result.certificateNumber);
+        if (numMatch) instanceNumber = parseInt(numMatch[1], 10);
+      }
+
       if (result.updated) {
         toast('Draft updated.', 'success');
         cancelEdit();
@@ -949,15 +957,28 @@
         return;
       }
       applyAppMode(info);
-      // Course Builder tab: only Brandon (bglynn) and Dad (sglynn) may see
+      // Course Builder tab: only allowlisted accounts may see
       // it. Everyone else gets the tab hidden; showView() also refuses the
       // 'builder' view for them as a backstop.
       const builderUser = (info && info.accountUser ? String(info.accountUser) : '').toLowerCase();
       window.EasyCourseBuilderAllowed = builderUser === 'bglynn' || builderUser === 'sglynn';
       const builderTab = $('tabCourseBuilder');
       if (builderTab) builderTab.style.display = window.EasyCourseBuilderAllowed ? '' : 'none';
+      // When the site runs EASY Suite's Course Builder module, it decides
+      // instead: every course author and reviewer gets the tab, and
+      // reviewers see how many courses are waiting for them.
+      if (window.easyCert.courses) {
+        window.easyCert.courses.sync('me').then((r) => {
+          if (!r || !r.ok || !r.data) return;
+          window.EasyCourseBuilderAllowed = Boolean(r.data.isAuthor || r.data.isReviewer);
+          if (builderTab) builderTab.style.display = window.EasyCourseBuilderAllowed ? '' : 'none';
+          const badge = $('tabCourseBuilderBadge');
+          const n = r.data.isReviewer ? (r.data.pendingReviews | 0) : 0;
+          if (badge) { badge.textContent = n; badge.classList.toggle('hidden', !n); }
+        }).catch(() => {});
+      }
       // Resolve review privileges and trim the approval UI for plain
-      // instructor accounts (Pam and office mode keep everything).
+      // instructor accounts (office mode keeps everything).
       window.EasyPerms.privileged = Boolean(info.proxyPosting || info.mode === 'office');
       if (!window.EasyPerms.privileged) {
         for (const id of ['subTabClasses', 'subTabAccounts']) {
