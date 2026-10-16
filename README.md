@@ -161,8 +161,9 @@ release triggers an update prompt. The updater only runs in the packaged app
   where it is still connected.
 - **Packaging fixed:** `forge.config.js` used to silently override the forge
   config in `package.json`, which dropped the `asarUnpack` entries — meaning
-  SumatraPDF couldn't execute from the packaged app. There is now one config,
-  with correct unpacking.
+  SumatraPDF couldn't execute from the packaged app. There is now one config.
+  (Until 1.1.1 it still used `asarUnpack`, which Forge ignores, so silent card
+  printing failed in installed builds; it now uses `asar.unpack`.)
 - **No more double-posts:** the Post button disables with a spinner while
   submitting.
 - **UI refresh:** sectioned form, sticky action bar, inline toasts and modals
