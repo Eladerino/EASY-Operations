@@ -58,7 +58,15 @@ jobs:
           if gh release view "v$V" >/dev/null 2>&1; then
             echo "::error::v$V is already released. Bump \"version\" in package.json, then run this again."; exit 1
           fi
-          tag=$(git ls-remote --tags origin "refs/tags/v$V" | cut -f1)
+          # Installed apps only update to a higher version, so a lower one
+          # (a typo, a stale branch) would never reach them.
+          latest=$(gh release view --json tagName -q .tagName 2>/dev/null || true)
+          latest=${latest#v}
+          if [ -n "$latest" ] && [ "$(printf '%s\n' "$latest" "$V" | sort -V | tail -n1)" != "$V" ]; then
+            echo "::error::v$V is lower than the latest release v$latest. Set a higher \"version\" in package.json."; exit 1
+          fi
+          # The ^{} line (listed last) is the commit an annotated tag points at.
+          tag=$(git ls-remote --tags origin "refs/tags/v$V" "refs/tags/v$V^{}" | tail -n1 | cut -f1)
           if [ -n "$tag" ] && [ "$tag" != "$GITHUB_SHA" ]; then
             echo "::error::Tag v$V already exists on a different commit. Bump the version, or delete that tag if a failed release left it behind."; exit 1
           fi
@@ -96,8 +104,7 @@ jobs:
           fi
           echo "Package OK: $expected"
 
-      - if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-files
           path: |
@@ -107,14 +114,16 @@ jobs:
           compression-level: 0
           retention-days: 1
 
+  # Pull requests run this job too, up to checking the files, so the hand-off
+  # from the build is tested before a real release depends on it.
   publish:
     needs: build
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: release-files
           path: dist
@@ -126,9 +135,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           V: ${{ needs.build.outputs.version }}
+          PUBLISH: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
         run: |
+          set -euo pipefail
           mapfile -t files < <(find dist -type f | sort)
           printf '%s\n' "${files[@]}"
+          got=$(for f in "${files[@]}"; do basename "$f"; done | sort | tr '\n' ' ')
+          want=$(printf '%s\n' RELEASES EasyOperationsInstaller.exe "EASYOperations-$V-full.nupkg" "EASYOperations-win32-x64-$V.zip" | sort | tr '\n' ' ')
+          if [ "$got" != "$want" ]; then
+            echo "::error::Expected release files: $want; got: $got"; exit 1
+          fi
+          if [ "$PUBLISH" != "true" ]; then
+            echo "Release files OK. Pull request, so nothing is published."; exit 0
+          fi
           gh release create "v$V" "${files[@]}" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
