@@ -490,17 +490,19 @@ ipcMain.handle('test-connection', async (_event, args = {}) => {
       }
       return { ok: false, error: json.message || `WordPress returned HTTP ${res.status}.` };
     }
-    // Probe the real upload permission: listing media requires the
-    // upload_files capability. (The capabilities field on users/me can be
+    // Probe the real upload permission: listing media in edit context
+    // requires editing rights. (The capabilities field on users/me can be
     // filtered out of REST responses by security plugins, so it is only a
     // fallback here, never the primary signal.)
     let canUpload = null;
     try {
-      const probe = await fetch(`${base}/wp-json/wp/v2/media?per_page=1`, {
+      // context=edit: the plain media list is public, so without it every
+      // account passed this check, upload rights or not.
+      const probe = await fetch(`${base}/wp-json/wp/v2/media?per_page=1&context=edit`, {
         headers: { Authorization: basicAuth({ user, appPassword }) },
       });
       if (probe.ok) canUpload = true;
-      else if (probe.status === 401 || probe.status === 403) canUpload = false;
+      else if (probe.status === 400 || probe.status === 401 || probe.status === 403) canUpload = false;
     } catch {
       canUpload = null;
     }
@@ -1441,45 +1443,16 @@ ipcMain.handle('cert-approvals-preview', async (_event, id) => {
   if (!config.ok) return { ok: false, error: config.error };
   const numId = parseInt(id, 10);
   if (!numId) return { ok: false, error: 'Invalid certificate id.' };
-  const auth = effectiveAuth(config).post;
-  const base = config.wpBaseUrl.replace(/\/+$/, '');
-  const headers = { Authorization: basicAuth(auth) };
+  let tmpPath = null;
   try {
-    const certRes = await fetch(`${base}/wp-json/wp/v2/cert/${numId}?_fields=acf`, { headers });
-    const certJson = await certRes.json().catch(() => ({}));
-    if (!certRes.ok) {
-      return { ok: false, error: 'Could not read this draft certificate.' };
-    }
-    const acf = certJson && certJson.acf;
-    const ref = resolvePdfRef(acf);
-    if (!ref) {
-      return { ok: false, error: 'No PDF is attached to this draft yet.' };
-    }
-    // Prefer the authenticated gatekeeper (EASY Core 1.5.0+): cert PDFs are
-    // no longer web-accessible at their direct media URLs.
-    const certNumber = (acf && acf.certificate_number) || '';
-    let sourceUrl = certNumber ? `${base}/cert-pdf/${encodeURIComponent(certNumber)}/` : null;
-    if (!sourceUrl) {
-      sourceUrl = ref.kind === 'url' ? ref.url : null;
-      if (ref.kind === 'id') {
-        const mediaRes = await fetch(`${base}/wp-json/wp/v2/media/${ref.id}?_fields=source_url`, { headers });
-        const mediaJson = await mediaRes.json().catch(() => ({}));
-        sourceUrl = mediaJson && mediaJson.source_url;
-        if (!mediaRes.ok || !sourceUrl) {
-          return { ok: false, error: 'Could not locate the certificate PDF.' };
-        }
-      }
-    }
-    const dlRes = await fetch(sourceUrl, { headers });
-    if (!dlRes.ok) return { ok: false, error: `Could not download the PDF (HTTP ${dlRes.status}).` };
-    const buf = Buffer.from(await dlRes.arrayBuffer());
-    const tmpPath = path.join(os.tmpdir(), `easy-cert-preview-${numId}-${Date.now()}.pdf`);
-    await fs.promises.writeFile(tmpPath, buf);
-
+    tmpPath = await downloadCertPdf(config, numId, 'preview');
     await openPdfViewerWindow(tmpPath, 'Certificate preview');
+    tmpPath = null; // the viewer owns the temp file now
     return { ok: true };
   } catch (err) {
     return { ok: false, error: `Could not open the preview: ${err.message}` };
+  } finally {
+    if (tmpPath) fs.unlink(tmpPath, () => {});
   }
 });
 
@@ -1527,8 +1500,8 @@ ipcMain.handle('cert-tools-search', async (_event, query = '') => {
 });
 
 // Download the stored PDF for a certificate (any status) so the caller
-// can print or save it. Shared by reprint; preview has its own viewer.
-async function downloadCertPdf(config, numId) {
+// can print or save it. Shared by reprint and draft preview.
+async function downloadCertPdf(config, numId, prefix = 'reprint') {
   const auth = effectiveAuth(config).post;
   const base = config.wpBaseUrl.replace(/\/+$/, '');
   const headers = { Authorization: basicAuth(auth) };
@@ -1551,10 +1524,19 @@ async function downloadCertPdf(config, numId) {
       if (!mediaRes.ok || !sourceUrl) throw new Error('Could not locate the certificate PDF.');
     }
   }
-  const dlRes = await fetch(sourceUrl, { headers });
+  // No redirect following: when the saved login is rejected, the
+  // gatekeeper redirects to the WordPress login page, and following it
+  // would save that HTML page as the "PDF".
+  const dlRes = await fetch(sourceUrl, { headers, redirect: 'manual' });
+  if (dlRes.status >= 300 && dlRes.status < 400) {
+    throw new Error('WordPress asked to sign in again. The saved application password may have been revoked; run Setup to sign in.');
+  }
   if (!dlRes.ok) throw new Error(`Could not download the PDF (HTTP ${dlRes.status}).`);
   const buf = Buffer.from(await dlRes.arrayBuffer());
-  const tmpPath = path.join(os.tmpdir(), `easy-cert-reprint-${numId}-${Date.now()}.pdf`);
+  if (buf.subarray(0, 5).toString('latin1') !== '%PDF-') {
+    throw new Error('The site did not return a PDF file for this certificate.');
+  }
+  const tmpPath = path.join(os.tmpdir(), `easy-cert-${prefix}-${numId}-${Date.now()}.pdf`);
   await fs.promises.writeFile(tmpPath, buf);
   return tmpPath;
 }
