@@ -34,7 +34,12 @@ and snippets.
   folder protection, email schedules, feed rules, leftovers), module switches,
   and the certificate PDF migration tool.
 - **EASY Suite → Settings**: reminder days, daily send time, pages kept out of
-  search, and who may use "List a Product".
+  search, who may use "List a Product", and the online-course key expiry and
+  access length.
+- **EASY Suite → Online courses**: issue keys for phone and invoice sales, look
+  up a key, revoke, restore or email it again, and see who is enrolled. Office
+  staff who can publish certificates can open this page even without admin
+  rights.
 - **Tools → Cert Expiry Check / Employer Digest**: dry-run previews, as before.
 
 ## Changes compared with the old plugins
@@ -75,6 +80,32 @@ and snippets.
   can publish certificates can review. Approved versions are served at
   `GET /easy/v1/course-builder/courses/<id>/final` for the module player.
   Routes are listed at the top of the module file.
+
+## 2.2.0
+
+- New module **Online courses: license keys** (`includes/module-licenses.php`,
+  admin page in `includes/licenses-admin.php`). Slice 1 of the online-courses
+  plan: single-use keys like `EASY-7K2P-9QXA-4MZD` (12 characters from 31 that
+  can't be misread, from `random_int`), stored in three new tables
+  (`wp_easy_licenses`, `wp_easy_enrollments`, `wp_easy_progress`) that the
+  module creates on first load.
+  - Redeeming (`POST /easy/v1/learn/redeem`) claims the key in one conditional
+    update, so only one account can win it, and opens an enrollment pinned to
+    the course's approved Course Builder version. A unique index stops a
+    learner holding two open enrollments in the same course. Ten failed tries
+    per account per hour, then a pause.
+  - Unused keys expire 12 months after issue; course access has no time limit
+    until EASY decides on one (both are settings). A daily job at 3:15 AM
+    St. John's time marks expired keys and closes enrollments that ran out.
+  - Revoking a used key suspends the learner's course; restoring reopens it.
+    A course the learner already finished, and its certificate, stay put.
+  - A learner whose access ran out can use a new key right away; they don't
+    wait for the daily job.
+  - Office routes under `/easy/v1/licenses` and `/easy/v1/enrollments` back the
+    app's future Online Learning tab. Routes are listed at the top of the
+    module file.
+  - Key emails stay off until the My Courses page (`/student-portal/courses/`)
+    exists, since they link to it.
 
 ## Development
 

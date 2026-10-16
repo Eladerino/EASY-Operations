@@ -141,6 +141,13 @@ function easy_suite_health_rows() {
         $rows[] = ['Course Builder sync', 'off', 'Switched off. The app\'s Course Builder keeps courses on each computer and passes reviews as files.'];
     }
 
+    // Online course keys.
+    if (!empty($on['licenses']) && function_exists('easy_licenses_health')) {
+        $rows[] = easy_licenses_health();
+    } else {
+        $rows[] = ['Online course keys', 'off', 'Switched off. Keys can\'t be issued or redeemed, and EASY Suite → Online courses is hidden. Keys and enrollments already saved are kept.'];
+    }
+
     // Notifications.
     if ($on['notifications'] && class_exists('Easy_Safety_Cert_Notifications', false)) {
         $daily = easy_suite_next_run('easy_safety_daily_expiry_check');
@@ -302,6 +309,9 @@ add_action('admin_post_easy_suite_save_modules', function () {
         wp_clear_scheduled_hook('easy_safety_daily_expiry_check');
         wp_clear_scheduled_hook('easy_safety_employer_digest');
     }
+    if (!empty($before['licenses']) && empty($save['licenses'])) {
+        wp_clear_scheduled_hook('easy_licenses_daily');
+    }
     if ($before !== $save) {
         delete_option('easy_suite_version');
     }
@@ -372,6 +382,13 @@ function easy_suite_settings_page() {
             update_option($opt, implode("\n", array_unique($names)), false);
         }
 
+        if (isset($_POST['easy_license_key_months'])) {
+            update_option('easy_license_key_months', max(1, min(60, (int) $_POST['easy_license_key_months'])), false);
+        }
+        if (isset($_POST['easy_license_access_days'])) {
+            update_option('easy_license_access_days', max(0, min(3650, (int) $_POST['easy_license_access_days'])), false);
+        }
+
         echo '<div class="notice notice-success is-dismissible"><p><strong>Settings saved.</strong></p></div>';
     }
 
@@ -419,6 +436,17 @@ function easy_suite_settings_page() {
             . '<p class="description">Admins and anyone who can publish certificates can already review, approve and send back courses. Add other usernames here, one per line.</p></td></tr>';
     }
     echo '</tbody></table>';
+
+    if (function_exists('easy_licenses_key_months')) {
+        echo '<h2 id="easy-online-courses">Online courses</h2><table class="form-table"><tbody>';
+        echo '<tr><th scope="row"><label for="easy_license_key_months">Unused keys expire after</label></th>'
+            . '<td><input type="number" id="easy_license_key_months" name="easy_license_key_months" value="' . esc_attr(easy_licenses_key_months()) . '" min="1" max="60" class="small-text"> months'
+            . '<p class="description">Counted from the day a key is issued. Applies to keys issued from now on.</p></td></tr>';
+        echo '<tr><th scope="row"><label for="easy_license_access_days">Course access after using a key</label></th>'
+            . '<td><input type="number" id="easy_license_access_days" name="easy_license_access_days" value="' . esc_attr(easy_licenses_access_days()) . '" min="0" max="3650" class="small-text"> days'
+            . '<p class="description">0 means no time limit. Applies to keys used from now on; a finished course and its certificate stay available either way.</p></td></tr>';
+        echo '</tbody></table>';
+    }
 
     echo '<h2>Shop</h2><table class="form-table"><tbody>';
     echo '<tr><th scope="row"><label for="easy_product_users">Who can use "List a Product"</label></th>'
