@@ -43,6 +43,11 @@ contextBridge.exposeInMainWorld('easyCert', {
     preview: (id) => ipcRenderer.invoke('cert-approvals-preview', id),
     get: (id) => ipcRenderer.invoke('cert-approvals-get', id),
   },
+  courses: {
+    sync: (op, args) => ipcRenderer.invoke('course-sync', { op, args }),
+    backup: (snapshot) => ipcRenderer.invoke('course-builder-backup', snapshot),
+    openBackups: () => ipcRenderer.invoke('course-builder-backup-folder'),
+  },
   certTools: {
     search: (query) => ipcRenderer.invoke('cert-tools-search', query),
     reprint: (id) => ipcRenderer.invoke('cert-tools-reprint', id),

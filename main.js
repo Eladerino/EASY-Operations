@@ -961,6 +961,82 @@ ipcMain.handle('course-builder-backup-folder', async () => {
 });
 
 /* ------------------------------------------------------------------ */
+/* Course Builder — site sync (EASY Suite "courses" module)             */
+/*                                                                     */
+/* One channel with a fixed set of operations, each mapped to one      */
+/* route under /wp-json/easy/v1/course-builder/. Ids are checked here  */
+/* so the renderer can't steer requests anywhere else. Results:        */
+/*   { ok: true, status, data }                                        */
+/*   { ok: false, status, code, error, data, missing }  site answered  */
+/*   { ok: false, offline: true, error }                 no answer      */
+/* `missing` means the site has no courses module (older EASY Suite or  */
+/* switched off), so the builder falls back to passing files around.   */
+/* ------------------------------------------------------------------ */
+
+const COURSE_ID_RE = /^[a-z0-9_-]{1,64}$/;
+
+function courseSyncRoute(op, args) {
+  const cid = () => {
+    const id = String(args.id || '');
+    if (!COURSE_ID_RE.test(id)) throw new Error('Invalid course id.');
+    return id;
+  };
+  const sid = () => {
+    const id = parseInt(args.reviewId, 10);
+    if (!(id > 0)) throw new Error('Invalid review id.');
+    return id;
+  };
+  const content = () => ({
+    course: args.course && typeof args.course === 'object' ? args.course : null,
+    baseRev: Number.isInteger(args.baseRev) && args.baseRev > 0 ? args.baseRev : 0,
+  });
+  switch (op) {
+    case 'me': return ['GET', '/course-builder/me'];
+    case 'list': return ['GET', '/course-builder/courses'];
+    case 'save': return ['POST', `/course-builder/courses/${cid()}`, content()];
+    case 'delete': return ['DELETE', `/course-builder/courses/${cid()}`];
+    case 'submit': return ['POST', `/course-builder/courses/${cid()}/review`, content()];
+    case 'withdraw': return ['POST', `/course-builder/courses/${cid()}/withdraw`, {}];
+    case 'final': return ['GET', `/course-builder/courses/${cid()}/final`];
+    case 'reviews': return ['GET', '/course-builder/reviews'];
+    case 'approve': return ['POST', `/course-builder/reviews/${sid()}/approve`, {}];
+    case 'sendBack': return ['POST', `/course-builder/reviews/${sid()}/send-back`, { note: String(args.note || '').slice(0, 2000) }];
+    case 'setAuthors': {
+      const list = Array.isArray(args.authors) ? args.authors.map((a) => String(a).trim()).filter(Boolean).slice(0, 50) : [];
+      return ['POST', '/course-builder/authors', { authors: list }];
+    }
+    default: throw new Error('Unknown Course Builder operation.');
+  }
+}
+
+ipcMain.handle('course-sync', async (_event, { op, args = {} } = {}) => {
+  const config = getConfig();
+  if (!config.ok) return { ok: false, error: config.error };
+  let route;
+  try {
+    route = courseSyncRoute(String(op || ''), args || {});
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+  const [method, endpoint, body] = route;
+  try {
+    const r = await easyRequest(config, method, endpoint, { body, timeoutMs: 30000 });
+    if (r.status >= 200 && r.status < 300) return { ok: true, status: r.status, data: r.json };
+    const code = r.json && r.json.code;
+    return {
+      ok: false,
+      status: r.status,
+      code,
+      missing: r.status === 404 && code === 'rest_no_route',
+      error: (r.json && r.json.message) || `WordPress returned HTTP ${r.status}.`,
+      data: r.json && r.json.data,
+    };
+  } catch (err) {
+    return { ok: false, offline: true, error: `Could not reach the site: ${err.message}` };
+  }
+});
+
+/* ------------------------------------------------------------------ */
 /* Schedule tab — The Events Calendar REST API (legacy v1)              */
 /*                                                                     */
 /* Uses the stable legacy namespace /wp-json/tribe/events/v1, which    */
@@ -1251,7 +1327,7 @@ function easyBase(config) {
   return config.wpBaseUrl.replace(/\/+$/, '') + '/wp-json/easy/v1';
 }
 
-async function easyRequest(config, method, endpoint, { body } = {}) {
+async function easyRequest(config, method, endpoint, { body, timeoutMs } = {}) {
   const auth = effectiveAuth(config);
   const res = await fetch(easyBase(config) + endpoint, {
     method,
@@ -1260,6 +1336,7 @@ async function easyRequest(config, method, endpoint, { body } = {}) {
       ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined,
   });
   const json = await res.json().catch(() => ({}));
   return { status: res.status, json };
