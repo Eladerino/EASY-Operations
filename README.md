@@ -117,21 +117,25 @@ and prompts for a restart to install. Release flow:
 
 1. Bump `version` in `package.json` — the updater compares this, not the
    `ops-*` build tag. Bump it once per *published release*, not per build —
-   and get it onto `main`.
+   and get it onto `main`. Use a plain number like `1.1.2`, higher than the
+   last release.
 2. On GitHub: **Actions → Release → Run workflow** (branch `main`). It builds
    the installer on GitHub's own Windows machine, checks the package
    (card-printing files unpacked, plugin code left out, `RELEASES` matching
    the update package) and publishes release `v<version>`. The release stays
    a draft until every file is uploaded, so installed apps never see a
-   half-finished one. It refuses to run for a version that's already released.
+   half-finished one. It refuses to run for a version that's already released
+   or lower than the latest release.
 
-Pull requests run the same build and checks without publishing.
+Pull requests that change the app run the same build and checks without
+publishing.
 
 Fallback, publishing from your own PC (PowerShell):
 `$env:GITHUB_TOKEN="<token>"; npm run publish` (token: GitHub → Settings →
 Developer settings → Personal access tokens (classic), `repo` scope). This
 publishes the release first and uploads files after, so if it stops partway,
-delete that release and its tag on GitHub before running it again.
+delete that release (and any leftover draft for that version) and its tag on
+GitHub before running it again.
 
 Only publish when there's something users should receive — every published
 release triggers an update prompt. The updater only runs in the packaged app
