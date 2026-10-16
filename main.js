@@ -435,8 +435,8 @@ async function printPdfBuffer(pdfBuffer, config) {
 
     await printer.print(tmpPath, {
       printer: target.name,
-      sumatraPDF: sumatraPath(config),
-      win32: ['-silent', '-exit-on-print'],
+      sumatraPdfPath: sumatraPath(config),
+      silent: true,
     });
     return { ok: true };
   } catch (err) {
