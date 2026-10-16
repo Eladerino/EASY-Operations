@@ -7,15 +7,19 @@ const { FuseV1Options, FuseVersion } = require('@electron/fuses');
 
 module.exports = {
   packagerConfig: {
-    asar: true,
+    // Executables cannot run from inside the asar archive, so SumatraPDF
+    // (used for silent card printing) is unpacked next to it into
+    // app.asar.unpacked: both the bundled copy and pdf-to-printer's own.
+    // The pattern is matched against the file name. (This used to be an
+    // `asarUnpack` list, which is an electron-builder option that Forge
+    // silently ignores, so nothing was unpacked and card printing failed.)
+    // plugin-auto-unpack-natives below adds native modules to this pattern.
+    asar: { unpack: 'SumatraPDF-3.4.6-32.exe' },
     executableName: 'Easy Operations',
     icon: './icon',
-    // Executables cannot run from inside the asar archive, so unpack them:
-    // pdf-to-printer's helpers and the bundled SumatraPDF used for silent printing.
-    asarUnpack: [
-      '**/node_modules/pdf-to-printer/**',
-      './SumatraPDF-3.4.6-32.exe',
-    ],
+    // The WordPress plugin source and tests live in this repo but aren't
+    // part of the app, so they stay out of the installer.
+    ignore: [/^\/site-plugins(\/|$)/, /^\/test(\/|$)/],
   },
   rebuildConfig: {},
   makers: [
