@@ -1,7 +1,7 @@
 // online-learning.js — Online Learning tab (CONCEPT PREVIEW).
 //
-// Demo-only tab with hard-coded sample data, so Brandon can show and
-// discuss the planned online-course admin view (student statuses,
+// Demo-only tab with hard-coded sample data, for showing and
+// discussing the planned online-course admin view (student statuses,
 // course inquiries, practical queue) before the real online-learning
 // flow exists. Nothing here touches the network or the WordPress site;
 // the attention badges are computed from the sample data and update as

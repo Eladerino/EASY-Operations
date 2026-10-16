@@ -4,7 +4,8 @@
   "mode": "instructor",
   "wpUser": {
     "user": "",
-    "appPassword": ""
+    "appPassword": "",
+    "appPasswordEnc": "(written by the app when OS-keychain encryption is available; preferred over appPassword)"
   },
   "instructor": {
     "name": "",
