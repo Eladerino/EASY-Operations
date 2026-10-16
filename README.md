@@ -304,7 +304,9 @@ release triggers an update prompt. The updater only runs in the packaged app
 
 EASY Suite, the site plugin, has its own change list in
 `site-plugins/easy-suite/README.md`. App features marked "EASY Suite 2.1+"
-fall back to the old behaviour on an older site.
+work in a simpler way on an older site (for certificate numbers, the app
+checks the newest 100 published certificates itself, which is also new in
+1.1.0).
 
 ### 1.1.1
 
@@ -344,12 +346,13 @@ fall back to the old behaviour on an older site.
   and the authors list are shared through the site, with the Review inbox in
   the app instead of files. See Course Builder.
 - **Preview and reprint only open real PDFs:** if the site answers a
-  certificate download with its login page (for example after a sign-in was
-  revoked), the app shows an error instead. It used to save the WordPress
+  certificate download with its login page (the PDF link sends the app to
+  sign in), the app shows an error instead. It used to save the WordPress
   login page as the PDF and open a broken viewer.
-- **Setup upload check fixed:** Test connection now really checks whether
-  the account can upload files. The old check read the public media list, so
-  every account passed.
+- **Setup upload check fixed:** Test connection now lists media in edit
+  mode, which needs editing rights. The old check read the public media
+  list, so every account passed. (It still can't tell editing rights from
+  upload rights, so an account that can edit but not upload passes.)
 - **Certificate queue shows who gets emailed:** each draft shows the student
   email that publishing will send to (or "No student email"), plus the
   employer contact who gets the employer copy.
