@@ -31,6 +31,12 @@ function easy_suite_module_registry() {
             'default'     => true,
             'locked'      => false,
         ],
+        'courses' => [
+            'label'       => 'App bridge: Course Builder sync',
+            'description' => 'Stores Course Builder courses on the site so every computer sees the same copy, and runs the review queue (send for review, approve, send back) inside the app instead of passing files around. Authors and reviewers are set under Settings.',
+            'default'     => true,
+            'locked'      => false,
+        ],
         'notifications' => [
             'label'       => 'Certificate emails',
             'description' => 'Student email on publish, 30/7-day and expired reminders, and the twice-daily employer digest with certificate PDFs.',
