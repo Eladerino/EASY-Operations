@@ -19,6 +19,20 @@
 .b-status-approved { background: #e6f6ec; color: var(--success); border: 1px solid #bfe6cc; }
 .b-status-changes { background: var(--error-bg); color: var(--error); border: 1px solid #f3c1c1; }
 
+.b-sync {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: #f1f4f9;
+  color: var(--muted);
+}
+.b-sync-ok { background: #e6f6ec; color: var(--success); border-color: #bfe6cc; }
+.b-sync-busy { background: #eef2ff; color: #3b5bdb; border-color: #d0d9ff; }
+.b-sync-warn { background: var(--warn-bg); color: #8a5a00; border-color: var(--warn-line); }
+
 .b-delivery {
   display: inline-block;
   font-size: 11px;

@@ -57,6 +57,25 @@ and snippets.
   module version is fixed, so site emails are wrapped from switch-over on.
 - "List a Product" usernames are a setting instead of a hardcoded list.
 
+## 2.1.0
+
+- `GET /easy/v1/cert-number?candidate=…&exclude=…` returns the next free
+  certificate number checked against every certificate (drafts included), and
+  the site refuses (409) a create or update that would duplicate a number.
+- "Can post certificates for other instructors" is a setting (EASY Suite →
+  Settings, default `pevans`). The site honours it, and the app reads it from
+  `GET /easy/v1/app-config`.
+- New module **App bridge: Course Builder sync** (`includes/module-courses.php`).
+  Courses from the app's Course Builder are stored on the site (private
+  `easy_course` posts, review snapshots as `easy_course_snap`), so every
+  computer sees the same copy and reviews go through the in-app Review inbox
+  instead of files. A save counter stops two computers from silently
+  overwriting each other (the app keeps both versions instead). Authors
+  (default `sglynn`) and extra reviewers are settings; admins and anyone who
+  can publish certificates can review. Approved versions are served at
+  `GET /easy/v1/course-builder/courses/<id>/final` for the module player.
+  Routes are listed at the top of the module file.
+
 ## Development
 
 Each module is `includes/module-<key>.php`; the registry is in
