@@ -44,9 +44,14 @@ module.exports = {
     {
       name: '@electron-forge/publisher-github',
       config: {
+        // Releases are published to a separate PUBLIC repo that holds only
+        // the installers, so the source repo can stay private: the updater
+        // service (update.electronjs.org) only reads public repos.
+        // EASY_RELEASE_REPO overrides it for the one-time bridge release to
+        // the old repo (see README → Updates).
         repository: {
           owner: 'Eladerino',
-          name: 'EASY-Operations',
+          name: process.env.EASY_RELEASE_REPO || 'EASY-Operations-releases',
         },
         // Published immediately: every `electron-forge publish` is a deliberate
         // release meant for users. (draft: true would need a manual click on

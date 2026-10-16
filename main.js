@@ -19,7 +19,9 @@ const shared = require('./shared');
 // Standard Squirrel.Windows startup handling (install / update / uninstall).
 if (require('electron-squirrel-startup')) app.quit();
 
-// Self-updates via GitHub Releases (public repo Eladerino/EASY-Operations).
+// Self-updates via GitHub Releases on the public releases-only repo
+// (UPDATE_REPO). The source repo can be private; the update service only
+// needs the releases repo to be public, and the app carries no token.
 // Only runs in the packaged app; in dev it would just be noise.
 //
 // Policy:
@@ -28,6 +30,7 @@ if (require('electron-squirrel-startup')) app.quit();
 // - An update still uninstalled at the NEXT launch is mandatory: the app
 //   shows a blocking "Restart to update" prompt before the main window
 //   opens, so staff can never run more than one session behind.
+const UPDATE_REPO = 'Eladerino/EASY-Operations-releases';
 const PENDING_UPDATE_FILE = () => path.join(app.getPath('userData'), 'pending-update.json');
 let gateCheckInFlight = false;
 
@@ -129,7 +132,7 @@ function initUpdater() {
   if (!app.isPackaged) return;
   try {
     const { autoUpdater } = require('electron');
-    require('update-electron-app').updateElectronApp({ notifyUser: false });
+    require('update-electron-app').updateElectronApp({ repo: UPDATE_REPO, notifyUser: false });
     autoUpdater.on('update-downloaded', (event, releaseNotes, releaseName) => {
       const version = String(releaseName || '').trim() || 'new version';
       writePendingUpdate(version);
@@ -433,7 +436,7 @@ async function printPdfBuffer(pdfBuffer, config) {
 /* Build tag — lets the renderer detect stale/mismatched app files      */
 /* ------------------------------------------------------------------ */
 
-const BUILD_TAG = 'ops-20261010c';
+const BUILD_TAG = 'ops-20261016a';
 
 // Instructors always connect here; the setup screen shows it read-only.
 const SETUP_SITE_URL = 'https://easysafety.ca';
