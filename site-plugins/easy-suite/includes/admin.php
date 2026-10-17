@@ -432,10 +432,34 @@ function easy_suite_settings_page() {
 
     echo '<div class="wrap" style="max-width:820px;"><h1>EASY Suite settings</h1>';
     easy_suite_admin_tabs('easy-suite-settings');
+    ?>
+    <style>
+        .easy-suite-section { background:#fff; border:1px solid #c3c4c7; border-radius:6px; margin:0 0 12px; }
+        .easy-suite-section > summary { padding:14px 16px; cursor:pointer; font-size:14px; font-weight:600; }
+        .easy-suite-section > summary:hover { background:#f6f7f7; }
+        .easy-suite-section > summary .dashicons { color:#646970; margin-right:6px; vertical-align:text-bottom; }
+        .easy-suite-section-body { padding:4px 16px 16px; border-top:1px solid #f0f0f1; }
+        .easy-suite-section-body .form-table { margin-top:8px; }
+    </style>
+    <?php
     echo '<form method="post" action="">';
     wp_nonce_field('easy_suite_save_settings', 'easy_suite_settings_nonce');
 
-    echo '<h2>Certificate expiry reminders</h2><table class="form-table"><tbody>';
+    // Each section is a collapsible card; the first starts open.
+    $easy_section_open = true;
+    $easy_section = function ($title, $icon) use (&$easy_section_open) {
+        $open = $easy_section_open ? ' open' : '';
+        $easy_section_open = false;
+        echo '<details class="easy-suite-section"' . $open . '>'
+            . '<summary><span class="dashicons ' . esc_attr($icon) . '"></span>' . esc_html($title) . '</summary>'
+            . '<div class="easy-suite-section-body">';
+    };
+    $easy_section_end = function () {
+        echo '</div></details>';
+    };
+
+    $easy_section('Certificate expiry reminders', 'dashicons-email');
+    echo '<table class="form-table"><tbody>';
     echo '<tr><th scope="row"><label for="easy_notif_t1">First reminder (days before expiry)</label></th>'
         . '<td><input type="number" id="easy_notif_t1" name="easy_notif_t1" value="' . esc_attr($t1) . '" min="1" max="365" class="small-text"></td></tr>';
     echo '<tr><th scope="row"><label for="easy_notif_t2">Second reminder (days before expiry)</label></th>'
@@ -444,15 +468,19 @@ function easy_suite_settings_page() {
         . '<td><input type="time" id="easy_notif_time" name="easy_notif_time" value="' . esc_attr(easy_core_get_notification_time()) . '">'
         . '<p class="description">St. John\'s time. The expiry check runs once a day at this time.</p></td></tr>';
     echo '</tbody></table>';
+    $easy_section_end();
 
-    echo '<h2>Search engines</h2><table class="form-table"><tbody>';
+    $easy_section('Search engines', 'dashicons-search');
+    echo '<table class="form-table"><tbody>';
     echo '<tr><th scope="row"><label for="easy_noindex_paths">Pages kept out of search</label></th>'
         . '<td><textarea id="easy_noindex_paths" name="easy_noindex_paths" rows="10" class="large-text code">'
         . esc_textarea(implode("\n", easy_core_get_noindex_paths())) . '</textarea>'
         . '<p class="description">One page slug per line. Everything under <code>instructor-portal/</code> is always excluded.</p></td></tr>';
     echo '</tbody></table>';
+    $easy_section_end();
 
-    echo '<h2>EASY Operations app</h2><table class="form-table"><tbody>';
+    $easy_section('EASY Operations app', 'dashicons-desktop');
+    echo '<table class="form-table"><tbody>';
     echo '<tr><th scope="row"><label for="easy_proxy_posters">Can post certificates for other instructors</label></th>'
         . '<td><textarea id="easy_proxy_posters" name="easy_proxy_posters" rows="4" class="regular-text code">'
         . esc_textarea(implode("\n", function_exists('easy_suite_proxy_posters') ? easy_suite_proxy_posters() : [])) . '</textarea>'
@@ -468,9 +496,11 @@ function easy_suite_settings_page() {
             . '<p class="description">Admins and anyone who can publish certificates can already review, approve and send back courses. Add other usernames here, one per line.</p></td></tr>';
     }
     echo '</tbody></table>';
+    $easy_section_end();
 
     if (function_exists('easy_licenses_key_months')) {
-        echo '<h2 id="easy-online-courses">Online courses</h2><table class="form-table"><tbody>';
+        $easy_section('Online courses', 'dashicons-welcome-learn-more');
+        echo '<table class="form-table"><tbody>';
         echo '<tr><th scope="row"><label for="easy_license_key_months">Unused keys expire after</label></th>'
             . '<td><input type="number" id="easy_license_key_months" name="easy_license_key_months" value="' . esc_attr(easy_licenses_key_months()) . '" min="1" max="60" class="small-text"> months'
             . '<p class="description">Counted from the day a key is issued. Applies to keys issued from now on.</p></td></tr>';
@@ -478,21 +508,26 @@ function easy_suite_settings_page() {
             . '<td><input type="number" id="easy_license_access_days" name="easy_license_access_days" value="' . esc_attr(easy_licenses_access_days()) . '" min="0" max="3650" class="small-text"> days'
             . '<p class="description">0 means no time limit. Applies to keys used from now on; a finished course and its certificate stay available either way.</p></td></tr>';
         echo '</tbody></table>';
+        $easy_section_end();
     }
 
-    echo '<h2>Shop</h2><table class="form-table"><tbody>';
+    $easy_section('Shop', 'dashicons-cart');
+    echo '<table class="form-table"><tbody>';
     echo '<tr><th scope="row"><label for="easy_product_users">Who can use "List a Product"</label></th>'
         . '<td><textarea id="easy_product_users" name="easy_product_users" rows="4" class="regular-text code">'
         . esc_textarea(implode("\n", $product_users)) . '</textarea>'
         . '<p class="description">WordPress usernames, one per line. Everyone else gets a "not found" page.</p></td></tr>';
     echo '</tbody></table>';
+    $easy_section_end();
 
-    echo '<h2>Management queue</h2><table class="form-table"><tbody>';
+    $easy_section('Management queue', 'dashicons-clipboard');
+    echo '<table class="form-table"><tbody>';
     echo '<tr><th scope="row"><label for="easy_mgmt_queue_users">Who can view the management queue</label></th>'
         . '<td><textarea id="easy_mgmt_queue_users" name="easy_mgmt_queue_users" rows="4" class="regular-text code">'
         . esc_textarea(implode("\n", function_exists('easy_mgmt_queue_allowed_users') ? easy_mgmt_queue_allowed_users() : [])) . '</textarea>'
         . '<p class="description">WordPress usernames, one per line. Only these users (plus administrators) can see the [easy_management_queue] page.</p></td></tr>';
     echo '</tbody></table>';
+    $easy_section_end();
 
     submit_button('Save settings');
     echo '</form></div>';
