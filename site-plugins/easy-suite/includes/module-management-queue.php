@@ -254,34 +254,6 @@ function easy_mgmt_queue_questions() {
                 ['No, keep prices off the site', ''],
             ],
         ],
-        // ---- Payments ----
-        [
-            'key'     => 'seat_payment',
-            'section' => 'Payments — online purchases',
-            'label'   => 'Payment processor for online class seat purchases',
-            'why'     => 'Class seats will be sold through the website as WooCommerce products (one product per class date, stock equals seats). Current state: Bambora Credit Cards is enabled and configured; WooPayments ("Accept payments with Woo") is disabled and needs setup; PayPal Payments is not installed. Selection determines which processor takes seat payments at checkout.',
-            'type'    => 'radio_other',
-            'options' => [
-                ['Bambora Credit Cards (currently active)', 'Already enabled and configured.'],
-                ['WooPayments — complete the setup', 'Requires finishing the WooPayments onboarding.'],
-                ['PayPal Payments — install and set up', 'Requires installing the PayPal Payments extension and connecting an account.'],
-            ],
-            'other_placeholder' => 'Type a different processor',
-        ],
-        [
-            'key'     => 'shop_payment',
-            'section' => 'Payments — online purchases',
-            'label'   => 'Payment processor for shop purchases',
-            'why'     => 'Applies to general shop sales (equipment, materials) once the public shop opens. May be the same processor as class seats or a different one.',
-            'type'    => 'radio_other',
-            'options' => [
-                ['Same as class seats', ''],
-                ['Bambora Credit Cards', ''],
-                ['WooPayments', 'Requires completing setup if not already done.'],
-                ['PayPal Payments', 'Requires installing and connecting an account.'],
-            ],
-            'other_placeholder' => 'Type a different processor',
-        ],
         // ---- Shop review ----
         [
             'key'     => 'shop_review',
@@ -545,6 +517,14 @@ function easy_mgmt_queue_shortcode() {
             }
             echo '</section>';
             ?>
+            <section class="emq-section">
+                <div class="emq-section-head"><h3>Payments — current setup</h3><span class="emq-goes-where">Information only — no answer required</span></div>
+                <div class="emq-q">
+                    <p class="emq-why"><strong>What is active.</strong> Bambora Credit Cards is the enabled payment processor for all online purchases on easysafety.ca. WooPayments and PayPal Payments are installed but disabled; no action is needed on those unless a switch is decided later.</p>
+                    <p class="emq-why"><strong>How class seat sales work now.</strong> Each class date gets its own WooCommerce product (stock equals seats). The class page shows a "Book your seat" box; checkout collects each seat's certificate details and takes payment through Bambora. Completed orders add students to the class roster automatically. The previous Event Tickets add-on is no longer used for sales — it now handles calendar display only, and its checkout never had a payment gateway connected.</p>
+                    <p class="emq-why" style="margin-bottom:0"><strong>Where the money goes.</strong> Bambora settles payments to the bank account configured in the Bambora merchant account. If that account needs confirming or changing, it is done in the Bambora merchant portal, not on the website.</p>
+                </div>
+            </section>
             <section class="emq-section">
                 <div class="emq-section-head"><h3>Photos for LinkedIn and social media</h3></div>
                 <div class="emq-q">
