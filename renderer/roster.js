@@ -30,6 +30,7 @@
   let eventId = null;
   let roster = []; // the server's copy; re-rendered after every save
   let editingIndex = -1; // -1 means the form is adding, not editing
+  let loadToken = 0; // guards against stale loads painting the wrong class
 
   const MONTHS_SHORT = [
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -67,6 +68,10 @@
 
   function open({ id, title, date } = {}) {
     if (!id) return;
+    // Load token: if a previous load() is still in flight when a new class
+    // is opened, the stale response is ignored instead of painting the
+    // wrong class's students (and risking a save onto the wrong class).
+    const token = ++loadToken;
     eventId = id;
     roster = [];
     editingIndex = -1;
@@ -77,7 +82,7 @@
     hideForm();
     render();
     $('rosterModal').classList.remove('hidden');
-    load();
+    load(token);
   }
 
   function close() {
@@ -87,18 +92,22 @@
 
   /* ---------------- loading ---------------- */
 
-  async function load() {
+  async function load(token) {
     rosterError(null);
     setBusy(true);
     $('rosterCount').textContent = 'Loading students…';
     try {
       const res = await api().getRoster(eventId);
+      // A newer open() superseded this load; drop the stale response.
+      if (token !== loadToken) return;
       if (!res.ok) throw new Error(res.error || 'Could not load the student list.');
       roster = Array.isArray(res.roster) ? res.roster : [];
     } catch (err) {
+      if (token !== loadToken) return;
       rosterError(err.message);
       roster = [];
     } finally {
+      if (token !== loadToken) return;
       setBusy(false);
       render();
     }
@@ -184,6 +193,14 @@
       $('rosterName').focus();
       return;
     }
+    const email = $('rosterEmail').value.trim();
+    // Catch typos before the round-trip: the server silently drops invalid
+    // addresses, which is confusing when the saved row differs from typing.
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      rosterError('That email address does not look right. Check it and try again.');
+      $('rosterEmail').focus();
+      return;
+    }
 
     // On edit, carry the server-managed fields through untouched; new
     // entries are tagged as manual (the server defaults it anyway).
@@ -192,7 +209,7 @@
       name,
       employer: $('rosterEmployer').value.trim(),
       phone: $('rosterPhone').value.trim(),
-      email: $('rosterEmail').value.trim(),
+      email,
       payment: $('rosterPayment').value,
       notes: $('rosterNotes').value.trim(),
       source: (base && base.source) || 'manual',

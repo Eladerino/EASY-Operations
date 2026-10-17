@@ -590,3 +590,122 @@ add_action('easy_roster_updated', function ($event_id, $new_roster, $old_roster,
     }
     wc_update_product_stock($product, abs($delta), $delta > 0 ? 'decrease' : 'increase');
 }, 10, 4);
+
+/* ------------------------------------------------------------------
+ * Deletion safety: sold seats block deletion; trashing drafts the product
+ * ------------------------------------------------------------------ */
+
+/** Count roster records that came from a real checkout (sold seats). */
+function easy_seat_sold_count($event_id) {
+    $count = 0;
+    if (function_exists('easy_roster_get')) {
+        foreach ((array) easy_roster_get($event_id) as $r) {
+            if (is_array($r) && isset($r['source']) && $r['source'] === 'checkout') {
+                $count++;
+            }
+        }
+    }
+    return $count;
+}
+
+/**
+ * A class with sold seats absolutely cannot be deleted. Blocks trashing
+ * (wp-admin and REST) and permanent deletion alike.
+ */
+function easy_seats_guard_delete($event_id) {
+    if (get_post_type($event_id) !== 'tribe_events') {
+        return false;
+    }
+    return easy_seat_sold_count($event_id) > 0;
+}
+
+function easy_seats_delete_blocked_message() {
+    return 'This class has sold seats and cannot be deleted. Contact the site administrator if it must be removed.';
+}
+
+add_filter('pre_trash_post', function ($trash, $post) {
+    if ($post && easy_seats_guard_delete($post->ID)) {
+        if (defined('REST_REQUEST') && REST_REQUEST) {
+            return new WP_Error('easy_seats_sold', easy_seats_delete_blocked_message(), array('status' => 403));
+        }
+        wp_die(esc_html(easy_seats_delete_blocked_message()));
+    }
+    return $trash;
+}, 10, 2);
+
+add_filter('pre_delete_post', function ($delete, $post) {
+    if ($post && easy_seats_guard_delete($post->ID)) {
+        if (defined('REST_REQUEST') && REST_REQUEST) {
+            return new WP_Error('easy_seats_sold', easy_seats_delete_blocked_message(), array('status' => 403));
+        }
+        wp_die(esc_html(easy_seats_delete_blocked_message()));
+    }
+    return $delete;
+}, 10, 2);
+
+// Trashing a class drafts its seat product so it cannot be bought.
+// Untrashing restores it to published.
+add_action('trashed_post', function ($post_id) {
+    if (get_post_type($post_id) !== 'tribe_events') {
+        return;
+    }
+    $pid = function_exists('easy_seat_product_id') ? easy_seat_product_id($post_id) : 0;
+    if ($pid > 0 && get_post_status($pid) === 'publish') {
+        wp_update_post(array('ID' => $pid, 'post_status' => 'draft'));
+    }
+});
+
+add_action('untrashed_post', function ($post_id) {
+    if (get_post_type($post_id) !== 'tribe_events') {
+        return;
+    }
+    $pid = function_exists('easy_seat_product_id') ? easy_seat_product_id($post_id) : 0;
+    if ($pid > 0 && get_post_status($pid) === 'draft') {
+        wp_update_post(array('ID' => $pid, 'post_status' => 'publish'));
+    }
+});
+
+/* ------------------------------------------------------------------
+ * REST — online sale state for the app's class editor
+ * ------------------------------------------------------------------ */
+
+add_action('rest_api_init', function () {
+    if (!function_exists('register_rest_route')) {
+        return;
+    }
+    register_rest_route('easy/v1', '/sale-state/(?P<event_id>\d+)', array(
+        'methods'             => 'GET',
+        'callback'            => 'easy_seats_rest_sale_state',
+        'permission_callback' => 'easy_cert_rest_can_access',
+    ));
+});
+
+function easy_seats_rest_sale_state($request) {
+    $event_id = (int) $request['event_id'];
+    if (get_post_type($event_id) !== 'tribe_events') {
+        return new WP_Error('easy_no_event', 'Class not found.', array('status' => 404));
+    }
+    $out = array(
+        'event_id' => $event_id,
+        'linked'   => false,
+        'price'    => null,
+        'stock'    => null,
+        'sold'     => easy_seat_sold_count($event_id),
+        'capacity' => null,
+    );
+    $cap = get_post_meta($event_id, EASY_SEAT_CAPACITY_META, true);
+    if ($cap !== '' && is_numeric($cap)) {
+        $out['capacity'] = (int) $cap;
+    }
+    $pid = function_exists('easy_seat_product_id') ? easy_seat_product_id($event_id) : 0;
+    if ($pid > 0 && function_exists('wc_get_product')) {
+        $product = wc_get_product($pid);
+        if ($product) {
+            $out['linked'] = true;
+            $out['price'] = $product->get_price();
+            $out['stock'] = $product->managing_stock() ? $product->get_stock_quantity() : null;
+            $out['product_status'] = $product->get_status();
+        }
+    }
+    return $out;
+}
