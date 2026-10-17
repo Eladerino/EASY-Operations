@@ -1293,6 +1293,49 @@ ipcMain.handle('schedule-delete-event', async (_event, id) => {
   }
 });
 
+// Class roster (manual enrollment): stored by EASY Suite as event meta.
+//   GET /easy/v1/roster/<id> -> { event_id, roster: [...] }
+//   PUT /easy/v1/roster/<id> -> { event_id, roster: [...] } (sanitized copy)
+function validRosterEventId(id) {
+  const n = Number(id);
+  return Number.isInteger(n) && n > 0 ? n : 0;
+}
+
+ipcMain.handle('schedule-get-roster', async (_event, id) => {
+  const config = getConfig();
+  if (!config.ok) return { ok: false, error: config.error };
+  const eventId = validRosterEventId(id);
+  if (!eventId) return { ok: false, error: 'No class was selected.' };
+  try {
+    const r = await easyRequest(config, 'GET', `/roster/${eventId}`, { timeoutMs: 30000 });
+    if (r.status !== 200) {
+      return { ok: false, error: friendlyWriteError(r, 'load the student list') };
+    }
+    const roster = r.json && Array.isArray(r.json.roster) ? r.json.roster : [];
+    return { ok: true, roster };
+  } catch (err) {
+    return { ok: false, error: `Could not load the student list: ${err.message}` };
+  }
+});
+
+ipcMain.handle('schedule-save-roster', async (_event, { eventId, roster } = {}) => {
+  const config = getConfig();
+  if (!config.ok) return { ok: false, error: config.error };
+  const id = validRosterEventId(eventId);
+  if (!id) return { ok: false, error: 'No class was selected.' };
+  if (!Array.isArray(roster)) return { ok: false, error: 'The student list was not valid.' };
+  try {
+    const r = await easyRequest(config, 'PUT', `/roster/${id}`, { body: { roster }, timeoutMs: 30000 });
+    if (r.status !== 200) {
+      return { ok: false, error: friendlyWriteError(r, 'save the student list') };
+    }
+    const saved = r.json && Array.isArray(r.json.roster) ? r.json.roster : [];
+    return { ok: true, roster: saved };
+  } catch (err) {
+    return { ok: false, error: `Could not save the student list: ${err.message}` };
+  }
+});
+
 // Site timezone, shown in the scheduling UI so staff know which clock
 // the class times are on.
 ipcMain.handle('schedule-site-info', async () => {

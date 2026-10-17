@@ -601,9 +601,64 @@
       </div>
       <div class="modal-actions">
         <button type="button" id="evDelete" class="btn btn-danger hidden">Delete</button>
+        <button type="button" id="evStudents" class="btn btn-secondary hidden">Students</button>
         <span class="flex-spacer"></span>
         <button type="button" id="evCancel" class="btn btn-secondary">Cancel</button>
         <button type="button" id="evSave" class="btn btn-primary">Save class</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="rosterModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="rosterModalTitle">
+    <div class="modal-box modal-wide">
+      <h3 id="rosterModalTitle">Students</h3>
+      <p class="hint" id="rosterModalSub"></p>
+      <div id="rosterModalError" class="error-summary hidden" role="alert"></div>
+      <p id="rosterCount" class="roster-count"></p>
+      <div id="rosterChips" class="roster-chips"></div>
+      <p id="rosterEmpty" class="hint hidden">No students yet. Add the first one with the button below.</p>
+      <div id="rosterFormWrap" class="hidden">
+        <div class="grid">
+          <div class="field span-2">
+            <label for="rosterName">Full name <span class="optional">(as it should appear on the certificate)</span></label>
+            <input type="text" id="rosterName" maxlength="100" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="rosterEmployer">Employer</label>
+            <input type="text" id="rosterEmployer" maxlength="100" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="rosterPhone">Phone</label>
+            <input type="tel" id="rosterPhone" maxlength="40" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="rosterEmail">Email</label>
+            <input type="email" id="rosterEmail" maxlength="100" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="rosterPayment">Payment status</label>
+            <select id="rosterPayment">
+              <option value="">Not set</option>
+              <option value="paid">Paid</option>
+              <option value="unpaid">Unpaid</option>
+              <option value="po">PO</option>
+              <option value="comp">Comp</option>
+            </select>
+          </div>
+          <div class="field span-2">
+            <label for="rosterNotes">Notes <span class="optional">(optional)</span></label>
+            <textarea id="rosterNotes" rows="2" maxlength="500"></textarea>
+          </div>
+        </div>
+        <div class="modal-actions roster-form-actions">
+          <button type="button" id="rosterFormCancel" class="btn btn-secondary">Cancel</button>
+          <button type="button" id="rosterFormSave" class="btn btn-primary">Add student</button>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" id="rosterAdd" class="btn btn-secondary">+ Add student</button>
+        <span class="flex-spacer"></span>
+        <button type="button" id="rosterClose" class="btn btn-primary">Done</button>
       </div>
     </div>
   </div>
@@ -669,6 +724,7 @@
   <script src="../shared.js"></script>
   <script src="renderer.js"></script>
   <script src="schedule.js"></script>
+  <script src="roster.js"></script>
   <script src="approvals.js"></script>
   <script src="cert-approvals.js"></script>
   <script src="class-approvals.js"></script>
