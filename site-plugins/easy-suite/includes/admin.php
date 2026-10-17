@@ -374,6 +374,15 @@ function easy_suite_settings_page() {
         }
         update_option('easy_product_form_allowed_users', implode("\n", array_unique($users)), false);
 
+        $mgmt_users = [];
+        foreach (preg_split('/[\s,]+/', (string) wp_unslash($_POST['easy_mgmt_queue_users'] ?? '')) as $u) {
+            $u = strtolower(sanitize_user($u, true));
+            if ($u !== '') {
+                $mgmt_users[] = $u;
+            }
+        }
+        update_option('easy_mgmt_queue_users', implode("\n", array_unique($mgmt_users)), false);
+
         $proxies = [];
         foreach (preg_split('/[\s,]+/', (string) wp_unslash($_POST['easy_proxy_posters'] ?? '')) as $u) {
             $u = sanitize_user($u, true);
@@ -471,6 +480,13 @@ function easy_suite_settings_page() {
         . '<td><textarea id="easy_product_users" name="easy_product_users" rows="4" class="regular-text code">'
         . esc_textarea(implode("\n", $product_users)) . '</textarea>'
         . '<p class="description">WordPress usernames, one per line. Everyone else gets a "not found" page.</p></td></tr>';
+    echo '</tbody></table>';
+
+    echo '<h2>Management queue</h2><table class="form-table"><tbody>';
+    echo '<tr><th scope="row"><label for="easy_mgmt_queue_users">Who can view the management queue</label></th>'
+        . '<td><textarea id="easy_mgmt_queue_users" name="easy_mgmt_queue_users" rows="4" class="regular-text code">'
+        . esc_textarea(implode("\n", function_exists('easy_mgmt_queue_allowed_users') ? easy_mgmt_queue_allowed_users() : [])) . '</textarea>'
+        . '<p class="description">WordPress usernames, one per line. Only these users (plus administrators) can see the [easy_management_queue] page.</p></td></tr>';
     echo '</tbody></table>';
 
     submit_button('Save settings');
