@@ -312,3 +312,76 @@ textarea { resize: vertical; }
   .sched-day { min-height: 84px; }
   .app-header { flex-direction: column; align-items: flex-start; }
 }
+
+/* ---------- student roster modal ---------- */
+
+#rosterModal .modal-box { max-height: calc(100vh - 60px); overflow-y: auto; }
+
+#rosterModalSub { margin-bottom: 14px; }
+
+.roster-count {
+  font-weight: 700;
+  font-size: 13.5px;
+  color: var(--muted);
+  margin: 0 0 10px;
+}
+
+.roster-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.roster-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: #fbfcfe;
+  border: 1.5px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 5px 3px 8px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.roster-chip:hover {
+  border-color: var(--accent);
+  background: #fff;
+}
+
+.roster-chip-name {
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  background: none;
+  border: none;
+  padding: 5px 8px;
+  cursor: pointer;
+  border-radius: 999px;
+}
+
+.roster-chip-name:hover { text-decoration: underline; }
+
+.roster-chip-x {
+  font-family: inherit;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--muted);
+  background: none;
+  border: none;
+  border-radius: 50%;
+  width: 26px;
+  height: 26px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.roster-chip-x:hover {
+  color: var(--error);
+  background: var(--error-bg);
+}
+
+.roster-form-actions { margin-top: 14px; }
+
+#rosterEmpty { margin: 0 0 14px; }

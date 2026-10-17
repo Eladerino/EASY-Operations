@@ -715,6 +715,7 @@
     $('evStatus').value = 'publish';
     $('evDesc').value = '';
     $('evDelete').classList.add('hidden');
+    $('evStudents').classList.add('hidden');
   }
 
   function openEventModal({ date, courseLabel, courseValue, event } = {}) {
@@ -737,6 +738,10 @@
       $('evStatus').value = event.status === 'draft' ? 'draft' : 'publish';
       $('evDesc').value = event.description || '';
       $('evDelete').classList.remove('hidden');
+      // The roster manager needs a saved class to attach students to, so
+      // the Students button only appears when editing (never for a new
+      // class) and never in read-only mode.
+      if (!readOnly) $('evStudents').classList.remove('hidden');
       // Pre-select the course when the event matches one, so the picker
       // isn't blank on drafts created from a course. Categories are
       // recomputed from the matched course — the "Filed under" line shows
@@ -812,6 +817,18 @@
   });
 
   $('evCancel').addEventListener('click', closeEventModal);
+
+  // Opens the student roster manager for the class being edited. The
+  // roster module (roster.js) owns the modal; schedule.js just hands it
+  // the current class id, title, and date.
+  $('evStudents').addEventListener('click', () => {
+    if (!editingId || !window.EasyRoster) return;
+    window.EasyRoster.open({
+      id: editingId,
+      title: $('evTitle').value.trim() || '(untitled)',
+      date: $('evDate').value,
+    });
+  });
 
   $('evDelete').addEventListener('click', async () => {
     if (!editingId) return;
@@ -1004,6 +1021,7 @@
 
   window.EasySchedule = {
     normalizeEvent,
+    confirm: schedConfirm,
     refreshCalendar() { if (schedInitialized) refreshMonth(); },
     async editEvent(ev) {
       await ensureInit();
