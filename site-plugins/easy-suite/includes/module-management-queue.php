@@ -286,6 +286,40 @@ function easy_mgmt_queue_questions() {
     return $questions;
 }
 
+/** Pricing research reference table, shown above the forklift pricing questions. */
+function easy_mgmt_queue_pricing_research_html() {
+    $rows = [
+        ['Forklift Certify Online', 'https://forkliftcertifyonline.ca/', '$24.95', 'Online theory — CSA B335-aligned; employer does practical; digital cert, 3-yr'],
+        ['HSE Advisor', 'https://www.hseadvisor.ca/pages/courses.html', '$24.99', 'Online awareness — pan-Canadian PIT safety awareness, not full operator cert'],
+        ['csregs.com', 'https://csregs.com/products/forklift-operator-training-canada', '$25.00', 'Online (33 min) — Canadian OHS e-learning'],
+        ['eSafetyFirst', 'https://esafetyfirst.com/courses/hazard-awareness', '$47.95', 'Online — Forklift Safety single-course price'],
+        ['onlinewhmis.ca', 'https://onlinewhmis.ca/online-lift-truck-certification-training/', '$79.95', 'Online theory (~4h) — CSA B335-15; explicitly accepted in NL'],
+        ['Equipment Tutor', 'https://equipment-tutor.com/product/forklift-operator-safety-training/', '$79.95/seat', 'Online (1h) — counter-balance; capacity-plate math focus'],
+        ['Danatec', 'https://danatec.com/lifting-device-courses', '$99.98', 'Online + employer practical — CSA-compliant; instant certificate'],
+        ['Safe + Sound', 'https://www.learnfirstaid.ca/safety-soft-skills-training/', '$99.99', 'Online (1h45m) — counterbalanced forklift'],
+        ['Safety Services Manitoba', 'https://www.safetyservicesmanitoba.ca/wp-content/uploads/2018/10/PromoSheet_Online-Training.pdf', '$124.95/student', 'Online — Forklift/Lift Truck'],
+        ['ACT First Safety', 'https://Actfirstsafety.Ca/online-forklift-lift-truck-training.html', '$125.00', 'Online theory — competent person signs practical on printed cert'],
+        ['The Safety Standard', 'https://thesafetystandard.com/product/canadian-forklift-theory-all-lift-trucks/', '$139.95', 'Online theory — CSA compliant; practical booked separately (extra)'],
+        ['Worksite Safety', 'https://worksitesafety.ca/product/training/classroom/forklift/forklift-training-mississauga/', '$149 blended / $195 in-class', 'Blended or instructor-led — ~4h online theory + in-class practical'],
+        ['SafetyCo / IST', 'https://safetyco.ca/training/programs/instructor-led/forklift/?v=05c7c5a71e52', '$165.00', 'Instructor-led — CSA B335; Ontario-focused'],
+        ['WCFF', 'https://wcff.ca/lift-truck/', '$175 skilled / $425 new', 'Blended (half day) — theory + practical'],
+        ['BIS Safety Software', 'https://bissafety.ca/wp-content/uploads/2025/03/safety-software-doc.pdf', '$24.99–$69.99/module', 'Online modules sold individually'],
+    ];
+    $html = '<div class="emq-q"><p class="emq-why"><strong>What others charge.</strong> '
+        . 'Canadian online forklift course prices, researched October 2026. No Newfoundland and Labrador provider publishes an online price — '
+        . 'onlinewhmis.ca ($79.95) is the only listing that explicitly accepts NL.</p>'
+        . '<div style="overflow-x:auto;"><table class="emq-price-table">'
+        . '<thead><tr><th>Provider</th><th>Price (CAD)</th><th>What it is</th></tr></thead><tbody>';
+    foreach ($rows as $r) {
+        $html .= '<tr><td><a href="' . esc_url($r[1]) . '" target="_blank" rel="noopener">' . esc_html($r[0]) . '</a></td>'
+            . '<td style="white-space:nowrap;">' . esc_html($r[2]) . '</td>'
+            . '<td>' . esc_html($r[3]) . '</td></tr>';
+    }
+    $html .= '</tbody></table></div>'
+        . '<p class="emq-why" style="margin-bottom:0">Three more (VISTA Training, Canada Safety Training, Hard Hat Training) do not publish prices.</p></div>';
+    return $html;
+}
+
 /** Render one question. $saved = previously saved answer array for this key. */
 function easy_mgmt_queue_render_question($q, $saved) {
     $key   = $q['key'];
@@ -511,6 +545,10 @@ function easy_mgmt_queue_shortcode() {
                         echo '</section>';
                     }
                     echo '<section class="emq-section"><div class="emq-section-head"><h3>' . esc_html($q['section']) . '</h3></div>';
+                    if ($q['section'] === 'Online course pricing — forklift') {
+                        // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped — built with escaping above
+                        echo easy_mgmt_queue_pricing_research_html();
+                    }
                     $last_section = $q['section'];
                 }
                 easy_mgmt_queue_render_question($q, null);
@@ -598,6 +636,9 @@ function easy_mgmt_queue_shortcode() {
         .emq-opt-text { flex: 1; }
         .emq-opt-note { display: block; color: #55645a; font-size: 0.9rem; margin-top: 0.15rem; }
         .emq-other-input, .emq-free-input { width: 100%; font: inherit; font-size: 1rem; border: 1.5px solid #aebbae; border-radius: 8px; padding: 0.6rem 0.7rem; margin-top: 0.6rem; }
+        .emq-price-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        .emq-price-table th, .emq-price-table td { text-align: left; padding: 0.45rem 0.6rem; border-bottom: 1px solid #e5e9ef; vertical-align: top; }
+        .emq-price-table thead th { border-bottom: 2px solid #1e6b3c; white-space: nowrap; }
         .emq-other-input:disabled { opacity: 0.45; }
         .emq-free-input { min-height: 7rem; }
         .emq-list { margin: 0 0 1rem; padding-left: 1.25rem; }
