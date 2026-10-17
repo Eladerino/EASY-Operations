@@ -127,6 +127,12 @@ function easy_suite_module_registry() {
             'default'     => true,
             'locked'      => false,
         ],
+        'management-queue' => [
+            'label'       => 'Management queue',
+            'description' => 'Private decision forms for Colleen and Dad: the [easy_management_queue] shortcode renders the Terms of Service questions plus online-course pricing questions, visible only to the listed usernames. Submissions are saved on the site and emailed to Brandon.',
+            'default'     => true,
+            'locked'      => false,
+        ],
     ];
 }
 
