@@ -529,6 +529,21 @@ function easy_mgmt_queue_shortcode() {
         <h2>Management queue</h2>
         ***REMOVED***
         <p class="emq-progress"><strong><?php echo (int) $done_count; ?> of <?php echo (int) $total; ?></strong> decided.</p>
+        <section class="emq-section">
+            
+            <div class="emq-q">
+                ***REMOVED***
+                <ul class="emq-list">
+                    ***REMOVED***
+                    ***REMOVED***
+                    ***REMOVED***
+                    ***REMOVED***
+                    ***REMOVED***
+                    ***REMOVED***
+                    ***REMOVED***
+                </ul>
+            </div>
+        </section>
         <?php if ($just_saved): ?>
             <div class="emq-notice">Decisions saved. Brandon has been notified.</div>
         <?php endif; ?>

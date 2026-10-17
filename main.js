@@ -465,6 +465,15 @@ const WHATS_NEW_NOTES = {
     'New: manage class rosters in the Schedule tab. Open a class, click Students, and add walk-ins or phone bookings with name, employer, phone, email, payment status, and notes.',
     'If a class sells seats on the website, adding students here adjusts the online seat count automatically.',
   ],
+  '1.1.1': [
+    'Fixed: ID card printing to the card printer was broken in every installed build since 1.0.0. It works now.',
+    'The course editor loads reliably again (fixed a display issue).',
+  ],
+  '1.1.0': [
+    'New: Course Builder for putting courses together (chapters, quizzes, pass rules).',
+    'Course work now backs up automatically.',
+    'Leap-day fix: certificates expiring on Feb 29 in non-leap years no longer break.',
+  ],
 };
 
 function getWhatsNewSeen() {
