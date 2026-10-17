@@ -400,13 +400,15 @@
     });
   }
 
-  // Header "What's New" button: show the changelog dialog.
-  $('whatsNewHeaderButton').addEventListener('click', async () => {
-    try {
-      await window.easyCert.showWhatsNew();
-    } catch (err) {
-      toast(`Could not open What's New: ${err.message}`, 'error');
-    }
+  // Header "What's New" button: open the full summary modal.
+  $('whatsNewHeaderButton').addEventListener('click', () => {
+    $('whatsNewModal').classList.remove('hidden');
+  });
+  $('whatsNewClose').addEventListener('click', () => {
+    $('whatsNewModal').classList.add('hidden');
+  });
+  $('whatsNewModal').addEventListener('click', (e) => {
+    if (e.target === $('whatsNewModal')) $('whatsNewModal').classList.add('hidden');
   });
 
   // Header "Setup" button: open Settings without signing out.

@@ -506,6 +506,61 @@ function easy_mgmt_queue_open_questions() {
     return $out;
 }
 
+/** Full revised projects summary for the What's New section. Plain language for the team. */
+function easy_mgmt_queue_whats_new_html() {
+    ob_start();
+    ?>
+    <div class="emq-q">
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+    </div>
+    <?php
+    return ob_get_clean();
+}
+
 /** Shortcode output. */
 function easy_mgmt_queue_shortcode() {
     if (!easy_mgmt_queue_can_view()) {
@@ -531,18 +586,10 @@ function easy_mgmt_queue_shortcode() {
         <p class="emq-progress"><strong><?php echo (int) $done_count; ?> of <?php echo (int) $total; ?></strong> decided.</p>
         <section class="emq-section">
             
-            <div class="emq-q">
-                ***REMOVED***
-                <ul class="emq-list">
-                    ***REMOVED***
-                    ***REMOVED***
-                    ***REMOVED***
-                    ***REMOVED***
-                    ***REMOVED***
-                    ***REMOVED***
-                    ***REMOVED***
-                </ul>
-            </div>
+            <?php
+            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped — built with escaping in easy_mgmt_queue_whats_new_html
+            echo easy_mgmt_queue_whats_new_html();
+            ?>
         </section>
         <?php if ($just_saved): ?>
             <div class="emq-notice">Decisions saved. Brandon has been notified.</div>
