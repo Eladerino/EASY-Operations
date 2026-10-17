@@ -51,6 +51,12 @@ class Easy_Safety_Cert_Notifications {
     // or via the 'easy_cert_notifications_suppressed' filter.
     const SUPPRESS_CONST = 'EASY_CERT_SUPPRESS_NOTIFICATIONS';
 
+    // Last-run tracking (v2.2.1): stamped on every real send run (cron or
+    // manual) so the Overview page can show whether the scheduled runs are
+    // actually firing. Stored as site-local MySQL datetimes.
+    const LAST_EXPIRY_RUN_OPT = 'easy_cert_last_expiry_run';
+    const LAST_DIGEST_RUN_OPT = 'easy_cert_last_digest_run';
+
     public static function notifications_suppressed() {
         if (defined(self::SUPPRESS_CONST) && constant(self::SUPPRESS_CONST)) {
             return true;
@@ -377,6 +383,12 @@ class Easy_Safety_Cert_Notifications {
             $send = false;
         }
 
+        // Stamp every real send run (cron or manual) so the Overview page
+        // can show whether the scheduled runs are actually firing.
+        if ($send) {
+            update_option(self::LAST_EXPIRY_RUN_OPT, current_time('mysql'));
+        }
+
         $certs = get_posts([
             'post_type'      => 'cert',
             'post_status'    => 'publish',
@@ -487,7 +499,7 @@ class Easy_Safety_Cert_Notifications {
 
     public static function add_manual_check_menu() {
         add_submenu_page(
-            'tools.php',
+            'easy-suite',
             'Certificate Expiry Check',
             'Cert Expiry Check',
             'manage_options',
@@ -924,6 +936,12 @@ class Easy_Safety_Cert_Notifications {
             $send = false;
         }
 
+        // Stamp every real send run (cron or manual) so the Overview page
+        // can show whether the scheduled runs are actually firing.
+        if ($send) {
+            update_option(self::LAST_DIGEST_RUN_OPT, current_time('mysql'));
+        }
+
         $q = new WP_Query([
             'post_type'      => 'cert',
             'post_status'    => 'publish',
@@ -1178,7 +1196,7 @@ class Easy_Safety_Cert_Notifications {
 
     public static function add_employer_digest_menu() {
         add_submenu_page(
-            'tools.php',
+            'easy-suite',
             'Employer Certificate Digest',
             'Employer Digest',
             'manage_options',

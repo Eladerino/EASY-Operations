@@ -49,6 +49,20 @@ function easy_suite_next_run($hook) {
     return $dt->format('M j, g:i A') . ' (St. John\'s)';
 }
 
+/** Format a stored last-run timestamp (site-local MySQL datetime) for display. */
+function easy_suite_last_run($option) {
+    $raw = get_option($option, '');
+    if (!$raw) {
+        return null;
+    }
+    try {
+        $dt = new DateTimeImmutable($raw, new DateTimeZone('America/St_Johns'));
+    } catch (Exception $e) {
+        return null;
+    }
+    return $dt->format('M j, g:i A');
+}
+
 /**
  * Health checks: [label, 'ok'|'warn'|'error'|'off', detail]. Each check
  * only reads; nothing on the overview writes unless a button is pressed.
@@ -153,11 +167,14 @@ function easy_suite_health_rows() {
         $daily = easy_suite_next_run('easy_safety_daily_expiry_check');
         $digest = easy_suite_next_run('easy_safety_employer_digest');
         $suppressed = Easy_Safety_Cert_Notifications::notifications_suppressed();
+        $last_expiry = easy_suite_last_run(Easy_Safety_Cert_Notifications::LAST_EXPIRY_RUN_OPT);
+        $last_digest = easy_suite_last_run(Easy_Safety_Cert_Notifications::LAST_DIGEST_RUN_OPT);
         $rows[] = [
             'Certificate emails',
             $suppressed ? 'warn' : ($daily && $digest ? 'ok' : 'warn'),
             ($suppressed ? 'Sending is SUPPRESSED (import mode); no emails go out. ' : '')
                 . 'Next expiry check: ' . ($daily ?: 'not scheduled') . '. Next employer digest: ' . ($digest ?: 'not scheduled') . '.'
+                . ' Last expiry check ran: ' . ($last_expiry ?: 'never') . '. Last employer digest ran: ' . ($last_digest ?: 'never') . '.'
                 . (defined('DISABLE_WP_CRON') && DISABLE_WP_CRON ? ' WordPress cron is driven by the server.' : ''),
         ];
     } else {
@@ -228,8 +245,8 @@ function easy_suite_overview_page() {
             . esc_html($text) . '</td><td>' . esc_html($detail) . '</td></tr>';
     }
     echo '</tbody></table>';
-    echo '<p><a href="' . esc_url(admin_url('tools.php?page=easy-cert-check')) . '">Certificate expiry check (dry run)</a> &middot; '
-        . '<a href="' . esc_url(admin_url('tools.php?page=easy-employer-digest')) . '">Employer digest preview</a> &middot; '
+    echo '<p><a href="' . esc_url(admin_url('admin.php?page=easy-cert-check')) . '">Certificate expiry check (dry run)</a> &middot; '
+        . '<a href="' . esc_url(admin_url('admin.php?page=easy-employer-digest')) . '">Employer digest preview</a> &middot; '
         . '<a href="' . esc_url(admin_url('admin.php?page=easy-suite-settings')) . '">Settings</a></p>';
 
     // Module switches.
