@@ -2,7 +2,15 @@
 /**
  * Module: Instructor calendar feed (was EASY Instructor Calendar Feed 1.0.4).
  *
- * Pretty URL:  /instructor-calendar/<organizer-slug>.ics
+ * Pretty URL:  /instructor-calendar/<64-hex-token>.ics
+ *
+ * Each instructor (tribe_organizer) gets a secret 64-char token stored in
+ * post meta. The token makes the feed URL unguessable; regenerating it kills
+ * the old URL instantly. Slug-based URLs (e.g. /instructor-calendar/scott-glynn.ics)
+ * returned 404 starting in 2.2.5, so instructors re-subscribe once with their
+ * tokened link (Pam distributes them). Roster names appear in the feed;
+ * phone/email/payment stay in the app only.
+ *
  * The rewrite rule is flushed by EASY Suite on activation and version change.
  */
 
@@ -12,16 +20,16 @@ defined('ABSPATH') || exit;
 /* ------------------------------------------------------------------
  * Rewrite rule + query vars
  *
- * Pretty URL:  https://easysafety.ca/instructor-calendar/scott-glynn.ics
- * Fallback:    https://easysafety.ca/?easy_instructor_ics=1&instructor_organizer=scott-glynn
+ * Pretty URL:  https://easysafety.ca/instructor-calendar/<64-hex-token>.ics
+ * Fallback:    https://easysafety.ca/?easy_instructor_ics=1&ics_token=<token>
  * ------------------------------------------------------------------ */
 
 add_action('init', 'easy_ics_add_rewrite_rule');
 
 function easy_ics_add_rewrite_rule() {
     add_rewrite_rule(
-        '^instructor-calendar/([^/]+)\.ics/?$',
-        'index.php?easy_instructor_ics=1&instructor_organizer=$matches[1]',
+        '^instructor-calendar/([a-f0-9]{64})\.ics/?$',
+        'index.php?easy_instructor_ics=1&ics_token=$matches[1]',
         'top'
     );
 }
@@ -30,7 +38,7 @@ add_filter('query_vars', 'easy_ics_query_vars');
 
 function easy_ics_query_vars($vars) {
     $vars[] = 'easy_instructor_ics';
-    $vars[] = 'instructor_organizer';
+    $vars[] = 'ics_token';
     return $vars;
 }
 
@@ -49,14 +57,17 @@ function easy_ics_maybe_serve() {
 }
 
 function easy_ics_serve_feed() {
-    $input = get_query_var('instructor_organizer');
-    if (!$input && isset($_GET['instructor_organizer'])) {
-        $input = sanitize_text_field(wp_unslash($_GET['instructor_organizer']));
+    $token = get_query_var('ics_token');
+    if (!$token && isset($_GET['ics_token'])) {
+        $token = sanitize_text_field(wp_unslash($_GET['ics_token']));
     }
-    if (!$input) {
-        status_header(400);
+
+    // Never confirm whether a feed exists: a bad or missing token is a
+    // plain 404, identical to a nonexistent page.
+    if (!is_string($token) || !preg_match('/^[a-f0-9]{64}$/', $token)) {
+        status_header(404);
         header('Content-Type: text/plain; charset=utf-8');
-        echo 'Missing instructor. Example: /instructor-calendar/scott-glynn.ics';
+        echo 'Not found.';
         exit;
     }
 
@@ -67,11 +78,11 @@ function easy_ics_serve_feed() {
         exit;
     }
 
-    $organizer = easy_ics_find_organizer($input);
+    $organizer = easy_ics_find_organizer_by_token($token);
     if (!$organizer) {
         status_header(404);
         header('Content-Type: text/plain; charset=utf-8');
-        echo 'Instructor not found: ' . esc_html($input) . '. Check Events > Organizers in wp-admin for the exact organizer name — the feed matches on slug, name, or post ID.';
+        echo 'Not found.';
         exit;
     }
 
@@ -90,83 +101,180 @@ function easy_ics_serve_feed() {
 }
 
 /* ------------------------------------------------------------------
- * Organizer lookup — accepts ID, slug, or display name
+ * Feed tokens — one secret per instructor (tribe_organizer)
+ *
+ * The token lives in post meta (_easy_ics_token) and is the only thing
+ * that identifies a feed. There is no slug/name fallback: without the
+ * exact token the feed is a 404, which keeps student names in the feed
+ * behind an unguessable URL.
  * ------------------------------------------------------------------ */
 
-function easy_ics_find_organizer($input) {
-    $input = trim((string) $input);
-    if ($input === '') {
+define('EASY_ICS_TOKEN_META', '_easy_ics_token');
+
+/** The instructor's feed token, generating one on first use. */
+function easy_ics_get_token($organizer_id) {
+    $organizer_id = (int) $organizer_id;
+    if ($organizer_id <= 0) {
+        return '';
+    }
+    $token = get_post_meta($organizer_id, EASY_ICS_TOKEN_META, true);
+    if (is_string($token) && preg_match('/^[a-f0-9]{64}$/', $token)) {
+        return $token;
+    }
+    return easy_ics_regenerate_token($organizer_id);
+}
+
+/** Fresh token for an instructor. The previous feed URL dies instantly. */
+function easy_ics_regenerate_token($organizer_id) {
+    $organizer_id = (int) $organizer_id;
+    if ($organizer_id <= 0) {
+        return '';
+    }
+    $token = bin2hex(random_bytes(32));
+    update_post_meta($organizer_id, EASY_ICS_TOKEN_META, $token);
+    return $token;
+}
+
+/** Find the organizer that owns a feed token (timing-safe compare). */
+function easy_ics_find_organizer_by_token($token) {
+    if (!is_string($token) || !preg_match('/^[a-f0-9]{64}$/', $token)) {
         return null;
     }
-
-    // 1) Numeric post ID.
-    if (ctype_digit($input)) {
-        $p = get_post((int) $input);
-        if ($p && $p->post_type === 'tribe_organizer') {
-            return $p;
-        }
-    }
-
-    // 2) Slug.
-    $p = get_page_by_path(sanitize_title($input), OBJECT, 'tribe_organizer');
-    if ($p) {
-        return $p;
-    }
-
-    // 3) Name search — exact (case-insensitive) title match wins,
-    //    otherwise the first search hit.
-    $q = new WP_Query(array(
+    $ids = get_posts(array(
         'post_type'      => 'tribe_organizer',
         'post_status'    => 'publish',
-        's'              => $input,
-        'posts_per_page' => 10,
+        'numberposts'    => 200,
         'fields'         => 'ids',
         'no_found_rows'  => true,
+        'meta_key'       => EASY_ICS_TOKEN_META,
+        'meta_compare'   => 'EXISTS',
     ));
-    if ($q->have_posts()) {
-        foreach ($q->posts as $id) {
-            if (strcasecmp(trim(get_the_title($id)), $input) === 0) {
-                return get_post($id);
-            }
-        }
-        return get_post($q->posts[0]);
-    }
-
-    // 4) Normalized comparison across all organizers. WordPress search
-    //    treats "scott-glynn" as one hyphenated token, so it never matches
-    //    a title of "Scott Glynn" — normalize both sides instead. This also
-    //    covers case differences and deduplicated slugs ("scott-glynn-2").
-    $norm = easy_ics_normalize_name($input);
-    if ($norm !== '') {
-        $all = get_posts(array(
-            'post_type'   => 'tribe_organizer',
-            'post_status' => 'publish',
-            'numberposts' => 200,
-        ));
-        foreach ($all as $o) {
-            if (easy_ics_normalize_name($o->post_title) === $norm) {
-                return $o;
-            }
-        }
-        // Loose slug prefix match as a last resort.
-        $slug = sanitize_title($input);
-        if ($slug !== '') {
-            foreach ($all as $o) {
-                if (strpos($o->post_name, $slug) === 0) {
-                    return $o;
-                }
-            }
+    foreach ($ids as $id) {
+        $stored = get_post_meta($id, EASY_ICS_TOKEN_META, true);
+        if (is_string($stored) && $stored !== '' && hash_equals($stored, $token)) {
+            return get_post($id);
         }
     }
-
     return null;
 }
 
-function easy_ics_normalize_name($s) {
-    $s = html_entity_decode((string) $s, ENT_QUOTES, 'UTF-8');
-    $s = strtolower($s);
-    return preg_replace('/[^a-z0-9]/', '', $s);
+/** Public feed URL for an instructor. */
+function easy_ics_feed_url($organizer_id) {
+    $token = easy_ics_get_token($organizer_id);
+    if ($token === '') {
+        return '';
+    }
+    return home_url('/instructor-calendar/' . $token . '.ics');
 }
+
+/* One-time migration: mint a token for every existing organizer. */
+add_action('admin_init', function () {
+    if (get_option('easy_ics_tokens_migrated') === '2.2.5') {
+        return;
+    }
+    $ids = get_posts(array(
+        'post_type'     => 'tribe_organizer',
+        'post_status'   => 'publish',
+        'numberposts'   => 500,
+        'fields'        => 'ids',
+        'no_found_rows' => true,
+    ));
+    foreach ($ids as $id) {
+        easy_ics_get_token($id);
+    }
+    update_option('easy_ics_tokens_migrated', '2.2.5');
+});
+
+/* ------------------------------------------------------------------
+ * Default venue — every class shows a location
+ *
+ * Most classes run at EASY Safety itself, but the "Where" line and the
+ * venue block only render when the event has a venue set — the rest show
+ * nothing and students are left to assume. To make the location explicit,
+ * events saved without a venue get the EASY Safety Training venue.
+ * An explicitly set venue is never overwritten; virtual classes (title
+ * contains "Virtual") are skipped. For off-site classes Pam picks the
+ * venue when creating the event.
+ * ------------------------------------------------------------------ */
+
+/** Post ID of the "EASY Safety Training" venue (44 Austin Street); 0 when missing. */
+function easy_default_venue_id() {
+    static $found = null;
+    if ($found !== null) {
+        return $found;
+    }
+    $found = 0;
+    $p = get_page_by_path('easy-safety-training', OBJECT, 'tribe_venue');
+    if ($p) {
+        $found = (int) $p->ID;
+        return $found;
+    }
+    $venues = get_posts(array(
+        'post_type'     => 'tribe_venue',
+        'post_status'   => 'publish',
+        'numberposts'   => 100,
+        'fields'        => 'ids',
+        'no_found_rows' => true,
+    ));
+    foreach ($venues as $vid) {
+        if (strcasecmp(trim(get_the_title($vid)), 'EASY Safety Training') === 0) {
+            $found = (int) $vid;
+            return $found;
+        }
+    }
+    return $found;
+}
+
+/** True when the event looks virtual — never gets the office venue. */
+function easy_event_is_virtual($post_id) {
+    $title = get_the_title($post_id);
+    return $title && stripos($title, 'virtual') !== false;
+}
+
+/** Fill in the default venue when an event is saved without one. Runs late
+ * so TEC's own save handler goes first. */
+add_action('save_post_tribe_events', function ($post_id, $post, $update) {
+    if (wp_is_post_revision($post_id) || wp_is_post_autosave($post_id)) {
+        return;
+    }
+    if (function_exists('easy_ics_event_venue_id') && easy_ics_event_venue_id($post_id)) {
+        return; // explicit venue — never overwrite
+    }
+    if (easy_event_is_virtual($post_id)) {
+        return;
+    }
+    $vid = easy_default_venue_id();
+    if ($vid > 0) {
+        update_post_meta($post_id, '_EventVenueID', $vid);
+    }
+}, 20, 3);
+
+/* One-time backfill: venue-less published events get the default venue. */
+add_action('admin_init', function () {
+    if (get_option('easy_default_venue_backfilled') === '2.2.5') {
+        return;
+    }
+    $vid = easy_default_venue_id();
+    if ($vid > 0) {
+        $events = get_posts(array(
+            'post_type'     => 'tribe_events',
+            'post_status'   => 'publish',
+            'numberposts'   => 500,
+            'fields'        => 'ids',
+            'no_found_rows' => true,
+        ));
+        foreach ($events as $eid) {
+            if (function_exists('easy_ics_event_venue_id') && easy_ics_event_venue_id($eid)) {
+                continue;
+            }
+            if (easy_event_is_virtual($eid)) {
+                continue;
+            }
+            update_post_meta($eid, '_EventVenueID', $vid);
+        }
+    }
+    update_option('easy_default_venue_backfilled', '2.2.5');
+});
 
 /* ------------------------------------------------------------------
  * Event query — published tribe_events in the window, filtered by
@@ -447,11 +555,12 @@ function easy_ics_build($organizer, $events) {
         $p     = $ev['post'];
         $title = html_entity_decode(get_the_title($p->ID), ENT_QUOTES, 'UTF-8');
 
-        // NOTE: DESCRIPTION is deliberately omitted. The event description
-        // carries the full preset course outline (coverage, duration,
-        // prerequisites, chapter list) — useful on the website, but just
-        // clutter inside a calendar event. The URL below links to the full
-        // details for anyone who wants them.
+        // NOTE: the full DESCRIPTION (event post content) is deliberately
+        // omitted. The event description carries the preset course outline
+        // (coverage, duration, prerequisites, chapter list) — useful on the
+        // website, but just clutter inside a calendar event. The URL below
+        // links to the full details for anyone who wants them. The roster
+        // block added further down is a separate, roster-only DESCRIPTION.
         $loc = easy_ics_event_location($p->ID);
         $url = get_permalink($p->ID);
 
@@ -493,6 +602,17 @@ function easy_ics_build($organizer, $events) {
         }
         if ($url) {
             $lines[] = 'URL:' . easy_ics_escape($url);
+        }
+        // Class roster, names only: the instructor sees who to expect.
+        // Phone/email/payment/notes stay in the app. Guarded so the feed
+        // keeps working when the roster module is switched off.
+        if (function_exists('easy_roster_names')) {
+            $names = easy_roster_names($p->ID);
+            if (!empty($names)) {
+                $lines[] = 'DESCRIPTION:' . easy_ics_escape(
+                    'Students (' . count($names) . "):\n- " . implode("\n- ", $names)
+                );
+            }
         }
         $lines[] = 'STATUS:CONFIRMED';
         $lines[] = 'END:VEVENT';
