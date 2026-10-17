@@ -568,49 +568,59 @@ function easy_suite_feeds_page() {
 }
 
 /* ------------------------------------------------------------------
- * Plugins page: short description + "View details" thickbox
+ * Plugins page: short description + native "View details" modal
  * ------------------------------------------------------------------ */
+
+// Serve our own plugin information through the same API core uses, so the
+// View details modal renders exactly like a wordpress.org plugin's.
+add_filter('plugins_api', function ($res, $action, $args) {
+    if ($action !== 'plugin_information' || !isset($args->slug) || $args->slug !== 'easy-suite') {
+        return $res;
+    }
+    $registry = function_exists('easy_suite_module_registry') ? easy_suite_module_registry() : array();
+    $option = get_option('easy_suite_modules', array());
+    $mod_list = '';
+    foreach ($registry as $key => $m) {
+        $on = isset($option[$key]) ? (bool) $option[$key] : !empty($m['default']);
+        $mod_list .= '<li><strong>' . esc_html(isset($m['label']) ? $m['label'] : $key) . '</strong>'
+            . ($on ? '' : ' (off)') . '</li>';
+    }
+    $info = new stdClass();
+    $info->name = 'EASY Suite';
+    $info->slug = 'easy-suite';
+    $info->version = EASY_SUITE_VERSION;
+    $info->author = 'Brandon Glynn';
+    $info->requires = '6.5';
+    $info->requires_php = '8.0';
+    $info->sections = array(
+        'description' => '<p>All EASY Safety Training site integrations in one plugin. Replaces EASY Core, '
+            . 'EASY Certificate Notifications, EASY Instructor Calendar Feed, and the EASY snippets.</p>'
+            . '<h4>What it does</h4><ul>'
+            . '<li>EASY Operations app bridge: approvals, expiring certs, ACF on the cert REST endpoint</li>'
+            . '<li>Certificate privacy and the PDF gatekeeper</li>'
+            . '<li>Student, expiry, and employer notification emails</li>'
+            . '<li>Online course license keys</li>'
+            . '<li>Instructor calendar feeds (per-instructor private links)</li>'
+            . '<li>Class rosters and WooCommerce seat sales</li>'
+            . '<li>Instructor-only shop products</li>'
+            . '<li>SEO noindex for utility pages and past events</li>'
+            . '<li>Management queue for Colleen and Dad</li>'
+            . '<li>Small site tweaks that used to live in Code Snippets</li>'
+            . '</ul>'
+            . '<h4>Modules (' . count($registry) . ')</h4><ul>' . $mod_list . '</ul>',
+        'changelog' => '<h4>' . esc_html(EASY_SUITE_VERSION) . '</h4>'
+            . '<p>Current version. See the git history for the full changelog.</p>',
+    );
+    return $info;
+}, 10, 3);
 
 add_filter('plugin_row_meta', function ($links, $file) {
     if ($file !== plugin_basename(EASY_SUITE_FILE)) {
         return $links;
     }
-    $links[] = '<a href="#TB_inline?width=640&height=550&inlineId=easy-suite-details" class="thickbox" title="EASY Suite">View details</a>';
+    $url = network_admin_url('plugin-install.php?tab=plugin-information&plugin=easy-suite'
+        . '&TB_iframe=true&width=600&height=550');
+    $links[] = '<a href="' . esc_url($url) . '" class="thickbox open-plugin-details-modal" '
+        . 'aria-label="More information about EASY Suite">View details</a>';
     return $links;
 }, 10, 2);
-
-add_action('admin_footer-plugins.php', function () {
-    $registry = function_exists('easy_suite_module_registry') ? easy_suite_module_registry() : array();
-    $option = get_option('easy_suite_modules', array());
-    ?>
-    <div id="easy-suite-details" style="display:none;">
-        <h2>EASY Suite <?php echo esc_html(EASY_SUITE_VERSION); ?></h2>
-        <p>All EASY Safety Training site integrations in one plugin. Replaces EASY Core,
-        EASY Certificate Notifications, EASY Instructor Calendar Feed, and the EASY snippets.</p>
-        <h3>What it does</h3>
-        <ul style="list-style:disc;margin-left:20px;">
-            <li>EASY Operations app bridge: approvals, expiring certs, ACF on the cert REST endpoint</li>
-            <li>Certificate privacy and the PDF gatekeeper</li>
-            <li>Student, expiry, and employer notification emails</li>
-            <li>Online course license keys</li>
-            <li>Instructor calendar feeds (per-instructor private links)</li>
-            <li>Class rosters and WooCommerce seat sales</li>
-            <li>Instructor-only shop products</li>
-            <li>SEO noindex for utility pages and past events</li>
-            <li>Management queue for Colleen and Dad</li>
-            <li>Small site tweaks that used to live in Code Snippets</li>
-        </ul>
-        <?php if ($registry) : ?>
-        <h3>Modules (<?php echo count($registry); ?>)</h3>
-        <ul style="list-style:disc;margin-left:20px;">
-            <?php foreach ($registry as $key => $m) :
-                $on = isset($option[$key]) ? (bool) $option[$key] : !empty($m['default']);
-            ?>
-            <li><strong><?php echo esc_html(isset($m['label']) ? $m['label'] : $key); ?></strong>
-                <?php echo $on ? '' : '(off)'; ?></li>
-            <?php endforeach; ?>
-        </ul>
-        <?php endif; ?>
-    </div>
-    <?php
-});
