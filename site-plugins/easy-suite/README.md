@@ -51,6 +51,7 @@ always stay on.
 | Instructor calendar feed | Calendar feed per instructor at `/instructor-calendar/<name>.ics` |
 | Shop | Instructor-only products and the `[easy_product_form]` listing form |
 | SEO noindex | Keeps utility pages out of search results |
+| Past events: noindex | Keeps single event pages out of search results once the class date has passed |
 | Staff certificate archive | Makes `/cert/` list every certificate |
 | Small site tweaks | Course page "no upcoming sessions" message, login and register form styling, certificates page login redirect, branded email wrapper, links in Ultimate Member checkbox labels |
 

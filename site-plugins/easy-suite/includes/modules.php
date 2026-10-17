@@ -67,6 +67,12 @@ function easy_suite_module_registry() {
             'default'     => true,
             'locked'      => false,
         ],
+        'event-noindex' => [
+            'label'       => 'Past events: noindex',
+            'description' => 'Automatically keeps single event pages out of search results and the sitemap once the class date has passed. No list to maintain; upcoming events are untouched.',
+            'default'     => true,
+            'locked'      => false,
+        ],
         'cert-archive' => [
             'label'       => 'Staff certificate archive: show all',
             'description' => 'The staff /cert/ archive lists every certificate instead of only the newest 10, so its expiry filter covers everything.',
