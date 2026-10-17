@@ -286,6 +286,40 @@ function easy_mgmt_queue_questions() {
     return $questions;
 }
 
+/** Pricing research reference table, shown above the forklift pricing questions. */
+function easy_mgmt_queue_pricing_research_html() {
+    $rows = [
+        ***REMOVED***
+        ***REMOVED***
+        ***REMOVED***
+        ***REMOVED***
+        ***REMOVED***
+        ***REMOVED***
+        ***REMOVED***
+        ***REMOVED***
+        ***REMOVED***
+        ***REMOVED***
+        ***REMOVED***
+        ***REMOVED***
+        ***REMOVED***
+        ***REMOVED***
+        ***REMOVED***
+    ];
+    ***REMOVED***
+        . '***REMOVED***'
+        . '***REMOVED***'
+        . '<div style="overflow-x:auto;"><table class="emq-price-table">'
+        . '<thead><tr><th>Provider</th><th>Price (CAD)</th><th>What it is</th></tr></thead><tbody>';
+    foreach ($rows as $r) {
+        $html .= '<tr><td><a href="' . esc_url($r[1]) . '" target="_blank" rel="noopener">' . esc_html($r[0]) . '</a></td>'
+            . '<td style="white-space:nowrap;">' . esc_html($r[2]) . '</td>'
+            . '<td>' . esc_html($r[3]) . '</td></tr>';
+    }
+    $html .= '</tbody></table></div>'
+        ***REMOVED***
+    return $html;
+}
+
 /** Render one question. $saved = previously saved answer array for this key. */
 function easy_mgmt_queue_render_question($q, $saved) {
     $key   = $q['key'];
@@ -511,6 +545,10 @@ function easy_mgmt_queue_shortcode() {
                         echo '</section>';
                     }
                     echo '<section class="emq-section"><div class="emq-section-head"><h3>' . esc_html($q['section']) . '</h3></div>';
+                    if ($q['section'] === '***REMOVED***') {
+                        // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped — built with escaping above
+                        echo easy_mgmt_queue_pricing_research_html();
+                    }
                     $last_section = $q['section'];
                 }
                 easy_mgmt_queue_render_question($q, null);
@@ -598,6 +636,9 @@ function easy_mgmt_queue_shortcode() {
         .emq-opt-text { flex: 1; }
         .emq-opt-note { display: block; color: #55645a; font-size: 0.9rem; margin-top: 0.15rem; }
         .emq-other-input, .emq-free-input { width: 100%; font: inherit; font-size: 1rem; border: 1.5px solid #aebbae; border-radius: 8px; padding: 0.6rem 0.7rem; margin-top: 0.6rem; }
+        .emq-price-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        .emq-price-table th, .emq-price-table td { text-align: left; padding: 0.45rem 0.6rem; border-bottom: 1px solid #e5e9ef; vertical-align: top; }
+        .emq-price-table thead th { border-bottom: 2px solid #1e6b3c; white-space: nowrap; }
         .emq-other-input:disabled { opacity: 0.45; }
         .emq-free-input { min-height: 7rem; }
         .emq-list { margin: 0 0 1rem; padding-left: 1.25rem; }
