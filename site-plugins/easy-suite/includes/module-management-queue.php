@@ -254,6 +254,46 @@ function easy_mgmt_queue_questions() {
                 ['No, keep prices off the site', ''],
             ],
         ],
+        // ---- Payments ----
+        [
+            'key'     => 'seat_payment',
+            'section' => 'Payments — online purchases',
+            'label'   => 'Payment processor for online class seat purchases',
+            'why'     => 'Class seats will be sold through the website as WooCommerce products (one product per class date, stock equals seats). Current state: Bambora Credit Cards is enabled and configured; WooPayments ("Accept payments with Woo") is disabled and needs setup; PayPal Payments is not installed. Selection determines which processor takes seat payments at checkout.',
+            'type'    => 'radio_other',
+            'options' => [
+                ['Bambora Credit Cards (currently active)', 'Already enabled and configured.'],
+                ['WooPayments — complete the setup', 'Requires finishing the WooPayments onboarding.'],
+                ['PayPal Payments — install and set up', 'Requires installing the PayPal Payments extension and connecting an account.'],
+            ],
+            'other_placeholder' => 'Type a different processor',
+        ],
+        [
+            'key'     => 'shop_payment',
+            'section' => 'Payments — online purchases',
+            'label'   => 'Payment processor for shop purchases',
+            'why'     => 'Applies to general shop sales (equipment, materials) once the public shop opens. May be the same processor as class seats or a different one.',
+            'type'    => 'radio_other',
+            'options' => [
+                ['Same as class seats', ''],
+                ['Bambora Credit Cards', ''],
+                ['WooPayments', 'Requires completing setup if not already done.'],
+                ['PayPal Payments', 'Requires installing and connecting an account.'],
+            ],
+            'other_placeholder' => 'Type a different processor',
+        ],
+        // ---- Shop review ----
+        [
+            'key'     => 'shop_review',
+            'section' => 'Shop — products and prices',
+            'label'   => 'Current shop products and prices',
+            'why'     => 'The shop currently lists 7 published products, all in the Instructor Materials category (visible to instructors only): Overhead Crane Rigging ($430–$10,000); Aerial Work Platform Scissor & Boom ($430–$10,000); Trenching and Excavating ($230–$5,000); Counterbalance Forklift Class 1, 4, 5, 7 ($430–$10,000); Workplace NL Confined Space Entry ($600–$13,000); Workplace NL Fall Protection Recertification ($600–$13,000); Workplace NL Fall Protection ($600–$13,000). Confirmation requested: are these products and price ranges correct, or are changes needed?',
+            'type'    => 'radio_other',
+            'options' => [
+                ['Correct as listed', 'No changes to products or prices.'],
+            ],
+            'other_placeholder' => 'Describe the changes needed',
+        ],
     ];
 
     // Append admin-added custom questions, numbered after the built-ins.
