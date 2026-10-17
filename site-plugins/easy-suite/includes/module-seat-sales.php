@@ -261,6 +261,9 @@ function easy_seats_sync_event_to_product($event_id) {
     if (is_string($cost)) {
         $cost = trim($cost);
     }
+    // The app's Cost field is free text; tolerate "$430" or "1,000".
+    $cost = str_replace(array('$', ','), '', (string) $cost);
+    $cost = trim($cost);
     if ($cost !== '' && is_numeric($cost)) {
         $product->set_regular_price((string) $cost);
     }
@@ -277,6 +280,9 @@ function easy_seats_sync_event_to_product($event_id) {
 add_action('save_post_tribe_events', 'easy_seats_sync_event_to_product', 20);
 
 // REST field so the app can read and write the seat capacity on a class.
+// NOTE: the app talks to TEC's own REST API (/tribe/events/v1), which does
+// not honor register_rest_field. The field below is a fallback for /wp/v2;
+// the working path is the tribe_events_rest_event_prepare_postarr filter.
 add_action('rest_api_init', function () {
     if (!function_exists('register_rest_field')) {
         return;
@@ -302,6 +308,57 @@ add_action('rest_api_init', function () {
         'schema' => array('type' => 'integer', 'context' => array('view', 'edit')),
     ));
 });
+
+/**
+ * TEC's custom REST API (the one the app uses) ignores register_rest_field,
+ * so catch the capacity here instead. prepare_postarr runs before the post
+ * exists on create, so stash the value and let the save_post handler below
+ * write it once the event ID is known.
+ */
+$GLOBALS['easy_seats_pending_capacity'] = null;
+add_filter('tribe_events_rest_event_prepare_postarr', function ($postarr, $request) {
+    if (isset($request['easy_seats'])) {
+        $GLOBALS['easy_seats_pending_capacity'] = $request['easy_seats'];
+    }
+    return $postarr;
+}, 10, 2);
+
+// Write any stashed capacity from the TEC REST filter, then run the sync.
+add_action('save_post_tribe_events', function ($event_id) {
+    if (array_key_exists('easy_seats_pending_capacity', $GLOBALS) && $GLOBALS['easy_seats_pending_capacity'] !== null) {
+        $value = $GLOBALS['easy_seats_pending_capacity'];
+        $GLOBALS['easy_seats_pending_capacity'] = null;
+        if ($value === '' ) {
+            delete_post_meta($event_id, EASY_SEAT_CAPACITY_META);
+        } else {
+            update_post_meta($event_id, EASY_SEAT_CAPACITY_META, max(0, (int) $value));
+        }
+    }
+}, 15);
+
+/**
+ * TEC's custom endpoints build their JSON by hand, so inject the capacity
+ * into both the single-event and archive responses. (Runs after TEC's own
+ * response cache, so nothing stale gets stored.)
+ */
+function easy_seats_inject_event_array($event) {
+    if (is_array($event) && isset($event['id'])) {
+        $v = get_post_meta((int) $event['id'], EASY_SEAT_CAPACITY_META, true);
+        $event['easy_seats'] = $v === '' ? null : (int) $v;
+    }
+    return $event;
+}
+add_filter('tribe_rest_single_event_data', function ($data, $request) {
+    return easy_seats_inject_event_array($data);
+}, 10, 2);
+add_filter('tribe_rest_events_archive_data', function ($data, $request) {
+    if (!empty($data['events']) && is_array($data['events'])) {
+        foreach ($data['events'] as $i => $event) {
+            $data['events'][$i] = easy_seats_inject_event_array($event);
+        }
+    }
+    return $data;
+}, 10, 2);
 
 /* ------------------------------------------------------------------
  * Checkout: per-seat certificate info
