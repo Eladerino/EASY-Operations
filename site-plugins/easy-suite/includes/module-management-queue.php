@@ -45,13 +45,29 @@ function easy_mgmt_queue_get_responses() {
     return is_array($saved) ? $saved : [];
 }
 
+/** Custom questions added by admins. Stored as a list of question arrays. */
+function easy_mgmt_queue_custom_questions() {
+    $saved = get_option('easy_mgmt_queue_custom_questions', []);
+    if (!is_array($saved)) {
+        return [];
+    }
+    $out = [];
+    foreach ($saved as $q) {
+        if (!is_array($q) || empty($q['key']) || empty($q['label'])) {
+            continue;
+        }
+        $out[] = $q;
+    }
+    return $out;
+}
+
 /**
  * Question definitions. Each: key, number (for display), section, label,
  * why (context), type (radio|text|date|textarea), options[] for radio
  * (each: value shown, note optional), or placeholder for text/date.
  */
 function easy_mgmt_queue_questions() {
-    return [
+    $questions = [
         // ---- Terms of Service: starting point ----
         [
             'key'     => 'has_own_terms',
@@ -234,6 +250,23 @@ function easy_mgmt_queue_questions() {
             ],
         ],
     ];
+
+    // Append admin-added custom questions, numbered after the built-ins.
+    $num = 0;
+    foreach ($questions as $hq) {
+        if (!empty($hq['num']) && $hq['num'] > $num) {
+            $num = (int) $hq['num'];
+        }
+    }
+    foreach (easy_mgmt_queue_custom_questions() as $cq) {
+        // Only numbered types get a number; textarea/info types do not.
+        if ($cq['type'] !== 'textarea') {
+            $num++;
+            $cq['num'] = $num;
+        }
+        $questions[] = $cq;
+    }
+    return $questions;
 }
 
 /** Render one question. $saved = previously saved answer array for this key. */
@@ -549,3 +582,151 @@ function easy_mgmt_queue_shortcode() {
     return ob_get_clean();
 }
 add_shortcode('easy_management_queue', 'easy_mgmt_queue_shortcode');
+
+/* --- Admin: view responses and manage custom questions ---------------------- */
+
+function easy_mgmt_queue_admin_handle() {
+    if (!current_user_can('manage_options')) {
+        return;
+    }
+    // Add a custom question.
+    if (isset($_POST['emq_add_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['emq_add_nonce'])), 'emq_add_question')) {
+        $label = isset($_POST['emq_new_label']) ? trim(sanitize_text_field(wp_unslash($_POST['emq_new_label']))) : '';
+        if ($label !== '') {
+            $section = isset($_POST['emq_new_section']) ? trim(sanitize_text_field(wp_unslash($_POST['emq_new_section']))) : '';
+            $why = isset($_POST['emq_new_why']) ? trim(sanitize_textarea_field(wp_unslash($_POST['emq_new_why']))) : '';
+            $type = isset($_POST['emq_new_type']) ? sanitize_key(wp_unslash($_POST['emq_new_type'])) : 'radio';
+            if (!in_array($type, ['radio', 'radio_other', 'textarea'], true)) {
+                $type = 'radio';
+            }
+            $options = [];
+            if ($type !== 'textarea' && isset($_POST['emq_new_options'])) {
+                foreach (preg_split('/[\r\n]+/', (string) wp_unslash($_POST['emq_new_options'])) as $line) {
+                    $line = trim(sanitize_text_field($line));
+                    if ($line !== '') {
+                        $options[] = [$line, ''];
+                    }
+                }
+            }
+            $key = 'custom_' . substr(md5($label . microtime(true)), 0, 12);
+            $q = [
+                'key'     => $key,
+                'section' => $section !== '' ? $section : 'Additional questions',
+                'label'   => $label,
+                'why'     => $why,
+                'type'    => $type,
+                'options' => $options,
+                'custom'  => true,
+            ];
+            if ($type === 'radio_other') {
+                $q['other_placeholder'] = 'Type an alternative';
+            }
+            $all = easy_mgmt_queue_custom_questions();
+            // easy_mgmt_queue_custom_questions filters invalid ones; keep raw here.
+            $raw = get_option('easy_mgmt_queue_custom_questions', []);
+            $raw = is_array($raw) ? $raw : [];
+            $raw[] = $q;
+            update_option('easy_mgmt_queue_custom_questions', $raw, false);
+            add_settings_error('emq_admin', 'emq_added', 'Question added.', 'success');
+        }
+    }
+    // Delete a custom question (and its saved answer, if any).
+    if (isset($_POST['emq_del_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['emq_del_nonce'])), 'emq_del_question')) {
+        $del_key = isset($_POST['emq_del_key']) ? sanitize_key(wp_unslash($_POST['emq_del_key'])) : '';
+        if ($del_key !== '') {
+            $raw = get_option('easy_mgmt_queue_custom_questions', []);
+            $raw = is_array($raw) ? array_values(array_filter($raw, function ($q) use ($del_key) {
+                return !is_array($q) || ($q['key'] ?? '') !== $del_key;
+            })) : [];
+            update_option('easy_mgmt_queue_custom_questions', $raw, false);
+            $resp = easy_mgmt_queue_get_responses();
+            if (isset($resp['answers'][$del_key])) {
+                unset($resp['answers'][$del_key]);
+                update_option('easy_mgmt_queue_responses', $resp, false);
+            }
+            add_settings_error('emq_admin', 'emq_deleted', 'Question deleted.', 'success');
+        }
+    }
+}
+
+function easy_mgmt_queue_format_answer($q, $a) {
+    if (!is_array($a)) {
+        return '(skipped)';
+    }
+    if (isset($a['text'])) {
+        return $a['text'] !== '' ? $a['text'] : '(skipped)';
+    }
+    $choice = $a['choice'] ?? '';
+    if ($choice === '') {
+        return '(skipped)';
+    }
+    if ($choice === '__other') {
+        return isset($a['other']) && $a['other'] !== '' ? $a['other'] : '(write-in selected; no text entered)';
+    }
+    return $choice;
+}
+
+function easy_mgmt_queue_admin_page() {
+    if (!current_user_can('manage_options')) {
+        wp_die(esc_html__('You do not have permission to view this page.', 'easy-suite'));
+    }
+    easy_mgmt_queue_admin_handle();
+    settings_errors('emq_admin');
+
+    $responses = easy_mgmt_queue_get_responses();
+    $answers = isset($responses['answers']) ? $responses['answers'] : [];
+    $questions = easy_mgmt_queue_questions();
+
+    echo '<div class="wrap" style="max-width:900px;"><h1>Management queue</h1>';
+    echo '<p>Private decision page: <a href="' . esc_url(home_url('/management-queue/')) . '" target="_blank" rel="noopener">' . esc_html(home_url('/management-queue/')) . '</a> (Private page, shortcode <code>[easy_management_queue]</code>). Visible only to the usernames in EASY Suite → Settings → Management queue, plus administrators.</p>';
+
+    // --- Submitted responses ---
+    echo '<h2>Submitted responses</h2>';
+    if (empty($answers)) {
+        echo '<p><em>No responses submitted yet.</em></p>';
+    } else {
+        echo '<p>Submitted by <strong>' . esc_html($responses['submitted_by'] ?? '?') . '</strong> at ' . esc_html($responses['submitted_at'] ?? '?') . ' (site time).</p>';
+        echo '<table class="widefat striped"><thead><tr><th style="width:40%">Question</th><th>Answer</th></tr></thead><tbody>';
+        foreach ($questions as $q) {
+            $label = (!empty($q['num']) ? $q['num'] . '. ' : '') . $q['label'];
+            $ans = isset($answers[$q['key']]) ? easy_mgmt_queue_format_answer($q, $answers[$q['key']]) : '(skipped)';
+            echo '<tr><td>' . esc_html($label) . '</td><td>' . esc_html($ans) . '</td></tr>';
+        }
+        echo '</tbody></table>';
+    }
+
+    // --- Custom questions ---
+    echo '<h2>Custom questions</h2>';
+    $custom = easy_mgmt_queue_custom_questions();
+    if (empty($custom)) {
+        echo '<p><em>No custom questions yet. Built-in questions (Terms of Service, pricing) cannot be edited here.</em></p>';
+    } else {
+        echo '<table class="widefat striped"><thead><tr><th>Question</th><th>Section</th><th>Type</th><th></th></tr></thead><tbody>';
+        foreach ($custom as $cq) {
+            echo '<tr><td>' . esc_html($cq['label']) . '</td><td>' . esc_html($cq['section']) . '</td><td>' . esc_html($cq['type']) . '</td>';
+            echo '<td><form method="post" action="" style="margin:0">';
+            wp_nonce_field('emq_del_question', 'emq_del_nonce');
+            echo '<input type="hidden" name="emq_del_key" value="' . esc_attr($cq['key']) . '">';
+            echo '<button type="submit" class="button button-link-delete" onclick="return confirm(\'Delete this question and its saved answer?\')">Delete</button>';
+            echo '</form></td></tr>';
+        }
+        echo '</tbody></table>';
+    }
+
+    echo '<h3>Add a question</h3>';
+    echo '<form method="post" action="">';
+    wp_nonce_field('emq_add_question', 'emq_add_nonce');
+    echo '<table class="form-table"><tbody>';
+    echo '<tr><th scope="row"><label for="emq_new_section">Section heading</label></th><td><input type="text" id="emq_new_section" name="emq_new_section" class="regular-text" placeholder="Additional questions"><p class="description">Groups the question under a heading on the page.</p></td></tr>';
+    echo '<tr><th scope="row"><label for="emq_new_label">Question</label></th><td><input type="text" id="emq_new_label" name="emq_new_label" class="large-text" required></td></tr>';
+    echo '<tr><th scope="row"><label for="emq_new_why">Context / help text</label></th><td><textarea id="emq_new_why" name="emq_new_why" rows="3" class="large-text"></textarea><p class="description">Shown under the question. Keep it factual and neutral.</p></td></tr>';
+    echo '<tr><th scope="row"><label for="emq_new_type">Answer type</label></th><td><select id="emq_new_type" name="emq_new_type">'
+        . '<option value="radio">Multiple choice</option>'
+        . '<option value="radio_other">Multiple choice + write-in</option>'
+        . '<option value="textarea">Free text</option>'
+        . '</select></td></tr>';
+    echo '<tr><th scope="row"><label for="emq_new_options">Choices</label></th><td><textarea id="emq_new_options" name="emq_new_options" rows="5" class="large-text code" placeholder="One choice per line"></textarea><p class="description">One choice per line. Only used for multiple-choice types.</p></td></tr>';
+    echo '</tbody></table>';
+    submit_button('Add question');
+    echo '</form></div>';
+}

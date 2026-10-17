@@ -13,6 +13,9 @@ add_action('admin_menu', function () {
     add_menu_page('EASY Suite', 'EASY Suite', 'manage_options', 'easy-suite', 'easy_suite_overview_page', 'dashicons-shield-alt', 58);
     add_submenu_page('easy-suite', 'EASY Suite overview', 'Overview', 'manage_options', 'easy-suite', 'easy_suite_overview_page');
     add_submenu_page('easy-suite', 'EASY Suite calendar feeds', 'Calendar feeds', 'manage_options', 'easy-suite-feeds', 'easy_suite_feeds_page');
+    if (function_exists('easy_mgmt_queue_admin_page')) {
+        add_submenu_page('easy-suite', 'EASY Suite management queue', 'Management queue', 'manage_options', 'easy-suite-queue', 'easy_mgmt_queue_admin_page');
+    }
     add_submenu_page('easy-suite', 'EASY Suite settings', 'Settings', 'manage_options', 'easy-suite-settings', 'easy_suite_settings_page');
 });
 
