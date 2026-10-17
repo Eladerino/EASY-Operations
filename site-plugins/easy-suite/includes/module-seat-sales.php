@@ -230,6 +230,80 @@ add_action('tribe_events_single_event_after_the_content', function () {
 });
 
 /* ------------------------------------------------------------------
+ * Capacity + price sync: the app sets cost and seats on the class;
+ * this keeps the linked WooCommerce product in step.
+ * ------------------------------------------------------------------ */
+
+define('EASY_SEAT_CAPACITY_META', '_easy_seat_capacity');
+
+/**
+ * Sync the linked seat product's price and stock from the event.
+ * Price follows the event cost; stock follows capacity minus students
+ * already on the roster. Only touches an already-linked product.
+ */
+function easy_seats_sync_event_to_product($event_id) {
+    if (!easy_seats_wc_ready()) {
+        return;
+    }
+    $event_id = (int) $event_id;
+    if (get_post_type($event_id) !== 'tribe_events') {
+        return;
+    }
+    $pid = easy_seat_product_id($event_id);
+    if ($pid <= 0) {
+        return;
+    }
+    $product = wc_get_product($pid);
+    if (!$product) {
+        return;
+    }
+    $cost = get_post_meta($event_id, '_EventCost', true);
+    if (is_string($cost)) {
+        $cost = trim($cost);
+    }
+    if ($cost !== '' && is_numeric($cost)) {
+        $product->set_regular_price((string) $cost);
+    }
+    $capacity = get_post_meta($event_id, EASY_SEAT_CAPACITY_META, true);
+    if ($capacity !== '' && is_numeric($capacity)) {
+        $capacity = max(0, (int) $capacity);
+        $roster = function_exists('easy_roster_get') ? easy_roster_get($event_id) : array();
+        $taken = is_array($roster) ? count($roster) : 0;
+        $product->set_manage_stock(true);
+        $product->set_stock_quantity(max(0, $capacity - $taken));
+    }
+    $product->save();
+}
+add_action('save_post_tribe_events', 'easy_seats_sync_event_to_product', 20);
+
+// REST field so the app can read and write the seat capacity on a class.
+add_action('rest_api_init', function () {
+    if (!function_exists('register_rest_field')) {
+        return;
+    }
+    register_rest_field('tribe_events', 'easy_seats', array(
+        'get_callback' => function ($event) {
+            $id = isset($event['id']) ? (int) $event['id'] : 0;
+            $v = $id > 0 ? get_post_meta($id, EASY_SEAT_CAPACITY_META, true) : '';
+            return $v === '' ? null : (int) $v;
+        },
+        'update_callback' => function ($value, $event) {
+            $id = is_object($event) ? (int) $event->ID : (isset($event['id']) ? (int) $event['id'] : 0);
+            if ($id <= 0) {
+                return;
+            }
+            if ($value === null || $value === '') {
+                delete_post_meta($id, EASY_SEAT_CAPACITY_META);
+            } else {
+                update_post_meta($id, EASY_SEAT_CAPACITY_META, max(0, (int) $value));
+            }
+            easy_seats_sync_event_to_product($id);
+        },
+        'schema' => array('type' => 'integer', 'context' => array('view', 'edit')),
+    ));
+});
+
+/* ------------------------------------------------------------------
  * Checkout: per-seat certificate info
  * ------------------------------------------------------------------ */
 

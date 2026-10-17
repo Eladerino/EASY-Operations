@@ -394,6 +394,7 @@
       organizerId: orgObj ? orgObj.id : null,
       organizerName: orgObj ? decodeEntities(orgObj.organizer || orgObj.name) : '',
       cost: raw.cost || '',
+      seats: (raw.easy_seats === null || raw.easy_seats === undefined) ? '' : raw.easy_seats,
       description: raw.description || '',
       categoryIds: Array.isArray(raw.categories)
         ? raw.categories.map((c) => c && c.id).filter(Boolean)
@@ -712,6 +713,7 @@
     $('evVenueProvince').value = 'NL';
     ['evOrgName', 'evOrgEmail', 'evOrgPhone'].forEach((id) => { $(id).value = ''; });
     $('evCost').value = '';
+    $('evSeats').value = '';
     $('evStatus').value = 'publish';
     $('evDesc').value = '';
     $('evDelete').classList.add('hidden');
@@ -735,6 +737,7 @@
       $('evVenue').value = event.venueId ? String(event.venueId) : '';
       $('evOrganizer').value = event.organizerId ? String(event.organizerId) : '';
       $('evCost').value = event.cost || '';
+      $('evSeats').value = (event.seats === '' || event.seats === null || event.seats === undefined) ? '' : event.seats;
       $('evStatus').value = event.status === 'draft' ? 'draft' : 'publish';
       $('evDesc').value = event.description || '';
       $('evDelete').classList.remove('hidden');
@@ -928,6 +931,8 @@
       if (organizerId) payload.organizer = [Number(organizerId)];
       const cost = $('evCost').value.trim();
       if (cost) payload.cost = cost;
+      const seatsRaw = $('evSeats').value.trim();
+      if (seatsRaw !== '') payload.easy_seats = Math.max(0, parseInt(seatsRaw, 10) || 0);
       if (modalCategoryIds.length) payload.categories = modalCategoryIds.slice();
 
       let res;
