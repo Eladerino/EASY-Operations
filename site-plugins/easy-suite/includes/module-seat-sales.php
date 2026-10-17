@@ -24,9 +24,15 @@
 
 defined('ABSPATH') || exit;
 
-if (!function_exists('wc_get_product')) {
-    // WooCommerce not active — nothing to do.
-    return;
+/**
+ * WooCommerce may load after EASY Suite (alphabetical plugin order), so the
+ * module always registers its hooks and each WooCommerce-dependent callback
+ * bails unless WooCommerce is actually active. (A file-scope
+ * function_exists('wc_get_product') guard silently disabled the entire module,
+ * including the event meta box — fixed in 2.2.13.)
+ */
+function easy_seats_wc_ready() {
+    return function_exists('wc_get_product');
 }
 
 define('EASY_SEAT_PRODUCT_META', '_easy_seat_product_id'); // on tribe_events
@@ -75,6 +81,10 @@ add_action('add_meta_boxes_tribe_events', function () {
 });
 
 function easy_seat_product_metabox($post) {
+    if (!easy_seats_wc_ready()) {
+        echo '<p>WooCommerce is not active; seat sales are unavailable.</p>';
+        return;
+    }
     $pid = easy_seat_product_id($post->ID);
     wp_nonce_field('easy_seat_product_save', 'easy_seat_product_nonce');
     echo '<p><label for="easy_seat_product_id"><strong>Seat product</strong></label></p>';
@@ -100,6 +110,9 @@ function easy_seat_product_metabox($post) {
 }
 
 add_action('save_post_tribe_events', function ($post_id, $post, $update) {
+    if (!easy_seats_wc_ready()) {
+        return;
+    }
     if (wp_is_post_revision($post_id) || wp_is_post_autosave($post_id)) {
         return;
     }
@@ -150,7 +163,7 @@ function easy_seat_create_product($event_id) {
  * ------------------------------------------------------------------ */
 
 add_action('tribe_events_single_event_after_the_content', function () {
-    if (!function_exists('tribe_get_event')) {
+    if (!function_exists('tribe_get_event') || !easy_seats_wc_ready()) {
         return;
     }
     $event_id = get_the_ID();
@@ -388,6 +401,9 @@ function easy_seats_sync_order_roster($order_id) {
  * ------------------------------------------------------------------ */
 
 add_action('easy_roster_updated', function ($event_id, $new_roster, $old_roster, $user_id) {
+    if (!easy_seats_wc_ready()) {
+        return;
+    }
     if (!is_array($old_roster)) {
         $old_roster = array();
     }
