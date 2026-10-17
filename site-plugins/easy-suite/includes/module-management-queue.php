@@ -506,6 +506,61 @@ function easy_mgmt_queue_open_questions() {
     return $out;
 }
 
+/** Full revised projects summary for the What's New section. Plain language for the team. */
+function easy_mgmt_queue_whats_new_html() {
+    ob_start();
+    ?>
+    <div class="emq-q">
+        <p class="emq-why"><strong>EASY Safety Training &mdash; digital projects summary.</strong> Everything built and fixed since late September 2026. Updated October 17, 2026. Written in plain language so everyone can follow along.</p>
+
+        <h3 style="font-size:1.05rem;margin:1.2rem 0 0.35rem;">Part 1 &mdash; EASY Operations (Desktop App)</h3>
+
+        <p class="emq-why"><strong>Certificates tab.</strong> The heart of the app &mdash; creating and managing student certificates. Fill out a simple form and the app generates a professional PDF automatically. Certificates post to the website as drafts by default &mdash; nothing goes live until the office reviews it. Look up any certificate ever issued, reprint it, or fix a typo before publishing. The app also watches for certificates approaching expiry and flags them.</p>
+
+        <p class="emq-why"><strong>Approvals tab.</strong> A review queue for the office. Instructors can create drafts but cannot publish &mdash; only the office pushes a certificate live. Pam can submit on behalf of instructors when needed.</p>
+
+        <p class="emq-why"><strong>Schedule tab.</strong> A visual month calendar for planning classes, built for Pam. Drag any of the 34 courses onto a date to create a class; drag to reschedule. <strong>New:</strong> open any class and manage its student list right in the app &mdash; add walk-ins and phone bookings with name, employer, phone, email, payment status, and notes. If the class sells seats online, the website stock adjusts automatically.</p>
+
+        <p class="emq-why"><strong>Online Learning tab.</strong> Still a visual demo for now &mdash; the first real online course will be <strong>Forklift</strong> (online theory plus a bookable in-person practical).</p>
+
+        <p class="emq-why"><strong>Course Builder.</strong> Dad&rsquo;s tool for building online course modules himself (chapters, quizzes, pass rules). In alpha testing, visible only to Brandon and Dad.</p>
+
+        <p class="emq-why"><strong>Recent app releases.</strong> v1.2.1: a &ldquo;What&rsquo;s New&rdquo; button in the header shows what changed after each update. v1.2.0: the student roster manager. v1.1.1: fixed ID-card printing (it was broken in every installed build) and the course editor display. v1.1.0: Course Builder alpha and automatic backups of course work. The app updates itself &mdash; releases only go out when there&rsquo;s something worth receiving.</p>
+
+        <h3 style="font-size:1.05rem;margin:1.2rem 0 0.35rem;">Part 2 &mdash; Website (easysafety.ca)</h3>
+
+        <p class="emq-why"><strong>Online seat sales (new).</strong> Class pages now have a &ldquo;Book your seat&rdquo; box showing seats remaining and the price. &ldquo;Book now&rdquo; goes straight to checkout, where the buyer enters each attendee&rsquo;s name and email exactly as they should appear on the certificate. Payment goes through Bambora (the existing credit-card processor). Completed orders add the students to the class roster automatically.</p>
+
+        <p class="emq-why"><strong>Student portal (new).</strong> A hub at <a href="https://easysafety.ca/student-portal/" target="_blank" rel="noopener">easysafety.ca/student-portal/</a>, linked from the site header and mobile menu. My Certificates is live; My Courses, Buy a Course, and Book In-Person Training arrive with the online forklift course.</p>
+
+        <p class="emq-why"><strong>Certificate emails.</strong> Students automatically get a &ldquo;Your Certificate is Ready!&rdquo; email on publish, plus expiry reminders at 30 days, 7 days, and after expiry &mdash; each with a &ldquo;Book Renewal Training&rdquo; button. The scheduling behind these was fixed in October; reminders now fire on time. All shop emails (order confirmations etc.) were restyled with EASY branding and send from &ldquo;EASY Safety Training&rdquo;.</p>
+
+        <p class="emq-why"><strong>Instructor calendars.</strong> Each instructor gets a private calendar feed for their phone or computer showing only their classes, including student names. <strong>Note:</strong> the links were replaced with unguessable private URLs in October &mdash; instructors need to re-subscribe once. Pam has the new links.</p>
+
+        <p class="emq-why"><strong>Management queue (new).</strong> This page &mdash; a private place for Colleen and Dad to work through decisions at their own pace. Answered items clear from the list and Brandon is notified.</p>
+
+        <p class="emq-why"><strong>Search &amp; security.</strong> All 26 course pages have proper search descriptions; utility pages are hidden from Google. Certificate data and PDFs are locked down &mdash; students see only their own, and PDF links go through a secure gatekeeper. Two security issues found in October were fixed (a login redirect pointing at the old developer&rsquo;s test site, and a page saving visitor details to a public file).</p>
+
+        <p class="emq-why"><strong>Content cleanup.</strong> All filler text replaced with real descriptions; eight half-built course pages got clean holding pages; typos fixed (&ldquo;WorkplaceNL&rdquo; everywhere); homepage speed improved; unused plugins removed.</p>
+
+        <p class="emq-why"><strong>Privacy Policy &amp; Terms.</strong> The Privacy Policy is published. The Terms of Service draft is waiting on Colleen&rsquo;s answers in the queue below, plus a lawyer&rsquo;s review.</p>
+
+        <p class="emq-why"><strong>Social media.</strong> The LinkedIn company page is live (<a href="https://www.linkedin.com/company/easy-safety-training/" target="_blank" rel="noopener">linkedin.com/company/easy-safety-training</a>) with 10 launch posts drafted. A Facebook takeover plan is drafted; page admin access is still pending.</p>
+
+        <h3 style="font-size:1.05rem;margin:1.2rem 0 0.35rem;">Part 3 &mdash; What&rsquo;s next</h3>
+
+        <p class="emq-why"><strong>Online forklift course.</strong> Theory online, practical assessment in person &mdash; a qualified evaluator goes to the client&rsquo;s site or another agreed location. Dad&rsquo;s theory plan is the head start. Pricing decisions are in the queue below; still to build are the course player, the My Courses page, quizzes, and certificate issuance.</p>
+
+        <p class="emq-why"><strong>Email.</strong> Finish the Resend setup for notifications@easysafety.ca (needs Colleen&rsquo;s GoDaddy login) &mdash; this removes the &ldquo;via siteground.biz&rdquo; tag from certificate emails.</p>
+
+        <p class="emq-why"><strong>Payments.</strong> Confirm the Bambora merchant account is fully active before real class sales &mdash; a test purchase was declined on Bambora&rsquo;s side in October.</p>
+
+        <p class="emq-why" style="margin-bottom:0"><strong>Older items.</strong> Wave 2 of the historical certificate migration (waits on Pam&rsquo;s control numbers); publish the Terms of Service; remove the robots.txt crawl-delay and fix the www redirect (needs Colleen&rsquo;s hosting access).</p>
+    </div>
+    <?php
+    return ob_get_clean();
+}
+
 /** Shortcode output. */
 function easy_mgmt_queue_shortcode() {
     if (!easy_mgmt_queue_can_view()) {
@@ -531,18 +586,10 @@ function easy_mgmt_queue_shortcode() {
         <p class="emq-progress"><strong><?php echo (int) $done_count; ?> of <?php echo (int) $total; ?></strong> decided.</p>
         <section class="emq-section">
             <div class="emq-section-head"><h3>What&rsquo;s new &mdash; October 2026 upgrades</h3><span class="emq-goes-where">Information only &mdash; no answer required</span></div>
-            <div class="emq-q">
-                <p class="emq-why">Everything below is new since the upgrade work started in mid-October:</p>
-                <ul class="emq-list">
-                    <li><strong>Book seats online.</strong> Class pages now have a &ldquo;Book your seat&rdquo; box showing seats remaining and the price. Customers check out on the site and enter each student&rsquo;s name and email exactly as they should appear on the certificate. Paid orders add the students to the class roster automatically. Walk-ins can still be added in the office app &mdash; the online seat count adjusts to match.</li>
-                    <li><strong>Student portal.</strong> New page at <a href="https://easysafety.ca/student-portal/" target="_blank" rel="noopener">easysafety.ca/student-portal/</a> &mdash; My Certificates is live now; My Courses, Buy a Course, and Book In-Person Training are coming with the online forklift course.</li>
-                    <li><strong>Class rosters.</strong> Every class now has a student list shared between the website and the office app, with payment tracking.</li>
-                    <li><strong>Certificate reminders fixed.</strong> Expiry reminder emails now send on schedule. They were previously only going out when someone happened to visit the site.</li>
-                    <li><strong>Instructor calendars.</strong> Calendar feed links were replaced with private links. Instructors need to re-subscribe once &mdash; Pam has the new links.</li>
-                    <li><strong>Shop emails restyled.</strong> Order confirmations and related emails now use EASY branding and come from &ldquo;EASY Safety Training&rdquo;.</li>
-                    <li><strong>This page.</strong> The Management Queue itself is new &mdash; a private place for exactly these kinds of decisions.</li>
-                </ul>
-            </div>
+            <?php
+            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped — built with escaping in easy_mgmt_queue_whats_new_html
+            echo easy_mgmt_queue_whats_new_html();
+            ?>
         </section>
         <?php if ($just_saved): ?>
             <div class="emq-notice">Decisions saved. Brandon has been notified.</div>

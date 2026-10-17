@@ -722,6 +722,39 @@
     </div>
   </div>
 
+  <div id="whatsNewModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="whatsNewTitle">
+    <div class="modal-box modal-wide" style="max-height:calc(100vh - 60px);overflow-y:auto;">
+      <h3 id="whatsNewTitle">What&rsquo;s New</h3>
+      <p class="hint">EASY Safety Training &mdash; digital projects summary. Everything built and fixed since late September 2026. Updated October 17, 2026.</p>
+      <div class="whats-new-body">
+        <h4>Part 1 &mdash; EASY Operations (Desktop App)</h4>
+        <p><strong>Certificates tab.</strong> The heart of the app &mdash; creating and managing student certificates. Fill out a simple form and the app generates a professional PDF automatically. Certificates post to the website as drafts by default &mdash; nothing goes live until the office reviews it. Look up any certificate ever issued, reprint it, or fix a typo before publishing. The app also watches for certificates approaching expiry and flags them.</p>
+        <p><strong>Approvals tab.</strong> A review queue for the office. Instructors can create drafts but cannot publish &mdash; only the office pushes a certificate live. Pam can submit on behalf of instructors when needed.</p>
+        <p><strong>Schedule tab.</strong> A visual month calendar for planning classes, built for Pam. Drag any of the 34 courses onto a date to create a class; drag to reschedule. <strong>New:</strong> open any class and manage its student list right in the app &mdash; add walk-ins and phone bookings with name, employer, phone, email, payment status, and notes. If the class sells seats online, the website stock adjusts automatically.</p>
+        <p><strong>Online Learning tab.</strong> Still a visual demo for now &mdash; the first real online course will be <strong>Forklift</strong> (online theory plus a bookable in-person practical).</p>
+        <p><strong>Course Builder.</strong> Dad&rsquo;s tool for building online course modules himself (chapters, quizzes, pass rules). In alpha testing, visible only to Brandon and Dad.</p>
+        <p><strong>Recent releases.</strong> v1.2.1: this What&rsquo;s New button &mdash; it shows what changed after each update. v1.2.0: the student roster manager. v1.1.1: fixed ID-card printing (broken in every installed build) and the course editor display. v1.1.0: Course Builder alpha and automatic backups of course work.</p>
+        <h4>Part 2 &mdash; Website (easysafety.ca)</h4>
+        <p><strong>Online seat sales (new).</strong> Class pages now have a &ldquo;Book your seat&rdquo; box showing seats remaining and the price. &ldquo;Book now&rdquo; goes straight to checkout, where the buyer enters each attendee&rsquo;s name and email exactly as they should appear on the certificate. Payment goes through Bambora. Completed orders add the students to the class roster automatically.</p>
+        <p><strong>Student portal (new).</strong> A hub at easysafety.ca/student-portal/ &mdash; My Certificates is live; My Courses, Buy a Course, and Book In-Person Training arrive with the online forklift course.</p>
+        <p><strong>Certificate emails.</strong> Students automatically get a &ldquo;Your Certificate is Ready!&rdquo; email on publish, plus expiry reminders at 30 days, 7 days, and after expiry. The scheduling was fixed in October &mdash; reminders now fire on time. Shop emails were restyled with EASY branding.</p>
+        <p><strong>Instructor calendars.</strong> Each instructor gets a private calendar feed showing only their classes, including student names. <strong>Note:</strong> the links were replaced with unguessable private URLs in October &mdash; instructors need to re-subscribe once. Pam has the new links.</p>
+        <p><strong>Management queue (new).</strong> A private page on the website where Colleen and Dad work through decisions at their own pace &mdash; Terms of Service details, online course pricing, shop review. Answered items clear from the list and Brandon is notified.</p>
+        <p><strong>Search &amp; security.</strong> All 26 course pages have proper search descriptions; utility pages hidden from Google. Certificate data and PDFs are locked down. Two security issues found in October were fixed.</p>
+        <p><strong>Privacy Policy &amp; Terms.</strong> The Privacy Policy is published. The Terms of Service draft waits on Colleen&rsquo;s answers in the management queue, plus a lawyer&rsquo;s review.</p>
+        <p><strong>Social media.</strong> The LinkedIn company page is live with 10 launch posts drafted. A Facebook takeover plan is drafted; page admin access is still pending.</p>
+        <h4>Part 3 &mdash; What&rsquo;s next</h4>
+        <p><strong>Online forklift course.</strong> Theory online, practical assessment in person &mdash; a qualified evaluator goes to the client&rsquo;s site or another agreed location. Pricing decisions are in the management queue; still to build are the course player, the My Courses page, quizzes, and certificate issuance.</p>
+        <p><strong>Email.</strong> Finish the Resend setup for notifications@easysafety.ca (needs Colleen&rsquo;s GoDaddy login).</p>
+        <p><strong>Payments.</strong> Confirm the Bambora merchant account is fully active before real class sales.</p>
+        <p><strong>Older items.</strong> Wave 2 of the historical certificate migration (waits on Pam); publish the Terms of Service; remove the robots.txt crawl-delay and fix the www redirect (needs Colleen).</p>
+      </div>
+      <div class="modal-actions" style="margin-top:16px;">
+        <button type="button" id="whatsNewClose" class="btn btn-primary">Close</button>
+      </div>
+    </div>
+  </div>
+
   <script src="../shared.js"></script>
   <script src="renderer.js"></script>
   <script src="schedule.js"></script>
