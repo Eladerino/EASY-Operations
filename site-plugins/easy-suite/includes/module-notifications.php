@@ -538,6 +538,7 @@ class Easy_Safety_Cert_Notifications {
         $rows   = $result['rows'];
 
         echo '<div class="wrap"><h1>Certificate Expiry Check</h1>';
+        easy_suite_admin_tabs('easy-cert-check');
 
         if ($did_send) {
             echo '<div class="notice notice-success"><p>'
@@ -1235,6 +1236,7 @@ class Easy_Safety_Cert_Notifications {
         $groups = $result['groups'];
 
         echo '<div class="wrap"><h1>Employer Certificate Digest</h1>';
+        easy_suite_admin_tabs('easy-employer-digest');
 
         if ($did_send) {
             echo '<div class="notice notice-success"><p>'

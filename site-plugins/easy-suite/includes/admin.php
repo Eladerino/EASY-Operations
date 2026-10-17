@@ -233,6 +233,7 @@ function easy_suite_overview_page() {
     $states = easy_suite_module_states();
 
     echo '<div class="wrap"><h1>EASY Suite <span style="font-weight:normal;color:#646970;">v' . esc_html(EASY_SUITE_VERSION) . '</span></h1>';
+    easy_suite_admin_tabs('easy-suite');
     if (!empty($_GET['easy_switched'])) {
         echo '<div class="notice notice-success is-dismissible"><p>The old plugins and snippets are switched off. EASY Suite is now running everything.</p></div>';
     }
@@ -430,6 +431,7 @@ function easy_suite_settings_page() {
         : array_filter(preg_split('/[\s,]+/', (string) get_option('easy_product_form_allowed_users', '')));
 
     echo '<div class="wrap" style="max-width:820px;"><h1>EASY Suite settings</h1>';
+    easy_suite_admin_tabs('easy-suite-settings');
     echo '<form method="post" action="">';
     wp_nonce_field('easy_suite_save_settings', 'easy_suite_settings_nonce');
 
@@ -517,6 +519,7 @@ function easy_suite_feeds_page() {
     }
 
     echo '<div class="wrap"><h1>Calendar feeds</h1>';
+    easy_suite_admin_tabs('easy-suite-feeds');
 
     if (!function_exists('easy_ics_feed_url')) {
         echo '<div class="notice notice-warning"><p>The instructor calendar feed module is switched off. Switch it on under EASY Suite &gt; Overview to manage feed links.</p></div></div>';
@@ -631,3 +634,26 @@ add_filter('plugin_action_links_' . plugin_basename(EASY_SUITE_FILE), function (
     array_unshift($links, $settings);
     return $links;
 });
+
+/* ------------------------------------------------------------------
+ * Admin tabs: jump between Suite pages without the sidebar
+ * ------------------------------------------------------------------ */
+
+function easy_suite_admin_tabs($current) {
+    $tabs = array(
+        'easy-suite'            => 'Overview',
+        'easy-suite-settings'   => 'Settings',
+        'easy-suite-queue'      => 'Management queue',
+        'easy-suite-feeds'      => 'Calendar feeds',
+        'easy-online-courses'   => 'Online courses',
+        'easy-cert-check'       => 'Cert Expiry Check',
+        'easy-employer-digest'  => 'Employer Digest',
+    );
+    echo '<h2 class="nav-tab-wrapper" style="margin:12px 0 20px;">';
+    foreach ($tabs as $slug => $label) {
+        $class = ($slug === $current) ? 'nav-tab nav-tab-active' : 'nav-tab';
+        echo '<a href="' . esc_url(admin_url('admin.php?page=' . $slug)) . '" class="' . $class . '">'
+            . esc_html($label) . '</a>';
+    }
+    echo '</h2>';
+}
