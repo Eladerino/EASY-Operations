@@ -61,6 +61,12 @@ function easy_suite_module_registry() {
             'default'     => true,
             'locked'      => false,
         ],
+        'seat-sales' => [
+            'label'       => 'Seat sales (WooCommerce)',
+            'description' => 'Sells class seats as WooCommerce products: event page shows seats remaining with add-to-cart, checkout collects per-seat certificate details into the class roster, and manual enrollments adjust product stock.',
+            'default'     => true,
+            'locked'      => false,
+        ],
         'shop' => [
             'label'       => 'Shop: instructor-only products & "List a Product"',
             'description' => 'Hides the Instructor Materials category from non-instructors and provides the [easy_product_form] listing form.',
