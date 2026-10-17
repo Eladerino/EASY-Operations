@@ -254,6 +254,46 @@ function easy_mgmt_queue_questions() {
                 ['***REMOVED***', ''],
             ],
         ],
+        // ---- Payments ----
+        [
+            ***REMOVED***
+            'section' => '***REMOVED***',
+            'label'   => '***REMOVED***',
+            ***REMOVED***
+            'type'    => 'radio_other',
+            'options' => [
+                ['***REMOVED***', '***REMOVED***'],
+                ['***REMOVED***', '***REMOVED***'],
+                ['***REMOVED***', '***REMOVED***'],
+            ],
+            'other_placeholder' => '***REMOVED***',
+        ],
+        [
+            ***REMOVED***
+            'section' => '***REMOVED***',
+            'label'   => '***REMOVED***',
+            'why'     => '***REMOVED***',
+            'type'    => 'radio_other',
+            'options' => [
+                ['***REMOVED***', ''],
+                ***REMOVED***
+                ***REMOVED***
+                ***REMOVED***
+            ],
+            'other_placeholder' => '***REMOVED***',
+        ],
+        // ---- Shop review ----
+        [
+            'key'     => '***REMOVED***',
+            'section' => '***REMOVED***',
+            'label'   => '***REMOVED***',
+            'why'     => '***REMOVED***',
+            'type'    => 'radio_other',
+            'options' => [
+                ['***REMOVED***', '***REMOVED***'],
+            ],
+            'other_placeholder' => '***REMOVED***',
+        ],
     ];
 
     // Append admin-added custom questions, numbered after the built-ins.
