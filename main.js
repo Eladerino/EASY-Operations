@@ -1408,6 +1408,22 @@ ipcMain.handle('schedule-get-roster', async (_event, id) => {
   }
 });
 
+ipcMain.handle('schedule-get-sale-state', async (_event, id) => {
+  const config = getConfig();
+  if (!config.ok) return { ok: false, error: config.error };
+  const eventId = validRosterEventId(id);
+  if (!eventId) return { ok: false, error: 'No class was selected.' };
+  try {
+    const r = await easyRequest(config, 'GET', `/sale-state/${eventId}`, { timeoutMs: 30000 });
+    if (r.status !== 200) {
+      return { ok: false, error: friendlyWriteError(r, 'load the sale status') };
+    }
+    return { ok: true, state: r.json || {} };
+  } catch (err) {
+    return { ok: false, error: `Could not load the sale status: ${err.message}` };
+  }
+});
+
 ipcMain.handle('schedule-save-roster', async (_event, { eventId, roster } = {}) => {
   const config = getConfig();
   if (!config.ok) return { ok: false, error: config.error };

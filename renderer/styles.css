@@ -123,6 +123,8 @@ main { max-width: 760px; margin: 0 auto; padding: 22px 20px 0; }
 
 .optional { color: var(--muted); font-weight: 400; font-size: 12px; }
 .hint { color: var(--muted); font-weight: 400; font-size: 12px; }
+.field-hint { color: var(--muted); font-size: 12.5px; margin: 6px 0 0; }
+.field-hint strong { color: inherit; }
 .required-hint { color: var(--muted); font-weight: 400; font-size: 12px; }
 
 input[type="text"], input[type="email"], input[type="tel"], input[type="date"], select {
@@ -360,7 +362,7 @@ input.error, select.error {
   animation: toast-in 0.2s ease-out;
 }
 .modal-box h3 { margin: 0 0 8px; font-size: 16px; }
-.modal-box p { margin: 0 0 20px; color: var(--muted); font-size: 13.5px; }
+.modal-box p { margin: 0 0 20px; color: var(--muted); font-size: 13.5px; white-space: pre-line; }
 .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
 .modal-actions .btn { min-width: 0; padding: 9px 18px; }
 

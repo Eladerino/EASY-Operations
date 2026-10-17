@@ -173,6 +173,7 @@
   let viewMonth = 0; // 0-11
   let readOnly = false; // true when the account cannot publish events
   let monthEvents = []; // normalized events for the visible range
+  let monthToken = 0; // guards refreshMonth against stale concurrent fetches
   let venueCache = []; // { id, name }
   let organizerCache = []; // { id, name }
   let categoryCache = []; // raw TEC categories: { id, name, slug, parent }
@@ -180,6 +181,7 @@
   let catByName = {}; // decoded lowercase name -> { id, name, slug, parent }
   let modalCategoryIds = []; // TEC category IDs for the class being edited
   let editingId = null;
+  let editingEvent = null; // normalized event being edited (null for new)
 
   // Reverse maps: course value -> app category key / course label.
   const courseValueToCategory = {};
@@ -230,9 +232,6 @@
     let names = [];
     if (courseValue) {
       const { parent, child } = resolveCourseCategories(courseValue);
-      console.log(`[schedule] course "${courseValue}" -> categories:`,
-        `parent=${parent ? `${decodeEntities(parent.name)} [${parent.slug}]` : 'none'}`,
-        `child=${child ? `${decodeEntities(child.name)} [${child.slug}]` : 'none'}`);
       if (parent) names.push(decodeEntities(parent.name));
       if (child) names.push(decodeEntities(child.name));
       if (!names.length) {
@@ -393,7 +392,7 @@
       venueName: venueObj ? decodeEntities(venueObj.venue || venueObj.name) : '',
       organizerId: orgObj ? orgObj.id : null,
       organizerName: orgObj ? decodeEntities(orgObj.organizer || orgObj.name) : '',
-      cost: raw.cost || '',
+      cost: (raw.cost === null || raw.cost === undefined) ? '' : raw.cost,
       seats: (raw.easy_seats === null || raw.easy_seats === undefined) ? '' : raw.easy_seats,
       description: raw.description || '',
       categoryIds: Array.isArray(raw.categories)
@@ -530,20 +529,26 @@
 
   async function refreshMonth() {
     if (!schedInitialized) return;
+    // Guard against rapid Prev/Next: a slow earlier fetch resolving last
+    // must not paint the wrong month's classes under the new month's title.
+    const token = ++monthToken;
     const { start, end } = visibleRange();
     $('schedLoading').classList.remove('hidden');
     $('schedError').classList.add('hidden');
     try {
       const res = await api().listEvents(start, end);
+      if (token !== monthToken) return;
       if (!res.ok) throw new Error(res.error || 'Could not load classes.');
       monthEvents = res.events.map(normalizeEvent);
       $('schedCount').textContent = `${monthEvents.length} class${monthEvents.length === 1 ? '' : 'es'}`;
     } catch (err) {
+      if (token !== monthToken) return;
       $('schedError').textContent = err.message;
       $('schedError').classList.remove('hidden');
       monthEvents = [];
       $('schedCount').textContent = '';
     } finally {
+      if (token !== monthToken) return;
       $('schedLoading').classList.add('hidden');
       renderGrid();
     }
@@ -680,10 +685,6 @@
             if (c && c.slug) catBySlug[String(c.slug).toLowerCase()] = c;
             if (c && c.name) catByName[decodeEntities(c.name).toLowerCase()] = c;
           }
-          // Diagnostic: what the site actually calls its categories, so a
-          // missed child match can be traced to the real name/slug.
-          console.log('[schedule] categories loaded:',
-            categoryCache.map((c) => `${decodeEntities(c.name)} [${c.slug}]`).join(', '));
         }
       } catch (err) {
         console.error('Could not load categories:', err);
@@ -693,6 +694,9 @@
 
   function resetModal() {
     editingId = null;
+    editingEvent = null;
+    $('evSaleState').classList.add('hidden');
+    $('evSaleState').textContent = '';
     modalCategoryIds = [];
     $('evCatLine').classList.add('hidden');
     $('eventModalTitle').textContent = 'Schedule class';
@@ -725,6 +729,7 @@
     if (event) {
       // Edit mode: keep the event's existing categories unless the course changes.
       editingId = event.id;
+      editingEvent = event;
       modalCategoryIds = (event.categoryIds || []).slice();
       $('eventModalTitle').textContent = 'Edit class';
       $('evTitle').value = event.title;
@@ -736,7 +741,7 @@
       $('evAllDay').dispatchEvent(new Event('change'));
       $('evVenue').value = event.venueId ? String(event.venueId) : '';
       $('evOrganizer').value = event.organizerId ? String(event.organizerId) : '';
-      $('evCost').value = event.cost || '';
+      $('evCost').value = (event.cost === null || event.cost === undefined) ? '' : event.cost;
       $('evSeats').value = (event.seats === '' || event.seats === null || event.seats === undefined) ? '' : event.seats;
       $('evStatus').value = event.status === 'draft' ? 'draft' : 'publish';
       $('evDesc').value = event.description || '';
@@ -745,6 +750,9 @@
       // the Students button only appears when editing (never for a new
       // class) and never in read-only mode.
       if (!readOnly) $('evStudents').classList.remove('hidden');
+      // Show whether this class actually sells seats online, so Cost/Seats
+      // are never a silent no-op. New classes have nothing linked yet.
+      loadSaleState(event.id);
       // Pre-select the course when the event matches one, so the picker
       // isn't blank on drafts created from a course. Categories are
       // recomputed from the matched course — the "Filed under" line shows
@@ -825,7 +833,10 @@
   // roster module (roster.js) owns the modal; schedule.js just hands it
   // the current class id, title, and date.
   $('evStudents').addEventListener('click', () => {
-    if (!editingId || !window.EasyRoster) return;
+    if (!editingId || !window.EasyRoster) {
+      toast('The student list could not be opened. Try reloading the app.', 'error');
+      return;
+    }
     window.EasyRoster.open({
       id: editingId,
       title: $('evTitle').value.trim() || '(untitled)',
@@ -837,7 +848,7 @@
     if (!editingId) return;
     const yes = await schedConfirm(
       'Delete this class?',
-      'The class is moved to the trash on the website (recoverable in wp-admin). This cannot be undone from here.',
+      'The class is moved to the trash on the website (recoverable in wp-admin). This cannot be undone from here. Classes with sold seats cannot be deleted.',
       'Delete'
     );
     if (!yes) return;
@@ -932,7 +943,14 @@
       const cost = $('evCost').value.trim();
       if (cost) payload.cost = cost;
       const seatsRaw = $('evSeats').value.trim();
-      if (seatsRaw !== '') payload.easy_seats = Math.max(0, parseInt(seatsRaw, 10) || 0);
+      if (seatsRaw !== '') {
+        payload.easy_seats = Math.max(0, parseInt(seatsRaw, 10) || 0);
+      } else if (editingId && editingEvent && editingEvent.seats !== '' && editingEvent.seats != null) {
+        // The class had a capacity and it was cleared: unset it on the site
+        // (empty string = delete). A field left empty from the start means
+        // "don't touch", so a never-set capacity is never wiped by accident.
+        payload.easy_seats = '';
+      }
       if (modalCategoryIds.length) payload.categories = modalCategoryIds.slice();
 
       let res;
@@ -960,6 +978,39 @@
       saveBtn.textContent = originalLabel;
     }
   });
+
+  /* ---------------- online sale state ---------------- */
+
+  // One line under Cost/Seats: is this class actually sellable online, and
+  // at what price? Silent when the site can't answer (offline, old plugin).
+  async function loadSaleState(id) {
+    const el = $('evSaleState');
+    el.classList.add('hidden');
+    el.textContent = '';
+    if (!id || !api().getSaleState) return;
+    try {
+      const res = await api().getSaleState(id);
+      if (!res.ok || !res.state) return;
+      // Don't paint a stale response over a newer modal.
+      if (id !== editingId) return;
+      const s = res.state;
+      let text;
+      if (!s.linked) {
+        text = 'Not selling online. Create the seat product on the website to sell seats for this class.';
+      } else if (s.product_status && s.product_status !== 'publish') {
+        text = `Seat sales paused (product is ${s.product_status}).`;
+      } else {
+        const price = s.price !== null && s.price !== undefined && s.price !== '' ? `$${s.price}` : 'price not set';
+        const stock = s.stock !== null && s.stock !== undefined ? `${s.stock} seat${s.stock === 1 ? '' : 's'} left` : 'stock not tracked';
+        const sold = s.sold ? ` · ${s.sold} sold` : '';
+        text = `Sells online: ${price} · ${stock}${sold}.`;
+      }
+      el.textContent = text;
+      el.classList.remove('hidden');
+    } catch (err) {
+      // Leave it hidden; the fields still work.
+    }
+  }
 
   /* ---------------- init ---------------- */
 
