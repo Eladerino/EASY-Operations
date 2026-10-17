@@ -51,7 +51,13 @@ function easy_suite_module_registry() {
         ],
         'calendar' => [
             'label'       => 'Instructor calendar feed',
-            'description' => 'Public read-only ICS feed per instructor at /instructor-calendar/<name>.ics.',
+            'description' => 'Per-instructor ICS feed at a secret tokened URL (/instructor-calendar/<token>.ics). Feed links are listed under EASY Suite > Calendar feeds; regenerating a token kills the old URL. Roster student names appear in feed events.',
+            'default'     => true,
+            'locked'      => false,
+        ],
+        'roster' => [
+            'label'       => 'Class rosters (manual enrollment)',
+            'description' => 'Per-class student rosters stored on the event: the app\'s Add Students editor reads/writes them over REST, and the instructor calendar feed lists student names.',
             'default'     => true,
             'locked'      => false,
         ],

@@ -12,6 +12,7 @@ defined('ABSPATH') || exit;
 add_action('admin_menu', function () {
     add_menu_page('EASY Suite', 'EASY Suite', 'manage_options', 'easy-suite', 'easy_suite_overview_page', 'dashicons-shield-alt', 58);
     add_submenu_page('easy-suite', 'EASY Suite overview', 'Overview', 'manage_options', 'easy-suite', 'easy_suite_overview_page');
+    add_submenu_page('easy-suite', 'EASY Suite calendar feeds', 'Calendar feeds', 'manage_options', 'easy-suite-feeds', 'easy_suite_feeds_page');
     add_submenu_page('easy-suite', 'EASY Suite settings', 'Settings', 'manage_options', 'easy-suite-settings', 'easy_suite_settings_page');
 });
 
@@ -474,4 +475,75 @@ function easy_suite_settings_page() {
 
     submit_button('Save settings');
     echo '</form></div>';
+}
+
+/* --- Calendar feeds --------------------------------------------------------- */
+
+add_action('admin_post_easy_suite_regenerate_ics', function () {
+    if (!current_user_can('manage_options')) {
+        wp_die(esc_html__('You do not have permission to do this.', 'easy-suite'));
+    }
+    check_admin_referer('easy_suite_regenerate_ics');
+    $oid = isset($_POST['organizer_id']) ? (int) $_POST['organizer_id'] : 0;
+    if ($oid > 0 && get_post_type($oid) === 'tribe_organizer' && function_exists('easy_ics_regenerate_token')) {
+        easy_ics_regenerate_token($oid);
+    }
+    wp_safe_redirect(add_query_arg(['regenerated' => $oid], admin_url('admin.php?page=easy-suite-feeds')));
+    exit;
+});
+
+function easy_suite_feeds_page() {
+    if (!current_user_can('manage_options')) {
+        wp_die(esc_html__('You do not have permission to view this page.', 'easy-suite'));
+    }
+
+    echo '<div class="wrap"><h1>Calendar feeds</h1>';
+
+    if (!function_exists('easy_ics_feed_url')) {
+        echo '<div class="notice notice-warning"><p>The instructor calendar feed module is switched off. Switch it on under EASY Suite &gt; Overview to manage feed links.</p></div></div>';
+        return;
+    }
+
+    if (!empty($_GET['regenerated'])) {
+        $name = get_the_title((int) $_GET['regenerated']);
+        echo '<div class="notice notice-success is-dismissible"><p>New feed link generated'
+            . ($name ? ' for ' . esc_html($name) : '')
+            . '. The old link stops working immediately — send the new one to the instructor.</p></div>';
+    }
+
+    echo '<p>Each instructor subscribes to their own secret link in Outlook or their phone\'s calendar app. '
+        . 'The link is unguessable; only someone with the exact link can open the feed. '
+        . 'Regenerating a link kills the old one instantly (use it if a link leaks or an instructor leaves).</p>';
+    echo '<p><strong>One-time job:</strong> the old name-based links (e.g. /instructor-calendar/scott-glynn.ics) stopped working with EASY Suite 2.2.5. '
+        . 'Send each instructor their new link below and have them replace the old subscription once.</p>';
+
+    $organizers = get_posts([
+        'post_type'      => 'tribe_organizer',
+        'post_status'    => 'publish',
+        'numberposts'    => 200,
+        'orderby'        => 'title',
+        'order'          => 'ASC',
+        'no_found_rows'  => true,
+    ]);
+
+    if (empty($organizers)) {
+        echo '<p>No instructors found. Add them under Events &gt; Organizers.</p></div>';
+        return;
+    }
+
+    echo '<table class="widefat striped" style="max-width:1100px;"><thead><tr>'
+        . '<th style="width:22%;">Instructor</th><th>Feed link</th><th style="width:14%;"></th>'
+        . '</tr></thead><tbody>';
+    foreach ($organizers as $o) {
+        $url = easy_ics_feed_url($o->ID);
+        echo '<tr><td><strong>' . esc_html(get_the_title($o)) . '</strong></td>';
+        echo '<td><input type="text" readonly value="' . esc_attr($url) . '" class="large-text code" onclick="this.select();" /></td>';
+        echo '<td><form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" style="margin:0;">'
+            . '<input type="hidden" name="action" value="easy_suite_regenerate_ics">'
+            . '<input type="hidden" name="organizer_id" value="' . esc_attr($o->ID) . '">';
+        wp_nonce_field('easy_suite_regenerate_ics');
+        echo '<button type="submit" class="button" onclick="return confirm(\'Generate a new feed link? The old link will stop working immediately.\');">Regenerate</button>'
+            . '</form></td></tr>';
+    }
+    echo '</tbody></table></div>';
 }
