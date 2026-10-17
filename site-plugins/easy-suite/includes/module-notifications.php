@@ -238,9 +238,14 @@ class Easy_Safety_Cert_Notifications {
         }
         add_action(self::EMPLOYER_CRON_HOOK, [__CLASS__, 'employer_cron_handler']);
 
-        // Admin manual check page.
-        add_action('admin_menu', [__CLASS__, 'add_manual_check_menu']);
-        add_action('admin_menu', [__CLASS__, 'add_employer_digest_menu']);
+        // Admin manual check page. Priority 20: the EASY Suite parent menu is
+        // registered on admin_menu at priority 10 (includes/admin.php), and
+        // submenu pages must be added after it. Otherwise WordPress computes
+        // a different page hookname at registration time than at access time
+        // and denies the page with "Sorry, you are not allowed to access
+        // this page." (Same pattern as the Online courses page.)
+        add_action('admin_menu', [__CLASS__, 'add_manual_check_menu'], 20);
+        add_action('admin_menu', [__CLASS__, 'add_employer_digest_menu'], 20);
 
         // Visible safety signal while import-suppression mode is engaged.
         if (self::notifications_suppressed()) {
