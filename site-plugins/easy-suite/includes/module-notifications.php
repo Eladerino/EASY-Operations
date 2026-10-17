@@ -305,7 +305,15 @@ class Easy_Safety_Cert_Notifications {
         $target_ts = $target->getTimestamp();
 
         $next = wp_next_scheduled(self::CRON_HOOK);
-        if (!$next || abs($next - $target_ts) > 600) {
+        if (!$next) {
+            wp_schedule_event($target_ts, 'daily', self::CRON_HOOK);
+        } elseif ($next > time() && abs($next - $target_ts) > 600) {
+            // Reschedule only when the event is in the future but at the
+            // wrong time (e.g. the send time changed in Settings). Never
+            // clear an overdue event: this runs during plugin load, before
+            // wp-cron fires, so clearing here would delete the overdue run
+            // before wp-cron ever sees it (v2.2.7 fix — the expiry check
+            // could never run).
             wp_clear_scheduled_hook(self::CRON_HOOK);
             wp_schedule_event($target_ts, 'daily', self::CRON_HOOK);
         }
