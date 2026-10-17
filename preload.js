@@ -8,6 +8,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('easyCert', {
   submit: (payload) => ipcRenderer.invoke('submit-certificate', payload),
   getAppInfo: () => ipcRenderer.invoke('get-app-info'),
+  showWhatsNew: () => ipcRenderer.invoke('show-whats-new'),
   printPdf: () => ipcRenderer.invoke('print-pdf-dialog'),
   savePdfCopy: () => ipcRenderer.invoke('save-pdf-copy'),
   openPdfExternal: () => ipcRenderer.invoke('open-pdf-external'),
