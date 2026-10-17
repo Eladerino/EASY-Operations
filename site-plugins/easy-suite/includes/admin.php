@@ -624,3 +624,10 @@ add_filter('plugin_row_meta', function ($links, $file) {
         . 'aria-label="More information about EASY Suite">View details</a>';
     return $links;
 }, 10, 2);
+
+// Settings shortcut next to Deactivate on the plugins page.
+add_filter('plugin_action_links_' . plugin_basename(EASY_SUITE_FILE), function ($links) {
+    $settings = '<a href="' . esc_url(admin_url('admin.php?page=easy-suite-settings')) . '">Settings</a>';
+    array_unshift($links, $settings);
+    return $links;
+});
