@@ -381,43 +381,84 @@ function easy_mgmt_queue_handle_submit() {
     }
 
     $all = easy_mgmt_queue_get_responses();
-    $all['answers'] = $clean;
+    $prev_answers = isset($all['answers']) ? $all['answers'] : [];
+    $prev_decided = isset($all['decided']) ? (array) $all['decided'] : [];
+
+    // Merge new answers over previous; newly answered questions become decided
+    // and clear from the queue.
+    $merged = array_merge($prev_answers, $clean);
+    $newly_decided = [];
+    foreach ($clean as $key => $ans) {
+        if (!in_array($key, $prev_decided, true)) {
+            $prev_decided[] = $key;
+            $newly_decided[] = $key;
+        }
+    }
+
+    $all['answers'] = $merged;
+    $all['decided'] = array_values(array_unique($prev_decided));
     $all['submitted_by'] = $user->user_login;
     $all['submitted_at'] = current_time('mysql');
     update_option('easy_mgmt_queue_responses', $all, false);
 
-    // Notify Brandon.
-    $lines = ['***REMOVED***', '', 'Submitted by: ' . $user->user_login . ' (' . $user->display_name . ')', 'Submitted at: ' . $all['submitted_at'] . ' (site time)', ''];
-    $answered = 0;
-    foreach (easy_mgmt_queue_questions() as $q) {
-        $key = $q['key'];
-        $a = isset($clean[$key]) ? $clean[$key] : null;
-        $label = (!empty($q['num']) ? $q['num'] . '. ' : '') . $q['label'];
-        if ($a === null) {
-            $lines[] = $label . ': (skipped)';
-            continue;
+    // Notify Brandon about the newly decided questions only.
+    if (!empty($newly_decided)) {
+        $by_key = [];
+        foreach (easy_mgmt_queue_questions() as $q) {
+            $by_key[$q['key']] = $q;
         }
-        $answered++;
-        if (isset($a['text'])) {
-            $lines[] = $label . ': ' . $a['text'];
-        } elseif ($a['choice'] === '__other') {
-            $lines[] = $label . ': ' . (isset($a['other']) ? $a['other'] : '(write-in selected; no text entered)');
-        } else {
-            $lines[] = $label . ': ' . $a['choice'];
+        $lines = ['EASY Management Queue — new decisions', '', 'Decided by: ' . $user->user_login . ' (' . $user->display_name . ')', 'Decided at: ' . $all['submitted_at'] . ' (site time)', ''];
+        foreach ($newly_decided as $key) {
+            $q = isset($by_key[$key]) ? $by_key[$key] : null;
+            $label = $q ? ((!empty($q['num']) ? $q['num'] . '. ' : '') . $q['label']) : $key;
+            $a = $merged[$key];
+            if (isset($a['text'])) {
+                $lines[] = $label . ': ' . $a['text'];
+            } elseif ($a['choice'] === '__other') {
+                $lines[] = $label . ': ' . (isset($a['other']) ? $a['other'] : '(write-in selected; no text entered)');
+            } else {
+                $lines[] = $label . ': ' . $a['choice'];
+            }
         }
+        $remaining = count(easy_mgmt_queue_questions()) - count($all['decided']);
+        $lines[] = '';
+        $lines[] = $remaining . ' question(s) still outstanding.';
+        $brandon = '***REMOVED***';
+        wp_mail($brandon, 'Management queue: ' . count($newly_decided) . ' new decision(s) by ' . $user->display_name, implode("\n", $lines));
     }
-    $lines[] = '';
-    $lines[] = $answered . ' of ' . count(easy_mgmt_queue_questions()) . ' answered.';
-    $to = get_option('admin_email');
-    // Brandon's address for queue notifications.
-    $brandon = '***REMOVED***';
-    wp_mail($brandon, '***REMOVED***', implode("\n", $lines));
 
     // Redirect to avoid resubmission.
     wp_safe_redirect(add_query_arg('emq_saved', '1', get_permalink()));
     exit;
 }
 add_action('template_redirect', 'easy_mgmt_queue_handle_submit');
+
+/** Questions not yet decided, respecting dependency visibility. */
+function easy_mgmt_queue_open_questions() {
+    $all = easy_mgmt_queue_get_responses();
+    $decided = isset($all['decided']) ? (array) $all['decided'] : [];
+    $answers = isset($all['answers']) ? $all['answers'] : [];
+    $out = [];
+    foreach (easy_mgmt_queue_questions() as $q) {
+        if (in_array($q['key'], $decided, true)) {
+            continue;
+        }
+        // Dependent questions appear only when the parent is decided with the matching value.
+        if (!empty($q['depends_on'])) {
+            [$pkey, $pval] = $q['depends_on'];
+            if (!in_array($pkey, $decided, true)) {
+                continue;
+            }
+            $pans = isset($answers[$pkey]) ? $answers[$pkey] : null;
+            $pchoice = (is_array($pans) && isset($pans['choice'])) ? $pans['choice'] : '';
+            if ($pchoice !== $pval) {
+                continue;
+            }
+        }
+        $out[] = $q;
+    }
+    return $out;
+}
 
 /** Shortcode output. */
 function easy_mgmt_queue_shortcode() {
@@ -430,23 +471,29 @@ function easy_mgmt_queue_shortcode() {
 
     $saved_all = easy_mgmt_queue_get_responses();
     $saved = isset($saved_all['answers']) ? $saved_all['answers'] : [];
+    $decided = isset($saved_all['decided']) ? (array) $saved_all['decided'] : [];
     $just_saved = isset($_GET['emq_saved']);
+    $open = easy_mgmt_queue_open_questions();
+    $total = count(easy_mgmt_queue_questions());
+    $done_count = count($decided);
 
     ob_start();
     ?>
     <div class="emq-wrap">
         <h2>Management queue</h2>
         ***REMOVED***
+        <p class="emq-progress"><strong><?php echo (int) $done_count; ?> of <?php echo (int) $total; ?></strong> decided.</p>
         <?php if ($just_saved): ?>
-            <div class="emq-notice">Responses saved. Brandon has been notified.</div>
-        <?php elseif (!empty($saved_all['submitted_at'])): ?>
-            <div class="emq-notice emq-notice-info">Last submitted <?php echo esc_html($saved_all['submitted_at']); ?> by <?php echo esc_html($saved_all['submitted_by']); ?>. Answers below can be changed and re-submitted.</div>
+            <div class="emq-notice">Decisions saved. Brandon has been notified.</div>
         <?php endif; ?>
+        <?php if (empty($open)): ?>
+            <div class="emq-notice">All decisions are in. Thank you.</div>
+        <?php else: ?>
         <form method="post" action="">
             <?php wp_nonce_field('emq_submit', 'emq_nonce'); ?>
             <?php
             $last_section = null;
-            foreach (easy_mgmt_queue_questions() as $q) {
+            foreach ($open as $q) {
                 if ($q['section'] !== $last_section) {
                     if ($last_section !== null) {
                         echo '</section>';
@@ -454,7 +501,7 @@ function easy_mgmt_queue_shortcode() {
                     echo '<section class="emq-section"><div class="emq-section-head"><h3>' . esc_html($q['section']) . '</h3></div>';
                     $last_section = $q['section'];
                 }
-                easy_mgmt_queue_render_question($q, isset($saved[$q['key']]) ? $saved[$q['key']] : null);
+                easy_mgmt_queue_render_question($q, null);
             }
             echo '</section>';
             ?>
@@ -504,13 +551,15 @@ function easy_mgmt_queue_shortcode() {
             </section>
             <div class="emq-finish">
                 ***REMOVED***
-                <button type="submit" class="emq-submit">Save responses</button>
+                <button type="submit" class="emq-submit">Submit decisions</button>
             </div>
         </form>
+        <?php endif; ?>
     </div>
     <style>
         .emq-wrap { max-width: 46rem; margin: 0 auto; }
         .emq-lede { color: #55645a; }
+        .emq-progress { font-size: 1.05rem; color: #1b241e; }
         .emq-notice { background: #e3f0e6; border: 1px solid #1e6b3c; border-radius: 10px; padding: 0.8rem 1rem; margin: 1rem 0; font-weight: 600; color: #14532d; }
         .emq-notice-info { background: #eef2ee; border-color: #aebbae; color: #1b241e; font-weight: 400; }
         .emq-section { margin: 0 0 2rem; }
@@ -656,6 +705,17 @@ function easy_mgmt_queue_admin_handle() {
             add_settings_error('emq_admin', 'emq_deleted', 'Question deleted.', 'success');
         }
     }
+    // Reopen a decided question (puts it back in the queue).
+    if (isset($_POST['emq_reopen_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['emq_reopen_nonce'])), 'emq_reopen_question')) {
+        $reopen_key = isset($_POST['emq_reopen_key']) ? sanitize_key(wp_unslash($_POST['emq_reopen_key'])) : '';
+        if ($reopen_key !== '') {
+            $resp = easy_mgmt_queue_get_responses();
+            $decided = isset($resp['decided']) ? (array) $resp['decided'] : [];
+            $resp['decided'] = array_values(array_diff($decided, [$reopen_key]));
+            update_option('easy_mgmt_queue_responses', $resp, false);
+            add_settings_error('emq_admin', 'emq_reopened', 'Question reopened — it is back in the queue.', 'success');
+        }
+    }
 }
 
 function easy_mgmt_queue_format_answer($q, $a) {
@@ -691,15 +751,28 @@ function easy_mgmt_queue_admin_page() {
 
     // --- Submitted responses ---
     echo '<h2>Submitted responses</h2>';
+    $decided = isset($responses['decided']) ? (array) $responses['decided'] : [];
     if (empty($answers)) {
         echo '<p><em>No responses submitted yet.</em></p>';
     } else {
-        echo '<p>Submitted by <strong>' . esc_html($responses['submitted_by'] ?? '?') . '</strong> at ' . esc_html($responses['submitted_at'] ?? '?') . ' (site time).</p>';
-        echo '<table class="widefat striped"><thead><tr><th style="width:40%">Question</th><th>Answer</th></tr></thead><tbody>';
+        echo '<p>Submitted by <strong>' . esc_html($responses['submitted_by'] ?? '?') . '</strong> at ' . esc_html($responses['submitted_at'] ?? '?') . ' (site time). '
+            . count($decided) . ' of ' . count($questions) . ' decided.</p>';
+        echo '<table class="widefat striped"><thead><tr><th style="width:35%">Question</th><th>Answer</th><th style="width:12%">Status</th><th style="width:10%"></th></tr></thead><tbody>';
         foreach ($questions as $q) {
             $label = (!empty($q['num']) ? $q['num'] . '. ' : '') . $q['label'];
             $ans = isset($answers[$q['key']]) ? easy_mgmt_queue_format_answer($q, $answers[$q['key']]) : '(skipped)';
-            echo '<tr><td>' . esc_html($label) . '</td><td>' . esc_html($ans) . '</td></tr>';
+            $is_decided = in_array($q['key'], $decided, true);
+            echo '<tr><td>' . esc_html($label) . '</td><td>' . esc_html($ans) . '</td>';
+            echo '<td>' . ($is_decided ? '<span style="color:#1e6b3c;font-weight:600">Decided</span>' : '<span style="color:#8a6d1a">Open</span>') . '</td>';
+            echo '<td>';
+            if ($is_decided) {
+                echo '<form method="post" action="" style="margin:0">';
+                wp_nonce_field('emq_reopen_question', 'emq_reopen_nonce');
+                echo '<input type="hidden" name="emq_reopen_key" value="' . esc_attr($q['key']) . '">';
+                echo '<button type="submit" class="button button-small">Reopen</button>';
+                echo '</form>';
+            }
+            echo '</td></tr>';
         }
         echo '</tbody></table>';
     }
