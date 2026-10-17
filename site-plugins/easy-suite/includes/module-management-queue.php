@@ -27,6 +27,11 @@ function easy_mgmt_queue_allowed_users() {
     return array_unique($users);
 }
 
+/** Resend Domain Connect auto-configure link for the GoDaddy email setup. Single-use; expires. */
+function easy_mgmt_queue_resend_link() {
+    return 'https://domainconnect.godaddy.com/v2/domainTemplates/providers/resend.com/services/mail-mta/apply?domain=easysafety.ca&redirect_uri=https%3A%2F%2Fresend.com%2Fdomains%2Fadd%2Fe8acf7ea-2d5e-42ff-acb8-f6f2888c468d%2Fdomain-connect-success&state=%7B%22protected%22%3A%22eyJhbGciOiJSU0EtT0FFUC0yNTYiLCJlbmMiOiJBMjU2R0NNIn0%22%2C%22encrypted_key%22%3A%22RIHbFOXucqt_Rm50rHmp3UitMj2P8RRXVzIYKWpD4Dh4QKxOz5VyWOWl3-fIvEKXsHL7HUUXwCiJ5i0cQ9jWKL7BtrJIRL_1mpR4A5oEFmqAPbfZjcj2HafPzjlg9DDIQy6sv1Ab1-COLAYHthBDbeCYWtNmvIxR_TuFwXOxnykcpXak5XxVxgcks2xgS1LEwFZFI8epKzXLTpt3k8VhGJAo48dYkfoTJgjRifP6uxkf5NXcWkulRrjSZArcsZjJGa9AFhjcyLPHPCirD4OYqHKB8svHCHha30_XBRSYfJERwWzwmXfddl_S2Av4qUphnLxD82SawaI7Gffa5jFdJA%22%2C%22iv%22%3A%22XWV-SeFCDzR9AKE7%22%2C%22ciphertext%22%3A%22FPBckRDm14iRGD5k2Q%22%2C%22tag%22%3A%22DddDupQp-i6SxmCEtAaEPw%22%7D&host=&mtaSpfDomain=send&mtaSpfHost=send.forge.rmta.net&fallbackSpfDomain=rsend&fallbackSpfHost=rsend.forge.rmta.net&domainKey=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDqGtgtolF8I4%2F%2F8%2BbBXk9JX%2B%2BWqkuWjVnl%2FYeE4i%2B77MhjrE5rfKicufRPxGkwGXaMl6bQosiRl%2FvINBBtcbAlQabwGcYMvJoBfA4dmOKZTYx74r3qSW24EC7Z0JzaKxCWyybrg7ykP9zmjbFRhXJmmN5Vd8rChppcwfnpKJORZQIDAQAB&groupId=dkim%2Coutbound%2Cmta&sig=K4aD7WpbFnVkBwSerswYsyEZPzVhy%2Fe9J5Y9IOud6JkAiCBm4L2JNLQJ%2BPuf7uGw4QmInz80YGg%2FMl5lE7XXwedLYP55VmK%2F%2FDm%2B800vVF3ZKV2xX9yJYcqLAoR0VKyXWfhYtz8pkxgJE2ERRdewvpGCMkYSQ9HnJUidN0Znko2gW6lYouZ02LAG8VC7D64Wx6ksMSi4xmXrXt%2BKg4EQqPTQvpAAxcFmUxxXj1233IDtF0RrsJjUZ2hXdVakVA6RrViwTqPkQ9BnBSygZOw0L%2BZCVFCg5r%2FUKquZ4ZlDPuTW4uL5uS7vSBAkr1Y8wsAH%2Bb92dbgIlbfaDOtRe3sYVQ%3D%3D&key=_dcpubkeyv1&dcsigref=1792250937591-1hwh';
+}
+
 /** Whether the current visitor may see the queue. Admins always may (to preview). */
 function easy_mgmt_queue_can_view() {
     if (!is_user_logged_in()) {
@@ -483,16 +488,18 @@ function easy_mgmt_queue_shortcode() {
                 </div>
             </section>
             <section class="emq-section">
-                <div class="emq-section-head"><h3>Email setup</h3><span class="emq-goes-where">Information only — no answer required</span></div>
+                <div class="emq-section-head"><h3>Email setup</h3></div>
                 <div class="emq-q">
-                    <p class="emq-why">Notification emails from the site (certificates, expiry reminders) require a one-time domain setup in GoDaddy. The setup applies the required changes automatically; no manual DNS entry is needed.</p>
+                    <p class="emq-why"><strong>Why this is needed.</strong> The website sends automated emails: course certificates, certification expiry reminders, and booking confirmations. These are sent from notifications@easysafety.ca. For email providers (Gmail, Outlook, etc.) to accept these messages as legitimate — instead of marking them as spam or showing a "via siteground.biz" warning — the easysafety.ca domain must explicitly authorize the email service (Resend) to send on its behalf. This authorization is recorded as three DNS entries (SPF, DKIM, and DMARC). Without it, some recipients never receive their certificates.</p>
+                    <p class="emq-why"><strong>What the button does.</strong> The button below opens an automated setup page (Resend's Domain Connect). After logging in to GoDaddy, the page proposes the three DNS entries and requests approval to add them. Selecting approve adds only those entries. No other DNS settings are changed: nameservers, website hosting, and existing email accounts are unaffected. The email service receives no access to the GoDaddy account itself — only permission to add the three records.</p>
                     <ol class="emq-list">
                         <li>Log in to GoDaddy.</li>
-                        <li>Use the setup link provided separately by Brandon.</li>
-                        <li>Approve the DNS changes proposed (SPF, DKIM, and DMARC records for the easysafety.ca domain).</li>
-                        <li>Done — setup is complete.</li>
+                        <li>Select the button below.</li>
+                        <li>Review and approve the three proposed DNS entries (SPF, DKIM, DMARC for easysafety.ca).</li>
+                        <li>Done — the site's emails will then send as notifications@easysafety.ca with no warnings.</li>
                     </ol>
-                    <p class="emq-why" style="margin-bottom:0">Note: the setup link expires. Prompt completion is required once the link has been received.</p>
+                    <p class="emq-why">Note: the setup link is single-use and expires. If the button reports an expired or invalid link, request a fresh link from Brandon.</p>
+                    <a class="emq-action-btn" href="<?php echo esc_url(easy_mgmt_queue_resend_link()); ?>" target="_blank" rel="noopener">Complete email setup in GoDaddy</a>
                 </div>
             </section>
             <div class="emq-finish">
@@ -530,6 +537,8 @@ function easy_mgmt_queue_shortcode() {
         .emq-finish { background: #fff; border: 1.5px solid #1e6b3c; border-radius: 12px; padding: 1.2rem; margin-top: 2rem; }
         .emq-submit { font: inherit; font-size: 1.05rem; font-weight: 700; color: #fff; background: #1e6b3c; border: none; border-radius: 10px; padding: 0.9rem 1.4rem; cursor: pointer; margin-top: 0.6rem; }
         .emq-submit:hover { filter: brightness(1.08); }
+        .emq-action-btn { display: inline-block; font-size: 1.02rem; font-weight: 700; color: #ffffff; background: #1e6b3c; border-radius: 10px; padding: 0.85rem 1.2rem; text-decoration: none; margin-top: 0.4rem; }
+        .emq-action-btn:hover { filter: brightness(1.08); color: #ffffff; }
     </style>
     <script>
     (function () {
