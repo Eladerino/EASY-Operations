@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name:       EASY Suite
- * Description:       All EASY Safety Training site integrations in one plugin: the EASY Operations app bridge (approvals, expiring certs, ACF on the cert REST endpoint), certificate privacy and the PDF gatekeeper, student/expiry/employer notification emails, online course license keys, the instructor calendar feed, instructor-only shop products, SEO noindex (utility pages and past events), and the small site tweaks that used to live in Code Snippets. Replaces EASY Core, EASY Certificate Notifications, EASY Instructor Calendar Feed, and the EASY snippets.
- * Version:           2.2.19
+ * Description:       All EASY Safety Training site integrations in one plugin. Replaces EASY Core, EASY Certificate Notifications, EASY Instructor Calendar Feed, and the EASY snippets.
+ * Version:           2.2.20
  * Requires at least: 6.5
  * Requires PHP:      8.0
  * Author:            Brandon Glynn
@@ -12,7 +12,7 @@
 
 defined('ABSPATH') || exit;
 
-define('EASY_SUITE_VERSION', '2.2.19');
+define('EASY_SUITE_VERSION', '2.2.20');
 define('EASY_SUITE_FILE', __FILE__);
 define('EASY_SUITE_DIR', plugin_dir_path(__FILE__));
 

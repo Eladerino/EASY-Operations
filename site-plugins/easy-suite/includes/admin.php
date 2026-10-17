@@ -566,3 +566,51 @@ function easy_suite_feeds_page() {
     }
     echo '</tbody></table></div>';
 }
+
+/* ------------------------------------------------------------------
+ * Plugins page: short description + "View details" thickbox
+ * ------------------------------------------------------------------ */
+
+add_filter('plugin_row_meta', function ($links, $file) {
+    if ($file !== plugin_basename(EASY_SUITE_FILE)) {
+        return $links;
+    }
+    $links[] = '<a href="#TB_inline?width=640&height=550&inlineId=easy-suite-details" class="thickbox" title="EASY Suite">View details</a>';
+    return $links;
+}, 10, 2);
+
+add_action('admin_footer-plugins.php', function () {
+    $registry = function_exists('easy_suite_module_registry') ? easy_suite_module_registry() : array();
+    $option = get_option('easy_suite_modules', array());
+    ?>
+    <div id="easy-suite-details" style="display:none;">
+        <h2>EASY Suite <?php echo esc_html(EASY_SUITE_VERSION); ?></h2>
+        <p>All EASY Safety Training site integrations in one plugin. Replaces EASY Core,
+        EASY Certificate Notifications, EASY Instructor Calendar Feed, and the EASY snippets.</p>
+        <h3>What it does</h3>
+        <ul style="list-style:disc;margin-left:20px;">
+            <li>EASY Operations app bridge: approvals, expiring certs, ACF on the cert REST endpoint</li>
+            <li>Certificate privacy and the PDF gatekeeper</li>
+            <li>Student, expiry, and employer notification emails</li>
+            <li>Online course license keys</li>
+            <li>Instructor calendar feeds (per-instructor private links)</li>
+            <li>Class rosters and WooCommerce seat sales</li>
+            <li>Instructor-only shop products</li>
+            <li>SEO noindex for utility pages and past events</li>
+            <li>Management queue for Colleen and Dad</li>
+            <li>Small site tweaks that used to live in Code Snippets</li>
+        </ul>
+        <?php if ($registry) : ?>
+        <h3>Modules (<?php echo count($registry); ?>)</h3>
+        <ul style="list-style:disc;margin-left:20px;">
+            <?php foreach ($registry as $key => $m) :
+                $on = isset($option[$key]) ? (bool) $option[$key] : !empty($m['default']);
+            ?>
+            <li><strong><?php echo esc_html(isset($m['label']) ? $m['label'] : $key); ?></strong>
+                <?php echo $on ? '' : '(off)'; ?></li>
+            <?php endforeach; ?>
+        </ul>
+        <?php endif; ?>
+    </div>
+    <?php
+});
