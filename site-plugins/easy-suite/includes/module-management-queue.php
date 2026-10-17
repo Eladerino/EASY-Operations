@@ -254,34 +254,6 @@ function easy_mgmt_queue_questions() {
                 ['***REMOVED***', ''],
             ],
         ],
-        // ---- Payments ----
-        [
-            ***REMOVED***
-            'section' => '***REMOVED***',
-            'label'   => '***REMOVED***',
-            ***REMOVED***
-            'type'    => 'radio_other',
-            'options' => [
-                ['***REMOVED***', '***REMOVED***'],
-                ['***REMOVED***', '***REMOVED***'],
-                ['***REMOVED***', '***REMOVED***'],
-            ],
-            'other_placeholder' => '***REMOVED***',
-        ],
-        [
-            ***REMOVED***
-            'section' => '***REMOVED***',
-            'label'   => '***REMOVED***',
-            'why'     => '***REMOVED***',
-            'type'    => 'radio_other',
-            'options' => [
-                ['***REMOVED***', ''],
-                ***REMOVED***
-                ***REMOVED***
-                ***REMOVED***
-            ],
-            'other_placeholder' => '***REMOVED***',
-        ],
         // ---- Shop review ----
         [
             'key'     => '***REMOVED***',
@@ -545,6 +517,14 @@ function easy_mgmt_queue_shortcode() {
             }
             echo '</section>';
             ?>
+            <section class="emq-section">
+                
+                <div class="emq-q">
+                    
+                    
+                    
+                </div>
+            </section>
             <section class="emq-section">
                 
                 <div class="emq-q">
