@@ -210,6 +210,7 @@ function easy_licenses_admin_page() {
     $notice = easy_licenses_admin_take_notice();
 
     echo '<div class="wrap"><h1>Online courses</h1>';
+    easy_suite_admin_tabs('easy-online-courses');
     if ($notice) {
         $class = ['success' => 'notice-success', 'warning' => 'notice-warning', 'error' => 'notice-error'][$notice['type']] ?? 'notice-info';
         echo '<div class="notice ' . esc_attr($class) . ' is-dismissible"><p>' . esc_html($notice['text']) . '</p></div>';

@@ -870,6 +870,7 @@ function easy_mgmt_queue_admin_page() {
     $questions = easy_mgmt_queue_questions();
 
     echo '<div class="wrap" style="max-width:900px;"><h1>Management queue</h1>';
+    easy_suite_admin_tabs('easy-suite-queue');
     echo '<p>Private decision page: <a href="' . esc_url(home_url('/management-queue/')) . '" target="_blank" rel="noopener">' . esc_html(home_url('/management-queue/')) . '</a> (Private page, shortcode <code>[easy_management_queue]</code>). Visible only to the usernames in EASY Suite → Settings → Management queue, plus administrators.</p>';
 
     // --- Submitted responses ---
