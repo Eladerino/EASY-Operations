@@ -147,7 +147,13 @@ function easy_seat_create_product($event_id) {
         return 0;
     }
     $product = new WC_Product_Simple();
-    $product->set_name(get_the_title($event_id) . ' — seat');
+    // Name carries the class date so buyers always know which session they're booking.
+    $date_label = function_exists('tribe_get_start_date')
+        ? tribe_get_start_date($event_id, false, 'M j, Y') : '';
+    $product_name = get_the_title($event_id)
+        . ($date_label !== '' ? ' — ' . $date_label : '')
+        . ' — seat';
+    $product->set_name($product_name);
     $product->set_status('draft');
     $product->set_catalog_visibility('hidden');
     $product->set_virtual(true); // seats don't ship
@@ -180,7 +186,25 @@ add_action('tribe_events_single_event_after_the_content', function () {
     }
 
     echo '<div class="easy-seat-sales" style="margin:2em 0;padding:1.25em;border:1px solid #ddd;border-radius:6px;">';
-    echo '<h3 style="margin-top:0;">Book your seat</h3>';
+    echo '<h3 style="margin-top:0;">' . esc_html__('Book your seat', 'easy-suite') . '</h3>';
+
+    // What you're buying: class name + date, so there's no ambiguity at checkout.
+    $event_date = function_exists('tribe_get_start_date')
+        ? tribe_get_start_date($event_id, false, 'l, F j, Y') : '';
+    $event_time = function_exists('tribe_get_start_date')
+        ? tribe_get_start_date($event_id, false, 'g:i A') : '';
+    $event_end = function_exists('tribe_get_end_date')
+        ? tribe_get_end_date($event_id, false, 'g:i A') : '';
+    if ($event_date !== '') {
+        $when = $event_date;
+        if ($event_time !== '') {
+            $when .= ', ' . $event_time;
+            if ($event_end !== '' && $event_end !== $event_time) {
+                $when .= ' – ' . $event_end;
+            }
+        }
+        echo '<p><strong>' . esc_html(get_the_title($event_id)) . '</strong><br>' . esc_html($when) . '</p>';
+    }
 
     $stock = $product->managing_stock() ? (int) $product->get_stock_quantity() : null;
     if ($stock !== null) {
@@ -194,10 +218,14 @@ add_action('tribe_events_single_event_after_the_content', function () {
     }
 
     echo '<p class="price" style="font-size:1.25em;font-weight:600;">' . wp_kses_post($product->get_price_html()) . '</p>';
-    echo '<p><a class="button alt" href="' . esc_url($product->add_to_cart_url()) . '">'
+    // Straight to checkout: one seat, one buyer, no cart detour.
+    $checkout_url = function_exists('wc_get_checkout_url')
+        ? add_query_arg('add-to-cart', $pid, wc_get_checkout_url())
+        : $product->add_to_cart_url();
+    echo '<p><a class="button alt" href="' . esc_url($checkout_url) . '">'
         . esc_html__('Book now', 'easy-suite') . '</a></p>';
     echo '<p class="description" style="font-size:.9em;color:#646970;">'
-        . esc_html__('You will enter each attendee’s certificate details at checkout.', 'easy-suite') . '</p>';
+        . esc_html__('At checkout you will enter each attendee’s name and email exactly as they should appear on the certificate.', 'easy-suite') . '</p>';
     echo '</div>';
 });
 
@@ -232,7 +260,7 @@ function easy_seat_cart_items() {
 }
 
 /** Render one seat's fields. */
-function easy_seat_fields_html($field_key, $seat_no, $event_title) {
+function easy_seat_fields_html($field_key, $seat_no, $event_title, $event_date_label = '') {
     $f = function ($name, $label, $required, $type = 'text', $placeholder = '') use ($field_key, $seat_no) {
         $id = esc_attr("{$field_key}_{$seat_no}_{$name}");
         $nm = esc_attr("easy_seats[{$field_key}][{$seat_no}][{$name}]");
@@ -241,16 +269,19 @@ function easy_seat_fields_html($field_key, $seat_no, $event_title) {
             . '<label for="' . $id . '">' . esc_html($label) . $req . '</label>'
             . '<input type="' . esc_attr($type) . '" id="' . $id . '" name="' . $nm . '"'
             . ' placeholder="' . esc_attr($placeholder) . '" class="input-text"'
-            . ($type === 'email' ? ' autocomplete="email"' : '') . ' /></p>';
+            . ($type === 'email' ? ' autocomplete="email"' : '')
+            . ($required ? ' required' : '') . ' /></p>';
     };
     $html = '<fieldset class="easy-seat-fieldset" style="border:1px solid #ddd;border-radius:6px;padding:1em;margin:0 0 1em;">';
-    /* translators: 1: seat number, 2: class title */
-    $html .= '<legend style="padding:0 .5em;font-weight:600;">'
-        . sprintf(esc_html__('Seat %1$d — %2$s', 'easy-suite'), $seat_no, $event_title) . '</legend>';
+    /* translators: 1: seat number, 2: class title, 3: class date */
+    $legend = $event_date_label !== ''
+        ? sprintf(esc_html__('Seat %1$d — %2$s (%3$s)', 'easy-suite'), $seat_no, $event_title, $event_date_label)
+        : sprintf(esc_html__('Seat %1$d — %2$s', 'easy-suite'), $seat_no, $event_title);
+    $html .= '<legend style="padding:0 .5em;font-weight:600;">' . $legend . '</legend>';
     $html .= $f('name', 'Name (as it should appear on the certificate)', true, 'text', 'e.g. Jordan Smith');
     $html .= $f('employer', 'Employer / company', false);
     $html .= $f('phone', 'Phone', false, 'tel');
-    $html .= $f('email', 'Email', false, 'email');
+    $html .= $f('email', 'Email (certificate notifications go here)', true, 'email');
     $html .= '</fieldset>';
     return $html;
 }
@@ -264,9 +295,11 @@ add_action('woocommerce_after_checkout_billing_form', function ($checkout) {
     echo '<p>' . esc_html__('We print certificates from these details — please double-check spelling.', 'easy-suite') . '</p>';
     foreach ($items as $it) {
         $title = get_the_title($it['event_id']);
+        $date_label = function_exists('tribe_get_start_date')
+            ? tribe_get_start_date($it['event_id'], false, 'M j, Y') : '';
         for ($i = 1; $i <= $it['qty']; $i++) {
             // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped — built by easy_seat_fields_html with escaping
-            echo easy_seat_fields_html($it['key'], $i, $title);
+            echo easy_seat_fields_html($it['key'], $i, $title, $date_label);
         }
     }
     echo '</div>';
@@ -298,7 +331,12 @@ add_action('woocommerce_checkout_process', function () {
                 );
             }
             $email = isset($seat['email']) ? trim((string) $seat['email']) : '';
-            if ($email !== '' && !is_email($email)) {
+            if ($email === '') {
+                wc_add_notice(
+                    sprintf(__('Seat %d is missing the attendee email address.', 'easy-suite'), $i),
+                    'error'
+                );
+            } elseif (!is_email($email)) {
                 wc_add_notice(
                     sprintf(__('Seat %d has an invalid email address.', 'easy-suite'), $i),
                     'error'
