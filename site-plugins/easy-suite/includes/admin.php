@@ -184,8 +184,8 @@ function easy_suite_health_rows() {
 
     // Calendar feed.
     if ($on['calendar']) {
-        $ok = easy_suite_rewrite_rule_exists('^instructor-calendar/([^/]+)\.ics/?$');
-        $rows[] = ['Instructor calendar feed', $ok ? 'ok' : 'warn', $ok ? 'Feeds are served at /instructor-calendar/<name>.ics.' : 'Feed address rule missing. Re-save Settings → Permalinks.'];
+        $ok = easy_suite_rewrite_rule_exists('^instructor-calendar/([a-f0-9]{64})\.ics/?$');
+        $rows[] = ['Instructor calendar feed', $ok ? 'ok' : 'warn', $ok ? 'Feeds are served at tokened /instructor-calendar/<token>.ics URLs.' : 'Feed address rule missing. Re-save Settings → Permalinks.'];
     } else {
         $rows[] = ['Instructor calendar feed', 'off', 'Switched off. Instructor calendar subscriptions stop updating.'];
     }
