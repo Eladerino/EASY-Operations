@@ -119,17 +119,18 @@ function easy_roster_set($event_id, $roster, $user_id = 0) {
         }
         $clean[] = $s;
     }
+    $old_roster = easy_roster_get($event_id);
     update_post_meta($event_id, EASY_ROSTER_META, $clean);
 
     /**
-     * Fires after a roster is replaced. The ticket stock decrement hooks in
-     * here once the ticket model is confirmed (recon pending).
+     * Fires after a roster is replaced.
      *
      * @param int   $event_id
      * @param array $clean    Sanitized roster that was stored.
+     * @param array $old      Roster as it was before this write.
      * @param int   $user_id  WP user that wrote it (0 = system/checkout).
      */
-    do_action('easy_roster_updated', $event_id, $clean, (int) $user_id);
+    do_action('easy_roster_updated', $event_id, $clean, $old_roster, (int) $user_id);
 
     return $clean;
 }
