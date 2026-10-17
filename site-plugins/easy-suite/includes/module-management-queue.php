@@ -529,6 +529,21 @@ function easy_mgmt_queue_shortcode() {
         <h2>Management queue</h2>
         <p class="emq-lede">Decisions required for the easysafety.ca Terms of Service and the upcoming online forklift course. Answer what can be answered; decided items clear from the list. Items without a definite answer may be left blank.</p>
         <p class="emq-progress"><strong><?php echo (int) $done_count; ?> of <?php echo (int) $total; ?></strong> decided.</p>
+        <section class="emq-section">
+            <div class="emq-section-head"><h3>What&rsquo;s new &mdash; October 2026 upgrades</h3><span class="emq-goes-where">Information only &mdash; no answer required</span></div>
+            <div class="emq-q">
+                <p class="emq-why">Everything below is new since the upgrade work started in mid-October:</p>
+                <ul class="emq-list">
+                    <li><strong>Book seats online.</strong> Class pages now have a &ldquo;Book your seat&rdquo; box showing seats remaining and the price. Customers check out on the site and enter each student&rsquo;s name and email exactly as they should appear on the certificate. Paid orders add the students to the class roster automatically. Walk-ins can still be added in the office app &mdash; the online seat count adjusts to match.</li>
+                    <li><strong>Student portal.</strong> New page at <a href="https://easysafety.ca/student-portal/" target="_blank" rel="noopener">easysafety.ca/student-portal/</a> &mdash; My Certificates is live now; My Courses, Buy a Course, and Book In-Person Training are coming with the online forklift course.</li>
+                    <li><strong>Class rosters.</strong> Every class now has a student list shared between the website and the office app, with payment tracking.</li>
+                    <li><strong>Certificate reminders fixed.</strong> Expiry reminder emails now send on schedule. They were previously only going out when someone happened to visit the site.</li>
+                    <li><strong>Instructor calendars.</strong> Calendar feed links were replaced with private links. Instructors need to re-subscribe once &mdash; Pam has the new links.</li>
+                    <li><strong>Shop emails restyled.</strong> Order confirmations and related emails now use EASY branding and come from &ldquo;EASY Safety Training&rdquo;.</li>
+                    <li><strong>This page.</strong> The Management Queue itself is new &mdash; a private place for exactly these kinds of decisions.</li>
+                </ul>
+            </div>
+        </section>
         <?php if ($just_saved): ?>
             <div class="emq-notice">Decisions saved. Brandon has been notified.</div>
         <?php endif; ?>
