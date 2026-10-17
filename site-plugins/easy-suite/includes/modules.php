@@ -103,6 +103,12 @@ function easy_suite_module_registry() {
             'default'     => true,
             'locked'      => false,
         ],
+        'portal-cards' => [
+            'label'       => 'Portal card layout',
+            'description' => 'Stacks the instructor and student portal card lists in a single column on phone screens, where the theme two-column layout overlaps.',
+            'default'     => true,
+            'locked'      => false,
+        ],
     ];
 }
 
