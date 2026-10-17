@@ -400,6 +400,15 @@
     });
   }
 
+  // Header "What's New" button: show the changelog dialog.
+  $('whatsNewHeaderButton').addEventListener('click', async () => {
+    try {
+      await window.easyCert.showWhatsNew();
+    } catch (err) {
+      toast(`Could not open What's New: ${err.message}`, 'error');
+    }
+  });
+
   // Header "Setup" button: open Settings without signing out.
   $('setupHeaderButton').addEventListener('click', async () => {
     try {

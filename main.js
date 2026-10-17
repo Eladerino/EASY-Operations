@@ -362,6 +362,7 @@ if (!singleInstance) {
     if (await maybeGateForPendingUpdate()) return;
     createWindow();
     initUpdater();
+    maybeShowWhatsNew();
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -447,6 +448,86 @@ async function printPdfBuffer(pdfBuffer, config) {
     fs.promises.unlink(tmpPath).catch(() => {});
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* What's New — changelog dialog on version change                      */
+/* ------------------------------------------------------------------ */
+
+const WHATS_NEW_FILE = () => path.join(app.getPath('userData'), 'whats-new.json');
+
+// Newest first in the object; shown oldest-first in the dialog.
+// Keep notes short and plain-language: Pam reads these.
+const WHATS_NEW_NOTES = {
+  '1.2.1': [
+    'New: a "What\'s New" button in the header shows what changed after each update.',
+  ],
+  '1.2.0': [
+    'New: manage class rosters in the Schedule tab. Open a class, click Students, and add walk-ins or phone bookings with name, employer, phone, email, payment status, and notes.',
+    'If a class sells seats on the website, adding students here adjusts the online seat count automatically.',
+  ],
+};
+
+function getWhatsNewSeen() {
+  try {
+    const raw = fs.readFileSync(WHATS_NEW_FILE(), 'utf8');
+    const data = JSON.parse(raw);
+    return typeof data.seen === 'string' ? data.seen : '';
+  } catch {
+    return '';
+  }
+}
+
+function setWhatsNewSeen(version) {
+  try {
+    fs.writeFileSync(WHATS_NEW_FILE(), JSON.stringify({ seen: version }), 'utf8');
+  } catch {
+    /* non-fatal: the dialog just shows again next launch */
+  }
+}
+
+/** Notes for every version newer than `seen`, oldest first. */
+function whatsNewSince(seen) {
+  const base = seen || '0.0.0';
+  const versions = Object.keys(WHATS_NEW_NOTES).filter((v) => isNewerVersion(v, base));
+  versions.sort((a, b) => (isNewerVersion(a, b) ? 1 : -1));
+  return versions.map((v) => ({ version: v, notes: WHATS_NEW_NOTES[v] }));
+}
+
+function showWhatsNewDialog(entries) {
+  const win = BrowserWindow.getAllWindows()[0];
+  const detail = entries
+    .map((e) => `Version ${e.version}\n` + e.notes.map((n) => `\u2022 ${n}`).join('\n'))
+    .join('\n\n');
+  dialog.showMessageBox(win, {
+    type: 'info',
+    title: "What's New — EASY Operations",
+    message: "What's new in EASY Operations",
+    detail,
+    buttons: ['Close'],
+    noLink: true,
+  });
+}
+
+/** After an update, show what changed (once per version). */
+function maybeShowWhatsNew() {
+  const current = app.getVersion();
+  const seen = getWhatsNewSeen();
+  if (!seen || isNewerVersion(current, seen)) {
+    const entries = whatsNewSince(seen);
+    if (entries.length > 0) {
+      setTimeout(() => showWhatsNewDialog(entries), 1500);
+    }
+    setWhatsNewSeen(current);
+  }
+}
+
+ipcMain.handle('show-whats-new', async () => {
+  const entries = whatsNewSince('0.0.0').slice(-3);
+  if (entries.length > 0) {
+    showWhatsNewDialog(entries);
+  }
+  return { ok: true };
+});
 
 /* ------------------------------------------------------------------ */
 /* Build tag — lets the renderer detect stale/mismatched app files      */
