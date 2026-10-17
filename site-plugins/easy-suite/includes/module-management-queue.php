@@ -27,6 +27,11 @@ function easy_mgmt_queue_allowed_users() {
     return array_unique($users);
 }
 
+/** Resend Domain Connect auto-configure link for the GoDaddy email setup. Single-use; expires. */
+function easy_mgmt_queue_resend_link() {
+    return '***REMOVED***';
+}
+
 /** Whether the current visitor may see the queue. Admins always may (to preview). */
 function easy_mgmt_queue_can_view() {
     if (!is_user_logged_in()) {
@@ -483,16 +488,18 @@ function easy_mgmt_queue_shortcode() {
                 </div>
             </section>
             <section class="emq-section">
-                ***REMOVED***
+                
                 <div class="emq-q">
-                    ***REMOVED***
+                    
+                    
                     <ol class="emq-list">
                         
-                        ***REMOVED***
-                        ***REMOVED***
-                        ***REMOVED***
+                        
+                        
+                        
                     </ol>
-                    ***REMOVED***
+                    
+                    <a class="emq-action-btn" href="<?php echo esc_url(easy_mgmt_queue_resend_link()); ?>" target="_blank" rel="noopener">Complete email setup in GoDaddy</a>
                 </div>
             </section>
             <div class="emq-finish">
@@ -530,6 +537,8 @@ function easy_mgmt_queue_shortcode() {
         .emq-finish { background: #fff; border: 1.5px solid #1e6b3c; border-radius: 12px; padding: 1.2rem; margin-top: 2rem; }
         .emq-submit { font: inherit; font-size: 1.05rem; font-weight: 700; color: #fff; background: #1e6b3c; border: none; border-radius: 10px; padding: 0.9rem 1.4rem; cursor: pointer; margin-top: 0.6rem; }
         .emq-submit:hover { filter: brightness(1.08); }
+        .emq-action-btn { display: inline-block; font-size: 1.02rem; font-weight: 700; color: #ffffff; background: #1e6b3c; border-radius: 10px; padding: 0.85rem 1.2rem; text-decoration: none; margin-top: 0.4rem; }
+        .emq-action-btn:hover { filter: brightness(1.08); color: #ffffff; }
     </style>
     <script>
     (function () {
