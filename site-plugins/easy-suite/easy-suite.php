@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       EASY Suite
  * Description:       All EASY Safety Training site integrations in one plugin. Replaces EASY Core, EASY Certificate Notifications, EASY Instructor Calendar Feed, and the EASY snippets.
- * Version:           2.2.20
+ * Version:           2.2.21
  * Requires at least: 6.5
  * Requires PHP:      8.0
  * Author:            Brandon Glynn
@@ -13,7 +13,7 @@
 
 defined('ABSPATH') || exit;
 
-define('EASY_SUITE_VERSION', '2.2.20');
+define('EASY_SUITE_VERSION', '2.2.21');
 define('EASY_SUITE_FILE', __FILE__);
 define('EASY_SUITE_DIR', plugin_dir_path(__FILE__));
 
@@ -109,6 +109,10 @@ add_action('admin_init', function () {
     }
     if (function_exists('easy_ics_add_rewrite_rule')) {
         easy_ics_add_rewrite_rule();
+    }
+    // 2.2.21: move the management-queue contact values out of code into options.
+    if (function_exists('easy_mgmt_queue_seed_contact_options')) {
+        easy_mgmt_queue_seed_contact_options();
     }
     flush_rewrite_rules();
     update_option('easy_suite_version', EASY_SUITE_VERSION);

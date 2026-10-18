@@ -5,6 +5,10 @@
 // window.easyCert.schedule; this file never sees WordPress credentials.
 // Every add/edit/delete PUTs the full roster array and re-renders from
 // the server's sanitized copy, which is the source of truth.
+// The PUT carries the revision from the last load; if someone else
+// changed the list meanwhile (e.g. an online seat sale), the server
+// rejects the save and this file reloads the fresh copy instead of
+// silently overwriting it.
 (function () {
   'use strict';
 
@@ -29,6 +33,7 @@
 
   let eventId = null;
   let roster = []; // the server's copy; re-rendered after every save
+  let rosterRevision = null; // revision from the last load/save; sent back on save
   let editingIndex = -1; // -1 means the form is adding, not editing
   let loadToken = 0; // guards against stale loads painting the wrong class
 
@@ -74,6 +79,7 @@
     const token = ++loadToken;
     eventId = id;
     roster = [];
+    rosterRevision = null;
     editingIndex = -1;
     $('rosterModalTitle').textContent = 'Students';
     const when = fmtHeaderDate(date);
@@ -102,6 +108,7 @@
       if (token !== loadToken) return;
       if (!res.ok) throw new Error(res.error || 'Could not load the student list.');
       roster = Array.isArray(res.roster) ? res.roster : [];
+      rosterRevision = res.revision !== undefined ? res.revision : null;
     } catch (err) {
       if (token !== loadToken) return;
       rosterError(err.message);
@@ -252,9 +259,22 @@
     rosterError(null);
     setBusy(true);
     try {
-      const res = await api().saveRoster(eventId, next);
-      if (!res.ok) throw new Error(res.error || 'Could not save the student list.');
+      const res = await api().saveRoster(eventId, next, rosterRevision);
+      if (!res.ok) {
+        if (res.conflict) {
+          // Someone else changed the list since it was loaded (e.g. an
+          // online seat sale). Show the fresh copy; nothing was overwritten.
+          roster = Array.isArray(res.roster) ? res.roster : [];
+          rosterRevision = res.revision !== undefined ? res.revision : null;
+          hideForm();
+          render();
+          rosterError(res.error || 'The student list changed. It has been reloaded — please check it and try again.');
+          return;
+        }
+        throw new Error(res.error || 'Could not save the student list.');
+      }
       roster = Array.isArray(res.roster) ? res.roster : [];
+      rosterRevision = res.revision !== undefined ? res.revision : rosterRevision;
       hideForm();
       render();
       toast(successMessage, 'success');

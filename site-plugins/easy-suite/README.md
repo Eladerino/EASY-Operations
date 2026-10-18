@@ -48,7 +48,11 @@ always stay on.
 | App bridge: Course Builder sync | Stores Course Builder courses and reviews on the site |
 | Online courses: license keys | Single-use course keys and enrollments (needs Course Builder sync) |
 | Certificate emails | Student email on publish, expiry reminders, twice-daily employer digest |
-| Instructor calendar feed | Calendar feed per instructor at `/instructor-calendar/<name>.ics` |
+| Instructor calendar feed | Private calendar feed per instructor at `/instructor-calendar/<token>.ics` (tokened URLs; instructors re-subscribe once) |
+| Class rosters | Per-class student lists (manual enrollment in the app; online buyers added automatically) |
+| Seat sales | Sells class seats as WooCommerce products: per-seat attendee details at checkout, roster sync, stock handling, sold-seat delete protection |
+| Portal cards | Student/instructor portal card hub (`/student-portal/`, `/instructor-portal/`) |
+| Management queue | Private decision page for the office (`[easy_management_queue]` shortcode) |
 | Shop | Instructor-only products and the `[easy_product_form]` listing form |
 | SEO noindex | Keeps utility pages out of search results |
 | Past events: noindex | Keeps single event pages out of search results once the class date has passed |
@@ -72,6 +76,9 @@ All routes are under `/wp-json/easy/v1/`.
 |---|---|
 | `pending-users…` | Accounts that can promote users |
 | `expiring-certs`, `cert-number` | Accounts that can edit certificates |
+| `roster/<id>` (GET) | Accounts that can edit certificates |
+| `roster/<id>` (PUT) | Accounts that can edit the class |
+| `sale-state/<id>` | Accounts that can edit certificates |
 | `app-config`, `course-builder/me`, `learn/…` | Any signed-in user |
 | `course-builder/…` | Course authors and reviewers |
 | `licenses…`, `enrollments…` | Admins, certificate publishers and Course Builder reviewers |

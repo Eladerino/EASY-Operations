@@ -151,8 +151,8 @@ function easy_seat_create_product($event_id) {
     $date_label = function_exists('tribe_get_start_date')
         ? tribe_get_start_date($event_id, false, 'M j, Y') : '';
     $product_name = get_the_title($event_id)
-        . ($date_label !== '' ? ' — ' . $date_label : '')
-        . ' — seat';
+        . ($date_label !== '' ? ' (' . $date_label . ')' : '')
+        . ' seat';
     $product->set_name($product_name);
     $product->set_status('draft');
     $product->set_catalog_visibility('hidden');
@@ -316,14 +316,21 @@ add_action('rest_api_init', function () {
  * write it once the event ID is known.
  */
 $GLOBALS['easy_seats_pending_capacity'] = null;
+$GLOBALS['easy_seats_pending_cost'] = null;
 add_filter('tribe_events_rest_event_prepare_postarr', function ($postarr, $request) {
     if (isset($request['easy_seats'])) {
         $GLOBALS['easy_seats_pending_capacity'] = $request['easy_seats'];
     }
+    // TEC writes the cost meta after save_post fires, so the price sync
+    // at priority 20 would read the previous price. Stash it here and
+    // write it at priority 15, the same trick as capacity.
+    if (isset($request['cost'])) {
+        $GLOBALS['easy_seats_pending_cost'] = $request['cost'];
+    }
     return $postarr;
 }, 10, 2);
 
-// Write any stashed capacity from the TEC REST filter, then run the sync.
+// Write any stashed capacity/cost from the TEC REST filter, then run the sync.
 add_action('save_post_tribe_events', function ($event_id) {
     if (array_key_exists('easy_seats_pending_capacity', $GLOBALS) && $GLOBALS['easy_seats_pending_capacity'] !== null) {
         $value = $GLOBALS['easy_seats_pending_capacity'];
@@ -333,6 +340,11 @@ add_action('save_post_tribe_events', function ($event_id) {
         } else {
             update_post_meta($event_id, EASY_SEAT_CAPACITY_META, max(0, (int) $value));
         }
+    }
+    if (array_key_exists('easy_seats_pending_cost', $GLOBALS) && $GLOBALS['easy_seats_pending_cost'] !== null) {
+        $cost = $GLOBALS['easy_seats_pending_cost'];
+        $GLOBALS['easy_seats_pending_cost'] = null;
+        update_post_meta($event_id, '_EventCost', is_string($cost) ? trim($cost) : $cost);
     }
 }, 15);
 
@@ -358,6 +370,31 @@ add_filter('tribe_rest_events_archive_data', function ($data, $request) {
         }
     }
     return $data;
+}, 10, 2);
+
+/* ------------------------------------------------------------------
+ * One seat product per cart: the "Book now" button links straight to
+ * checkout with ?add-to-cart=, so a double-click (or back-button
+ * re-click) would otherwise put two seats in the cart.
+ * ------------------------------------------------------------------ */
+add_filter('woocommerce_add_to_cart_validation', function ($passed, $product_id) {
+    if (!$passed || !function_exists('easy_seat_event_id')) {
+        return $passed;
+    }
+    if (easy_seat_event_id((int) $product_id) <= 0) {
+        return $passed; // not a seat product
+    }
+    if (function_exists('WC') && WC()->cart) {
+        foreach (WC()->cart->get_cart() as $item) {
+            if ((int) (isset($item['product_id']) ? $item['product_id'] : 0) === (int) $product_id) {
+                if (function_exists('wc_add_notice')) {
+                    wc_add_notice('This seat is already in your cart.', 'error');
+                }
+                return false;
+            }
+        }
+    }
+    return $passed;
 }, 10, 2);
 
 /* ------------------------------------------------------------------
@@ -406,8 +443,8 @@ function easy_seat_fields_html($field_key, $seat_no, $event_title, $event_date_l
     $html = '<fieldset class="easy-seat-fieldset" style="border:1px solid #ddd;border-radius:6px;padding:1em;margin:0 0 1em;">';
     /* translators: 1: seat number, 2: class title, 3: class date */
     $legend = $event_date_label !== ''
-        ? sprintf(esc_html__('Seat %1$d — %2$s (%3$s)', 'easy-suite'), $seat_no, $event_title, $event_date_label)
-        : sprintf(esc_html__('Seat %1$d — %2$s', 'easy-suite'), $seat_no, $event_title);
+        ? sprintf(esc_html__('Seat %1$d: %2$s (%3$s)', 'easy-suite'), $seat_no, $event_title, $event_date_label)
+        : sprintf(esc_html__('Seat %1$d: %2$s', 'easy-suite'), $seat_no, $event_title);
     $html .= '<legend style="padding:0 .5em;font-weight:600;">' . $legend . '</legend>';
     $html .= $f('name', 'Name (as it should appear on the certificate)', true, 'text', 'e.g. Jordan Smith');
     $html .= $f('employer', 'Employer / company', false);
@@ -527,6 +564,7 @@ function easy_seats_sync_order_roster($order_id) {
     if (empty($groups) || !is_array($groups)) {
         return;
     }
+    $roster_meta = defined('EASY_ROSTER_META') ? EASY_ROSTER_META : '_easy_roster';
     foreach ($groups as $group) {
         $event_id = isset($group['event_id']) ? (int) $group['event_id'] : 0;
         if ($event_id <= 0 || get_post_type($event_id) !== 'tribe_events') {
@@ -544,6 +582,7 @@ function easy_seats_sync_order_roster($order_id) {
                 'email'    => isset($seat['email']) ? $seat['email'] : '',
                 'payment'  => 'paid',
                 'source'   => 'checkout',
+                'order_id' => $order_id,
             ));
             if ($rec === null) {
                 continue;
@@ -554,11 +593,88 @@ function easy_seats_sync_order_roster($order_id) {
         // Direct meta write: WooCommerce already decremented stock at
         // checkout, so this must NOT go through easy_roster_set (which
         // fires the stock-adjust hook below).
-        update_post_meta($event_id, '_easy_roster', array_slice($roster, 0, 500));
+        update_post_meta($event_id, $roster_meta, array_slice($roster, 0, 500));
+        if (function_exists('easy_roster_bump_revision')) {
+            easy_roster_bump_revision($event_id);
+        }
     }
     $order->update_meta_data('_easy_roster_synced', 1);
     $order->save();
 }
+
+/**
+ * A cancelled or refunded order gives its seats back. WooCommerce restores
+ * the product stock on its own; the roster records (and their "sold"
+ * status for the delete guard) are removed here via a direct meta write
+ * so the stock-adjust hook does not fire a second time.
+ */
+function easy_seats_unsync_order_roster($order_id) {
+    $order = wc_get_order($order_id);
+    if (!$order) {
+        return;
+    }
+    if (!$order->get_meta('_easy_roster_synced') || $order->get_meta('_easy_roster_unsynced')) {
+        return; // never synced, or already removed
+    }
+    if (!function_exists('easy_roster_get')) {
+        return; // roster module switched off — nothing to remove from
+    }
+    $groups = $order->get_meta('_easy_seat_attendees');
+    if (empty($groups) || !is_array($groups)) {
+        return;
+    }
+    $roster_meta = defined('EASY_ROSTER_META') ? EASY_ROSTER_META : '_easy_roster';
+    foreach ($groups as $group) {
+        $event_id = isset($group['event_id']) ? (int) $group['event_id'] : 0;
+        if ($event_id <= 0 || get_post_type($event_id) !== 'tribe_events') {
+            continue;
+        }
+        $roster = easy_roster_get($event_id);
+        if (empty($roster)) {
+            continue;
+        }
+        // Name+email fallback for records that predate the order_id stamp.
+        $legacy_keys = array();
+        foreach ((array) (isset($group['seats']) ? $group['seats'] : array()) as $seat) {
+            $key = strtolower(trim((string) (isset($seat['name']) ? $seat['name'] : '')))
+                . '|' . strtolower(trim((string) (isset($seat['email']) ? $seat['email'] : '')));
+            if (trim($key, '|') !== '') {
+                $legacy_keys[$key] = true;
+            }
+        }
+        $kept = array();
+        $removed_any = false;
+        foreach ($roster as $rec) {
+            $mine = false;
+            if (is_array($rec) && isset($rec['source']) && $rec['source'] === 'checkout') {
+                if (!empty($rec['order_id']) && (int) $rec['order_id'] === (int) $order_id) {
+                    $mine = true;
+                } elseif (empty($rec['order_id'])) {
+                    $key = strtolower(trim((string) (isset($rec['name']) ? $rec['name'] : '')))
+                        . '|' . strtolower(trim((string) (isset($rec['email']) ? $rec['email'] : '')));
+                    if (isset($legacy_keys[$key])) {
+                        $mine = true;
+                    }
+                }
+            }
+            if ($mine) {
+                $removed_any = true;
+                continue;
+            }
+            $kept[] = $rec;
+        }
+        if ($removed_any) {
+            update_post_meta($event_id, $roster_meta, array_values($kept));
+            if (function_exists('easy_roster_bump_revision')) {
+                easy_roster_bump_revision($event_id);
+            }
+        }
+    }
+    $order->update_meta_data('_easy_roster_unsynced', 1);
+    $order->save();
+}
+add_action('woocommerce_order_status_cancelled', 'easy_seats_unsync_order_roster');
+add_action('woocommerce_order_status_refunded', 'easy_seats_unsync_order_roster');
 
 /* ------------------------------------------------------------------
  * Manual enrollment -> product stock
@@ -644,7 +760,8 @@ add_filter('pre_delete_post', function ($delete, $post) {
 }, 10, 2);
 
 // Trashing a class drafts its seat product so it cannot be bought.
-// Untrashing restores it to published.
+// Untrashing restores it to published — but only if WE drafted it on
+// trash. A product that was still an unfinished draft is left alone.
 add_action('trashed_post', function ($post_id) {
     if (get_post_type($post_id) !== 'tribe_events') {
         return;
@@ -652,6 +769,7 @@ add_action('trashed_post', function ($post_id) {
     $pid = function_exists('easy_seat_product_id') ? easy_seat_product_id($post_id) : 0;
     if ($pid > 0 && get_post_status($pid) === 'publish') {
         wp_update_post(array('ID' => $pid, 'post_status' => 'draft'));
+        update_post_meta($pid, '_easy_seat_drafted_on_trash', 1);
     }
 });
 
@@ -660,7 +778,8 @@ add_action('untrashed_post', function ($post_id) {
         return;
     }
     $pid = function_exists('easy_seat_product_id') ? easy_seat_product_id($post_id) : 0;
-    if ($pid > 0 && get_post_status($pid) === 'draft') {
+    if ($pid > 0 && get_post_status($pid) === 'draft' && get_post_meta($pid, '_easy_seat_drafted_on_trash', true)) {
+        delete_post_meta($pid, '_easy_seat_drafted_on_trash');
         wp_update_post(array('ID' => $pid, 'post_status' => 'publish'));
     }
 });

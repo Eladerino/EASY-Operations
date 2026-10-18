@@ -400,15 +400,12 @@
     });
   }
 
-  // Header "What's New" button: open the full summary modal.
+  // Header "What's New" button: show the recent release notes dialog.
+  // The notes are plain staff-facing release notes (kept in main.js).
+  // Nothing business-internal is shown here; the full project summary
+  // lives on the website's management queue page instead.
   $('whatsNewHeaderButton').addEventListener('click', () => {
-    $('whatsNewModal').classList.remove('hidden');
-  });
-  $('whatsNewClose').addEventListener('click', () => {
-    $('whatsNewModal').classList.add('hidden');
-  });
-  $('whatsNewModal').addEventListener('click', (e) => {
-    if (e.target === $('whatsNewModal')) $('whatsNewModal').classList.add('hidden');
+    window.easyCert.showWhatsNew();
   });
 
   // Header "Setup" button: open Settings without signing out.
