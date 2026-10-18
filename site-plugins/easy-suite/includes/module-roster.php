@@ -18,6 +18,7 @@ defined('ABSPATH') || exit;
 
 define('EASY_ROSTER_META', '_easy_roster');
 define('EASY_ROSTER_MAX_STUDENTS', 500);
+define('EASY_ROSTER_REV_META', '_easy_roster_rev');
 
 /* ------------------------------------------------------------------
  * Record shape + sanitization
@@ -66,12 +67,50 @@ function easy_roster_sanitize_record($rec) {
     // System stamps ride along untouched (ints only); writers set them.
     $out['added']    = isset($rec['added']) ? max(0, (int) $rec['added']) : 0;
     $out['added_by'] = isset($rec['added_by']) ? max(0, (int) $rec['added_by']) : 0;
+    // Stable record id, assigned once: lets writers tell records apart
+    // across saves (checkout protection, cancel/refund removal).
+    $rid = isset($rec['id']) && is_string($rec['id']) ? trim($rec['id']) : '';
+    $rid = preg_replace('/[^a-zA-Z0-9_-]/', '', $rid);
+    if ($rid === '' && function_exists('wp_generate_uuid4')) {
+        $rid = 'r_' . wp_generate_uuid4();
+    }
+    $out['id'] = substr($rid, 0, 60);
+    // The WooCommerce order this record came from (checkout records only).
+    $out['order_id'] = isset($rec['order_id']) ? max(0, (int) $rec['order_id']) : 0;
     return $out;
 }
 
 /* ------------------------------------------------------------------
  * Storage
  * ------------------------------------------------------------------ */
+
+/* ------------------------------------------------------------------
+ * Revision tracking (optimistic concurrency for the app's editor)
+ *
+ * Every roster write bumps the revision. The app sends back the
+ * revision it loaded; a mismatch means someone else (e.g. an online
+ * seat sale) changed the list meanwhile, and the save is rejected.
+ * ------------------------------------------------------------------ */
+
+/** Current roster revision for an event (seeded on first read). */
+function easy_roster_revision($event_id) {
+    $event_id = (int) $event_id;
+    $rev = (int) get_post_meta($event_id, EASY_ROSTER_REV_META, true);
+    if ($rev < 1) {
+        $rev = 1;
+        update_post_meta($event_id, EASY_ROSTER_REV_META, $rev);
+    }
+    return $rev;
+}
+
+/** Bump the roster revision after any write. Every writer must call this. */
+function easy_roster_bump_revision($event_id) {
+    $event_id = (int) $event_id;
+    $rev = (int) get_post_meta($event_id, EASY_ROSTER_REV_META, true);
+    $rev = max(1, $rev) + 1;
+    update_post_meta($event_id, EASY_ROSTER_REV_META, $rev);
+    return $rev;
+}
 
 /** Read the roster for an event. Always returns an array. */
 function easy_roster_get($event_id) {
@@ -121,6 +160,7 @@ function easy_roster_set($event_id, $roster, $user_id = 0) {
     }
     $old_roster = easy_roster_get($event_id);
     update_post_meta($event_id, EASY_ROSTER_META, $clean);
+    easy_roster_bump_revision($event_id);
 
     /**
      * Fires after a roster is replaced.
@@ -173,11 +213,21 @@ function easy_roster_rest_get($request) {
     return array(
         'event_id' => $event_id,
         'roster'   => easy_roster_get($event_id),
+        'revision' => easy_roster_revision($event_id),
     );
 }
 
 function easy_roster_rest_put($request) {
     $event_id = (int) $request['event_id'];
+    if (get_post_type($event_id) !== 'tribe_events') {
+        return new WP_Error('easy_roster_bad_event', 'Not a class event.', array('status' => 404));
+    }
+    // Roster edits need the same rights as editing the class itself.
+    // (The app only shows the Students editor when the account can edit
+    // events, so no legitimate app flow loses access here.)
+    if (!current_user_can('edit_post', $event_id)) {
+        return new WP_Error('easy_roster_forbidden', 'This account is not allowed to edit this class.', array('status' => 403));
+    }
     $params   = $request->get_json_params();
     if (!is_array($params) || !array_key_exists('roster', $params)) {
         // Also accept form-encoded for easy curl testing.
@@ -189,6 +239,46 @@ function easy_roster_rest_put($request) {
     if ($roster === null) {
         return new WP_Error('easy_roster_bad_roster', 'Send a JSON body like {"roster": [...]}.', array('status' => 400));
     }
+    // Optimistic concurrency: reject the save when the roster changed
+    // since the app loaded it (e.g. a seat sold online meanwhile).
+    // Older clients that send no revision keep the old behavior.
+    $sent_revision = (is_array($params) && isset($params['revision'])) ? (int) $params['revision'] : null;
+    $current_revision = easy_roster_revision($event_id);
+    if ($sent_revision !== null && $sent_revision !== $current_revision) {
+        return new WP_Error(
+            'easy_roster_conflict',
+            'The student list changed since you opened it (for example, a seat was sold online). The latest version is included below — please check it and try again.',
+            array(
+                'status'   => 409,
+                'roster'   => easy_roster_get($event_id),
+                'revision' => $current_revision,
+            )
+        );
+    }
+    // Students who paid online can only leave the roster through a
+    // cancelled/refunded order (or an administrator) — never here.
+    $old_checkout_ids = array();
+    foreach (easy_roster_get($event_id) as $rec) {
+        if (is_array($rec) && isset($rec['source']) && $rec['source'] === 'checkout' && !empty($rec['id'])) {
+            $old_checkout_ids[(string) $rec['id']] = true;
+        }
+    }
+    if (!empty($old_checkout_ids)) {
+        $new_ids = array();
+        foreach ($roster as $rec) {
+            if (is_array($rec) && !empty($rec['id'])) {
+                $new_ids[(string) $rec['id']] = true;
+            }
+        }
+        $removed = array_diff_key($old_checkout_ids, $new_ids);
+        if (!empty($removed) && !current_user_can('manage_options')) {
+            return new WP_Error(
+                'easy_roster_checkout_locked',
+                'This list includes students who paid online. They can only be removed by cancelling or refunding the order.',
+                array('status' => 403)
+            );
+        }
+    }
     $user   = wp_get_current_user();
     $result = easy_roster_set($event_id, $roster, ($user && $user->ID) ? (int) $user->ID : 0);
     if (is_wp_error($result)) {
@@ -197,5 +287,6 @@ function easy_roster_rest_put($request) {
     return array(
         'event_id' => $event_id,
         'roster'   => $result,
+        'revision' => easy_roster_revision($event_id),
     );
 }

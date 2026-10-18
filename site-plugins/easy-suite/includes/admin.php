@@ -387,6 +387,16 @@ function easy_suite_settings_page() {
         }
         update_option('easy_mgmt_queue_users', implode("\n", array_unique($mgmt_users)), false);
 
+        $notify_email = isset($_POST['easy_mgmt_queue_notify_email'])
+            ? sanitize_email(wp_unslash($_POST['easy_mgmt_queue_notify_email']))
+            : '';
+        update_option('easy_mgmt_queue_notify_email', $notify_email, false);
+
+        $resend_link = isset($_POST['easy_resend_domain_connect_link'])
+            ? esc_url_raw(trim((string) wp_unslash($_POST['easy_resend_domain_connect_link'])))
+            : '';
+        update_option('easy_resend_domain_connect_link', $resend_link, false);
+
         $proxies = [];
         foreach (preg_split('/[\s,]+/', (string) wp_unslash($_POST['easy_proxy_posters'] ?? '')) as $u) {
             $u = sanitize_user($u, true);
@@ -526,6 +536,14 @@ function easy_suite_settings_page() {
         . '<td><textarea id="easy_mgmt_queue_users" name="easy_mgmt_queue_users" rows="4" class="regular-text code">'
         . esc_textarea(implode("\n", function_exists('easy_mgmt_queue_allowed_users') ? easy_mgmt_queue_allowed_users() : [])) . '</textarea>'
         . '<p class="description">WordPress usernames, one per line. Only these users (plus administrators) can see the [easy_management_queue] page.</p></td></tr>';
+    echo '<tr><th scope="row"><label for="easy_mgmt_queue_notify_email">Decision notification email</label></th>'
+        . '<td><input type="email" id="easy_mgmt_queue_notify_email" name="easy_mgmt_queue_notify_email" class="regular-text" value="'
+        . esc_attr(function_exists('easy_mgmt_queue_notify_email') ? easy_mgmt_queue_notify_email() : get_option('easy_mgmt_queue_notify_email', '')) . '">'
+        . '<p class="description">Where new management-queue decisions are emailed.</p></td></tr>';
+    echo '<tr><th scope="row"><label for="easy_resend_domain_connect_link">Resend setup link</label></th>'
+        . '<td><textarea id="easy_resend_domain_connect_link" name="easy_resend_domain_connect_link" rows="3" class="large-text code">'
+        . esc_textarea((string) get_option('easy_resend_domain_connect_link', '')) . '</textarea>'
+        . '<p class="description">The single-use GoDaddy Domain Connect link for email setup. Clear this field once the setup is done and the button disappears from the queue page.</p></td></tr>';
     echo '</tbody></table>';
     $easy_section_end();
 

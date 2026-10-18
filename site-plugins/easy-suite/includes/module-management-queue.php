@@ -27,9 +27,34 @@ function easy_mgmt_queue_allowed_users() {
     return array_unique($users);
 }
 
-/** Resend Domain Connect auto-configure link for the GoDaddy email setup. Single-use; expires. */
+/** Resend Domain Connect auto-configure link for the GoDaddy email setup.
+ * Single-use; expires. Stored in an option (never in code): clear it in
+ * EASY Suite > Settings once the email setup is done. */
 function easy_mgmt_queue_resend_link() {
-    return '***REMOVED***';
+    return (string) get_option('easy_resend_domain_connect_link', '');
+}
+
+/** Where new management-queue decisions are emailed. */
+function easy_mgmt_queue_notify_email() {
+    $email = (string) get_option('easy_mgmt_queue_notify_email', '');
+    if ($email === '') {
+        $email = (string) get_option('admin_email', '');
+    }
+    return $email;
+}
+
+/**
+ * One-time seed (runs on the 2.2.21 update): move the previously
+ * hardcoded contact values into options so they live in the site's
+ * database instead of the public repo.
+ */
+function easy_mgmt_queue_seed_contact_options() {
+    if (get_option('easy_mgmt_queue_notify_email', null) === null) {
+        update_option('easy_mgmt_queue_notify_email', '***REMOVED***', false);
+    }
+    if (get_option('easy_resend_domain_connect_link', null) === null) {
+        update_option('easy_resend_domain_connect_link', '***REMOVED***', false);
+    }
 }
 
 /** Whether the current visitor may see the queue. Admins always may (to preview). */
@@ -469,8 +494,10 @@ function easy_mgmt_queue_handle_submit() {
         $remaining = count(easy_mgmt_queue_questions()) - count($all['decided']);
         $lines[] = '';
         $lines[] = $remaining . ' question(s) still outstanding.';
-        $brandon = '***REMOVED***';
-        wp_mail($brandon, 'Management queue: ' . count($newly_decided) . ' new decision(s) by ' . $user->display_name, implode("\n", $lines));
+        $notify_email = easy_mgmt_queue_notify_email();
+        if ($notify_email !== '') {
+            wp_mail($notify_email, 'Management queue: ' . count($newly_decided) . ' new decision(s) by ' . $user->display_name, implode("\n", $lines));
+        }
     }
 
     // Redirect to avoid resubmission.
@@ -656,6 +683,7 @@ function easy_mgmt_queue_shortcode() {
             </section>
             <section class="emq-section">
                 
+                <?php if (easy_mgmt_queue_resend_link() !== '') : ?>
                 <div class="emq-q">
                     
                     
@@ -668,6 +696,11 @@ function easy_mgmt_queue_shortcode() {
                     
                     <a class="emq-action-btn" href="<?php echo esc_url(easy_mgmt_queue_resend_link()); ?>" target="_blank" rel="noopener">Complete email setup in GoDaddy</a>
                 </div>
+                <?php else : ?>
+                <div class="emq-q">
+                    <p class="emq-why">Email setup is complete.</p>
+                </div>
+                <?php endif; ?>
             </section>
             <div class="emq-finish">
                 ***REMOVED***

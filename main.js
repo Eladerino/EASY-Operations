@@ -456,8 +456,19 @@ async function printPdfBuffer(pdfBuffer, config) {
 const WHATS_NEW_FILE = () => path.join(app.getPath('userData'), 'whats-new.json');
 
 // Newest first in the object; shown oldest-first in the dialog.
-// Keep notes short and plain-language: Pam reads these.
+// Keep notes short and plain-language: Pam reads these. Nothing
+// business-internal here — instructors see these notes too.
 const WHATS_NEW_NOTES = {
+  '1.2.4': [
+    'Fixed: the student list can no longer be accidentally overwritten when a seat sells online while it is open. You will see the fresh list and can try again.',
+    'Fixed: students who paid online can only be removed by cancelling or refunding the order.',
+  ],
+  '1.2.3': [
+    'New: the class editor shows whether a class is selling seats on the website, with the price, seats left, and seats sold.',
+  ],
+  '1.2.2': [
+    'New: set how many seats a class sells on the website right in the class editor (Seats field).',
+  ],
   '1.2.1': [
     'New: a "What\'s New" button in the header shows what changed after each update.',
   ],
@@ -1402,7 +1413,8 @@ ipcMain.handle('schedule-get-roster', async (_event, id) => {
       return { ok: false, error: friendlyWriteError(r, 'load the student list') };
     }
     const roster = r.json && Array.isArray(r.json.roster) ? r.json.roster : [];
-    return { ok: true, roster };
+    const revision = r.json && r.json.revision !== undefined ? r.json.revision : null;
+    return { ok: true, roster, revision };
   } catch (err) {
     return { ok: false, error: `Could not load the student list: ${err.message}` };
   }
@@ -1424,19 +1436,32 @@ ipcMain.handle('schedule-get-sale-state', async (_event, id) => {
   }
 });
 
-ipcMain.handle('schedule-save-roster', async (_event, { eventId, roster } = {}) => {
+ipcMain.handle('schedule-save-roster', async (_event, { eventId, roster, revision } = {}) => {
   const config = getConfig();
   if (!config.ok) return { ok: false, error: config.error };
   const id = validRosterEventId(eventId);
   if (!id) return { ok: false, error: 'No class was selected.' };
   if (!Array.isArray(roster)) return { ok: false, error: 'The student list was not valid.' };
   try {
-    const r = await easyRequest(config, 'PUT', `/roster/${id}`, { body: { roster }, timeoutMs: 30000 });
+    const r = await easyRequest(config, 'PUT', `/roster/${id}`, { body: { roster, revision }, timeoutMs: 30000 });
+    if (r.status === 409) {
+      // Someone else changed the list since it was loaded (e.g. an online
+      // seat sale). Hand the fresh copy back so the UI can reload it.
+      const data = (r.json && r.json.data) || {};
+      return {
+        ok: false,
+        conflict: true,
+        roster: Array.isArray(data.roster) ? data.roster : [],
+        revision: data.revision !== undefined ? data.revision : null,
+        error: (r.json && r.json.message) || 'The student list changed since you opened it.',
+      };
+    }
     if (r.status !== 200) {
       return { ok: false, error: friendlyWriteError(r, 'save the student list') };
     }
     const saved = r.json && Array.isArray(r.json.roster) ? r.json.roster : [];
-    return { ok: true, roster: saved };
+    const savedRevision = r.json && r.json.revision !== undefined ? r.json.revision : null;
+    return { ok: true, roster: saved, revision: savedRevision };
   } catch (err) {
     return { ok: false, error: `Could not save the student list: ${err.message}` };
   }

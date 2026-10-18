@@ -31,7 +31,7 @@ contextBridge.exposeInMainWorld('easyCert', {
     deleteEvent: (id) => ipcRenderer.invoke('schedule-delete-event', id),
     siteInfo: () => ipcRenderer.invoke('schedule-site-info'),
     getRoster: (eventId) => ipcRenderer.invoke('schedule-get-roster', eventId),
-    saveRoster: (eventId, roster) => ipcRenderer.invoke('schedule-save-roster', { eventId, roster }),
+    saveRoster: (eventId, roster, revision) => ipcRenderer.invoke('schedule-save-roster', { eventId, roster, revision }),
     getSaleState: (eventId) => ipcRenderer.invoke('schedule-get-sale-state', eventId),
   },
   approvals: {
