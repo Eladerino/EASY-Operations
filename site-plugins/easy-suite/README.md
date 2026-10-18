@@ -79,6 +79,8 @@ All routes are under `/wp-json/easy/v1/`.
 | `roster/<id>` (GET) | Accounts that can edit certificates |
 | `roster/<id>` (PUT) | Accounts that can edit the class |
 | `sale-state/<id>` | Accounts that can edit certificates |
+| `management-queue` | Admins |
+| `management-queue/questions` (POST) | Admins |
 | `app-config`, `course-builder/me`, `learn/…` | Any signed-in user |
 | `course-builder/…` | Course authors and reviewers |
 | `licenses…`, `enrollments…` | Admins, certificate publishers and Course Builder reviewers |
