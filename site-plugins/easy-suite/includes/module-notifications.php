@@ -717,7 +717,7 @@ class Easy_Safety_Cert_Notifications {
                 $subject = "Reminder: Your {$course_label} certificate expires " . self::short_date($expiry_date);
                 $message = '
 <div style="font-family:Arial, Helvetica, sans-serif; color:#000; margin:0; padding:0; background:#f5f7fa; padding:40px 0;">
-  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">Your '.$course_label_e.' certificate expires '.$expiry_date_e.' &mdash; renew today.</div>
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">Your '.$course_label_e.' certificate expires '.$expiry_date_e.'. Renew today.</div>
   <table role="presentation" border="0" cellspacing="0" cellpadding="0"
          style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;
                 box-shadow:0 4px 12px rgba(0,0,0,0.08);">
@@ -741,7 +741,7 @@ class Easy_Safety_Cert_Notifications {
           To avoid any lapse in certification, please make arrangements to renew your training before the expiry date.
         </p>
         <p style="font-size:14px; line-height:1.6; color:#666; margin:0 0 16px 0;">
-          Already rebooked? You&rsquo;re all set &mdash; this notice may have crossed paths with your booking.
+          Already rebooked? You&rsquo;re all set: this notice may have crossed paths with your booking.
         </p>
         <table role="presentation" style="width:100%;border-collapse:collapse;margin:20px 0;">
           <tr>
@@ -774,7 +774,7 @@ class Easy_Safety_Cert_Notifications {
                 $plain = "Dear {$student_name},\n\n"
                     . "This is a friendly reminder that your {$course_label} certificate will expire {$body_countdown} on {$expiry_date}.\n"
                     . "To avoid any lapse in certification, please make arrangements to renew your training before the expiry date.\n"
-                    . "Already rebooked? You're all set — this notice may have crossed paths with your booking.\n\n"
+                    . "Already rebooked? You're all set: this notice may have crossed paths with your booking.\n\n"
                     . "Book renewal training: " . self::course_page_url($course_value) . "\n"
                     . "Or view your certificates: " . self::CERT_PORTAL_URL . "\n\n"
                     . "Certificate Number: {$certificate_number}\n"
@@ -790,7 +790,7 @@ class Easy_Safety_Cert_Notifications {
                 $subject = "Your {$course_label} certificate expired " . self::short_date($expiry_date);
                 $message = '
 <div style="font-family:Arial, Helvetica, sans-serif; color:#000; margin:0; padding:0; background:#f5f7fa; padding:40px 0;">
-  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">Your '.$course_label_e.' certificate has expired &mdash; renew today.</div>
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">Your '.$course_label_e.' certificate has expired. Renew today.</div>
   <table role="presentation" border="0" cellspacing="0" cellpadding="0"
          style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;
                 box-shadow:0 4px 12px rgba(0,0,0,0.08);">
@@ -813,7 +813,7 @@ class Easy_Safety_Cert_Notifications {
           Your <strong>'.$course_label_e.'</strong> certificate expired on <strong>'.$expiry_date_e.'</strong>. Please complete renewal training as soon as possible.
         </p>
         <p style="font-size:14px; line-height:1.6; color:#666; margin:0 0 16px 0;">
-          Already rebooked? You&rsquo;re all set &mdash; this notice may have crossed paths with your booking.
+          Already rebooked? You&rsquo;re all set: this notice may have crossed paths with your booking.
         </p>
         <table role="presentation" style="width:100%;border-collapse:collapse;margin:20px 0;">
           <tr>
@@ -845,7 +845,7 @@ class Easy_Safety_Cert_Notifications {
 </div>';
                 $plain = "Dear {$student_name},\n\n"
                     . "Your {$course_label} certificate expired on {$expiry_date}. Please complete renewal training as soon as possible.\n"
-                    . "Already rebooked? You're all set — this notice may have crossed paths with your booking.\n\n"
+                    . "Already rebooked? You're all set: this notice may have crossed paths with your booking.\n\n"
                     . "Book renewal training: " . self::course_page_url($course_value) . "\n"
                     . "Or view your certificates: " . self::CERT_PORTAL_URL . "\n\n"
                     . "Certificate Number: {$certificate_number}\n"

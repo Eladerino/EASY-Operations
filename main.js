@@ -242,6 +242,14 @@ function decryptPassword(enc) {
 function wpAppPassword(wpUser) {
   return decryptPassword(wpUser.appPasswordEnc) || wpUser.appPassword || '';
 }
+// Config writes go through a temp file + rename so a crash mid-write can
+// never leave a half-written config.json behind.
+function writeConfigAtomic(filePath, data) {
+  const tmpPath = `${filePath}.tmp`;
+  fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2) + '\n');
+  fs.renameSync(tmpPath, filePath);
+}
+
 // Migrate a plaintext stored password to OS-keychain encryption, once.
 function maybeMigratePasswordEncryption(config) {
   if (!config.ok || !config.wpUser || !config.wpUser.appPassword || config.wpUser.appPasswordEnc) return;
@@ -252,7 +260,7 @@ function maybeMigratePasswordEncryption(config) {
     const raw = JSON.parse(fs.readFileSync(config.path, 'utf8'));
     raw.wpUser.appPasswordEnc = enc;
     delete raw.wpUser.appPassword;
-    fs.writeFileSync(config.path, JSON.stringify(raw, null, 2) + '\n');
+    writeConfigAtomic(config.path, raw);
     cachedConfig = null;
   } catch (e) { /* keep the plaintext config rather than breaking sign-in */ }
 }
@@ -461,6 +469,9 @@ const WHATS_NEW_FILE = () => path.join(app.getPath('userData'), 'whats-new.json'
 const WHATS_NEW_NOTES = {
   '1.2.6': [
     'The app now checks for updates once an hour instead of every 10 minutes.',
+    'Removing a student who paid online now explains itself instead of failing: cancel or refund their order on the website.',
+    'If the student list changes while you are adding someone, your entry is kept instead of discarded.',
+    'Publishing a certificate now double-checks that WordPress actually published it before saying the student was notified.',
   ],
   '1.2.5': [
     'Fixed: rejecting an account request now follows the website\'s own steps instead of skipping them.',
@@ -695,7 +706,7 @@ ipcMain.handle('save-setup', async (_event, setup = {}) => {
       return { ok: false, error: 'Site URL, username and application password are required.' };
     }
     fs.mkdirSync(path.dirname(userPath), { recursive: true });
-    fs.writeFileSync(userPath, JSON.stringify(config, null, 2) + '\n');
+    writeConfigAtomic(userPath, config);
     cachedConfig = null;
     return { ok: true };
   } catch (err) {
@@ -711,7 +722,7 @@ ipcMain.handle('set-printer', async (_event, name) => {
     if (!config.ok) return { ok: false, error: 'No saved setup found. Run Setup first.' };
     const raw = JSON.parse(fs.readFileSync(config.path, 'utf8'));
     raw.printerName = name || null;
-    fs.writeFileSync(config.path, JSON.stringify(raw, null, 2) + '\n');
+    writeConfigAtomic(config.path, raw);
     cachedConfig = null;
     return { ok: true };
   } catch (err) {
@@ -805,21 +816,13 @@ ipcMain.handle('submit-certificate', async (_event, payload) => {
   if (!config.ok) {
     return { ok: false, error: config.error, configPath: config.path };
   }
+  // A malformed payload from the renderer must not throw a raw TypeError
+  // out of the handler; the app speaks {ok:false}.
+  if (!payload || typeof payload !== 'object' || !payload.pdf || !payload.acf) {
+    return { ok: false, error: 'The certificate data was incomplete. Fill in the form and try again.' };
+  }
 
   const auth = effectiveAuth(config);
-
-  // Instructor mode: stamp the signed-in instructor's identity here in the
-  // main process, so the posted record cannot be re-attributed from the UI.
-  // Proxy posters (e.g. designated office accounts) are exempt — their form values flow through.
-  if (configMode(config) === 'instructor' && config.instructor && !(await isProxyPoster(config))) {
-    if (config.instructor.name) {
-      payload.pdf.instructorName = config.instructor.name;
-      payload.acf.instructor = config.instructor.name;
-    }
-    if (config.instructor.email) {
-      payload.acf.instructor_email = config.instructor.email;
-    }
-  }
 
   const base = config.wpBaseUrl.replace(/\/+$/, '');
   const updateId = parseInt(payload.updateId, 10) || 0;
@@ -827,6 +830,19 @@ ipcMain.handle('submit-certificate', async (_event, payload) => {
   let postSucceeded = false;
 
   try {
+    // Instructor mode: stamp the signed-in instructor's identity here in the
+    // main process, so the posted record cannot be re-attributed from the UI.
+    // Proxy posters (e.g. designated office accounts) are exempt — their form values flow through.
+    if (configMode(config) === 'instructor' && config.instructor && !(await isProxyPoster(config))) {
+      if (config.instructor.name) {
+        payload.pdf.instructorName = config.instructor.name;
+        payload.acf.instructor = config.instructor.name;
+      }
+      if (config.instructor.email) {
+        payload.acf.instructor_email = config.instructor.email;
+      }
+    }
+
     // 0. Guarantee a unique certificate number before anything is generated:
     // scan recent certs and auto-bump the instance on collision.
     const finalNumber = await resolveUniqueCertificateNumber(
@@ -1209,7 +1225,7 @@ function friendlyWriteError(r, action) {
     return `WordPress rejected the login while trying to ${action}. Re-run Setup to sign in again.`;
   }
   if (r.status === 403) {
-    return `This WordPress account is not allowed to ${action}. An admin needs to grant it event publishing rights (edit_tribe_events / publish_tribe_events).`;
+    return `This WordPress account is not allowed to ${action}. An admin needs to give it permission to manage classes on the website.`;
   }
   if (r.status === 400 && msg) return `WordPress refused to ${action}: ${msg}`;
   return `Could not ${action} (HTTP ${r.status}).${msg ? ` ${msg}` : ''}`;
@@ -1708,7 +1724,14 @@ ipcMain.handle('cert-approvals-list', async () => {
       return { ok: false, error: (r.json && r.json.message) || `WordPress returned HTTP ${r.status}.` };
     }
     const items = Array.isArray(r.json) ? r.json : [];
-    return { ok: true, certs: items.map(normalizeDraftCert) };
+    const total = parseInt(r.total || '0', 10) || 0;
+    const out = { ok: true, certs: items.map(normalizeDraftCert) };
+    // The site caps a page at 100 drafts; say so when there are more, so
+    // the queue never looks shorter than it actually is.
+    if (total > items.length) {
+      out.note = `Showing the first ${items.length} of ${total} drafts.`;
+    }
+    return out;
   } catch (err) {
     return { ok: false, error: `Could not load draft certificates: ${err.message}` };
   }
@@ -1729,6 +1752,9 @@ ipcMain.handle('cert-approvals-publish', async (_event, id) => {
     }
     if (r.status !== 200 || !(r.json && r.json.id)) {
       return { ok: false, error: (r.json && r.json.message) || `WordPress returned HTTP ${r.status}.` };
+    }
+    if (r.json.status && r.json.status !== 'publish') {
+      return { ok: false, error: 'WordPress kept the certificate as a draft. This account cannot publish certificates.' };
     }
     return { ok: true, id: numId };
   } catch (err) {

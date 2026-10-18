@@ -152,7 +152,7 @@
     return key.split(/[-_]+/).map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w)).join(' ');
   }
 
-  function renderList(certs) {
+  function renderList(certs, note) {
     const list = $('certApprovList');
     list.innerHTML = '';
     $('certApprovEmpty').classList.toggle('hidden', certs.length > 0);
@@ -215,7 +215,7 @@
         publishBtn.type = 'button';
         publishBtn.className = 'btn btn-primary btn-small';
         publishBtn.textContent = 'Publish';
-        publishBtn.addEventListener('click', () => publishCert(c));
+        publishBtn.addEventListener('click', (e) => publishCert(c, e.currentTarget));
       }
 
       // Fix before publish: open the draft in the certificate form.
@@ -236,9 +236,17 @@
       li.appendChild(actions);
       list.appendChild(li);
     }
+    // The queue is capped at one page of drafts; say so when there are
+    // more, so reviewers know the list is incomplete.
+    if (note) {
+      const noteLi = document.createElement('li');
+      noteLi.className = 'hint';
+      noteLi.textContent = note;
+      list.appendChild(noteLi);
+    }
   }
 
-  async function publishCert(cert) {
+  async function publishCert(cert, btn) {
     const courseBit = prettyCourse(cert.course);
     const what = courseBit ? `${courseBit} certificate` : 'certificate';
     const yes = await confirmDialog(
@@ -247,6 +255,7 @@
       'Publish'
     );
     if (!yes) return;
+    if (btn) btn.disabled = true;
     try {
       const res = await api().publish(cert.id);
       if (!res.ok) throw new Error(res.error || 'Publish failed.');
@@ -254,6 +263,8 @@
       await loadQueue();
     } catch (err) {
       toast(`Could not publish the certificate: ${err.message}`, 'error', 8000);
+    } finally {
+      if (btn) btn.disabled = false;
     }
   }
 
@@ -278,7 +289,7 @@
     try {
       const res = await api().list();
       if (!res.ok) throw new Error(res.error || 'Could not load the queue.');
-      renderList(res.certs || []);
+      renderList(res.certs || [], res.note);
     } catch (err) {
       showError(err.message);
     } finally {

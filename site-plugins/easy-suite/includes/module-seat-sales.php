@@ -200,7 +200,7 @@ add_action('tribe_events_single_event_after_the_content', function () {
         if ($event_time !== '') {
             $when .= ', ' . $event_time;
             if ($event_end !== '' && $event_end !== $event_time) {
-                $when .= ' – ' . $event_end;
+                $when .= ' - ' . $event_end;
             }
         }
         echo '<p><strong>' . esc_html(get_the_title($event_id)) . '</strong><br>' . esc_html($when) . '</p>';
@@ -599,6 +599,7 @@ function easy_seats_sync_order_roster($order_id) {
         }
     }
     $order->update_meta_data('_easy_roster_synced', 1);
+    $order->delete_meta_data('_easy_roster_unsynced');
     $order->save();
 }
 
@@ -671,6 +672,7 @@ function easy_seats_unsync_order_roster($order_id) {
         }
     }
     $order->update_meta_data('_easy_roster_unsynced', 1);
+    $order->delete_meta_data('_easy_roster_synced');
     $order->save();
 }
 add_action('woocommerce_order_status_cancelled', 'easy_seats_unsync_order_roster');

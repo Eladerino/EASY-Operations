@@ -227,7 +227,7 @@ add_shortcode('easy_product_form', function () {
             <input type="file" name="easy_image" accept="image/*"></label>
         </p>
         <?php else : ?>
-        <p><em><?php esc_html_e('Photo uploads are not enabled for your account — ask Brandon to add photos to your listing.', 'easy-core'); ?></em></p>
+        <p><em><?php esc_html_e('Photo uploads are not enabled for your account: ask Brandon to add photos to your listing.', 'easy-core'); ?></em></p>
         <?php endif; ?>
         <p><button type="submit" class="button"><?php esc_html_e('Submit for review', 'easy-core'); ?></button></p>
     </form>
@@ -243,7 +243,7 @@ add_shortcode('easy_product_form', function () {
     if ($mine) {
         echo '<h3>' . esc_html__('Your listings', 'easy-core') . '</h3><ul>';
         foreach ($mine as $m) {
-            echo '<li>' . esc_html($m->post_title) . ' — ' . esc_html(ucfirst($m->post_status)) . '</li>';
+            echo '<li>' . esc_html($m->post_title) . ' - ' . esc_html(ucfirst($m->post_status)) . '</li>';
         }
         echo '</ul>';
     }

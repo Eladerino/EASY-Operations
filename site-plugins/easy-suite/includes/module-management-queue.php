@@ -43,20 +43,6 @@ function easy_mgmt_queue_notify_email() {
     return $email;
 }
 
-/**
- * One-time seed (runs on the 2.2.21 update): move the previously
- * hardcoded contact values into options so they live in the site's
- * database instead of the public repo.
- */
-function easy_mgmt_queue_seed_contact_options() {
-    if (get_option('easy_mgmt_queue_notify_email', null) === null) {
-        update_option('easy_mgmt_queue_notify_email', '***REMOVED***', false);
-    }
-    if (get_option('easy_resend_domain_connect_link', null) === null) {
-        update_option('easy_resend_domain_connect_link', '***REMOVED***', false);
-    }
-}
-
 /** Whether the current visitor may see the queue. Admins always may (to preview). */
 function easy_mgmt_queue_can_view() {
     if (!is_user_logged_in()) {
@@ -355,7 +341,6 @@ function easy_mgmt_queue_render_question($q, $saved) {
     $dep_attr = '';
     if (!empty($q['depends_on'])) {
         $dep_attr = ' data-depends-on="' . esc_attr($q['depends_on'][0]) . '" data-depends-val="' . esc_attr($q['depends_on'][1]) . '"';
-        $show = ($sel === $q['depends_on'][1] || ($sel === '' && false));
         // Shown/hidden by JS; initial state set inline.
         $dep_attr .= $sel === $q['depends_on'][1] ? '' : ' style="display:none"';
     }
@@ -454,6 +439,22 @@ function easy_mgmt_queue_handle_submit() {
     $all = easy_mgmt_queue_get_responses();
     $prev_answers = isset($all['answers']) ? $all['answers'] : [];
     $prev_decided = isset($all['decided']) ? (array) $all['decided'] : [];
+
+    // Dependent answers (e.g. the "own terms" textarea) are only kept when
+    // the parent question was answered with the matching choice — a hidden
+    // field submitted via devtools is discarded. Mirrors the display rule
+    // in easy_mgmt_queue_open_questions().
+    foreach (easy_mgmt_queue_questions() as $q) {
+        if (empty($q['depends_on'])) {
+            continue;
+        }
+        [$pkey, $pval] = $q['depends_on'];
+        $pans = isset($clean[$pkey]) ? $clean[$pkey] : (isset($prev_answers[$pkey]) ? $prev_answers[$pkey] : null);
+        $pchoice = (is_array($pans) && isset($pans['choice'])) ? $pans['choice'] : '';
+        if ($pchoice !== $pval) {
+            unset($clean[$q['key']]);
+        }
+    }
 
     // Merge new answers over previous; newly answered questions become decided
     // and clear from the queue.
@@ -766,7 +767,6 @@ function easy_mgmt_queue_shortcode() {
                 }
             }
             radios.forEach(function (r) { r.addEventListener('change', syncAll); });
-            if (otherInput) { otherInput.addEventListener('input', function () {}); }
         });
         function syncAll() {
             document.querySelectorAll('.emq-q').forEach(function (q) {
