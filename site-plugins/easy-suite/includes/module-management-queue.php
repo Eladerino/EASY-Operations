@@ -61,290 +61,221 @@ function easy_mgmt_queue_get_responses() {
     return is_array($saved) ? $saved : [];
 }
 
-/** Custom questions added by admins. Stored as a list of question arrays. */
-function easy_mgmt_queue_custom_questions() {
-    $saved = get_option('easy_mgmt_queue_custom_questions', []);
-    if (!is_array($saved)) {
-        return [];
+/**
+ * Question definitions. Stored in the database (wp_options), NOT in code:
+ * question text is internal business content. Each: key, section, label,
+ * why (context), type (radio|radio_other|textarea), num (display number),
+ * options[] for radio (each: value shown, note optional), info_html
+ * (optional reference HTML shown above the question), depends_on
+ * ([parent_key, parent_value]).
+ */
+function easy_mgmt_queue_questions() {
+    $questions = get_option('easy_mgmt_queue_questions', array());
+    if (!is_array($questions)) {
+        return array();
     }
-    $out = [];
-    foreach ($saved as $q) {
-        if (!is_array($q) || empty($q['key']) || empty($q['label'])) {
-            continue;
+    // Back-compat: fold in questions added under the old separate option.
+    $legacy = get_option('easy_mgmt_queue_custom_questions', array());
+    if (is_array($legacy) && !empty($legacy)) {
+        $keys = array();
+        foreach ($questions as $q) {
+            if (is_array($q) && !empty($q['key'])) {
+                $keys[] = $q['key'];
+            }
         }
-        $out[] = $q;
+        foreach ($legacy as $cq) {
+            if (is_array($cq) && !empty($cq['key']) && !empty($cq['label']) && !in_array($cq['key'], $keys, true)) {
+                $questions[] = $cq;
+            }
+        }
     }
-    return $out;
+    return array_values(array_filter($questions, function ($q) {
+        return is_array($q) && !empty($q['key']) && !empty($q['label']);
+    }));
+}
+
+/** Raw stored questions, including invalid ones (admin management). */
+function easy_mgmt_queue_all_stored_questions() {
+    $questions = get_option('easy_mgmt_queue_questions', array());
+    return is_array($questions) ? array_values($questions) : array();
+}
+
+function easy_mgmt_queue_next_num($questions) {
+    $num = 0;
+    foreach ($questions as $q) {
+        if (is_array($q) && !empty($q['num']) && (int) $q['num'] > $num) {
+            $num = (int) $q['num'];
+        }
+    }
+    return $num + 1;
 }
 
 /**
- * Question definitions. Each: key, number (for display), section, label,
- * why (context), type (radio|text|date|textarea), options[] for radio
- * (each: value shown, note optional), or placeholder for text/date.
+ * Validate and store a new question. Returns the question array on success,
+ * or an error message string on failure. Shared by the admin screen and REST.
  */
-function easy_mgmt_queue_questions() {
-    $questions = [
-        // ---- Terms of Service: starting point ----
-        [
-            'key'     => '***REMOVED***',
-            'section' => '***REMOVED***',
-            'label'   => '***REMOVED***',
-            'why'     => '***REMOVED***',
-            'type'    => 'radio',
-            'options' => [
-                ***REMOVED***
-                ***REMOVED***
-            ],
-        ],
-        [
-            'key'         => '***REMOVED***',
-            'section'     => '***REMOVED***',
-            'label'       => '***REMOVED***',
-            'why'         => '***REMOVED***',
-            'type'        => 'textarea',
-            'placeholder' => '***REMOVED***',
-            'depends_on'  => ['***REMOVED***', 'Yes'],
-        ],
-        // ---- Terms of Service: business details ----
-        [
-            'key'     => '***REMOVED***',
-            'num'     => 1,
-            'section' => '***REMOVED***',
-            'label'   => '***REMOVED***',
-            'why'     => '***REMOVED***',
-            'type'    => 'radio_other',
-            'options' => [
-                ['***REMOVED*** (name as currently written)', '***REMOVED***'],
-            ],
-            'other_placeholder' => '***REMOVED***',
-        ],
-        // ---- Cancellations ----
-        [
-            'key'     => '***REMOVED***',
-            'num'     => 2,
-            'section' => '***REMOVED***',
-            'label'   => '***REMOVED***',
-            'why'     => '***REMOVED***',
-            'type'    => 'radio_other',
-            'options' => [
-                ['***REMOVED***', ''],
-                ['***REMOVED***', ''],
-                ['***REMOVED***', '***REMOVED*** applies instead.'],
-            ],
-            'other_placeholder' => '***REMOVED***',
-        ],
-        [
-            ***REMOVED***
-            'num'     => 3,
-            'section' => '***REMOVED***',
-            'label'   => '***REMOVED***',
-            'why'     => '***REMOVED***',
-            'type'    => 'radio_other',
-            'options' => [
-                ['***REMOVED***', ''],
-                ['***REMOVED***', ''],
-                ['***REMOVED***', '***REMOVED***'],
-            ],
-            'other_placeholder' => '***REMOVED***',
-        ],
-        [
-            'key'     => '***REMOVED***',
-            'num'     => 4,
-            'section' => '***REMOVED***',
-            ***REMOVED***
-            'why'     => '***REMOVED***',
-            'type'    => 'radio_other',
-            'options' => [
-                ***REMOVED***
-                ['***REMOVED***', ''],
-            ],
-            'other_placeholder' => '***REMOVED***',
-        ],
-        [
-            'key'     => '***REMOVED***',
-            'num'     => 5,
-            'section' => '***REMOVED***',
-            'label'   => '***REMOVED***',
-            'why'     => '***REMOVED***',
-            'type'    => 'radio_other',
-            'options' => [
-                ['***REMOVED***', ''],
-            ],
-            'other_placeholder' => '',
-            'other_type'        => 'date',
-        ],
-        // ---- Privacy Policy ----
-        [
-            ***REMOVED***
-            'num'     => 6,
-            'section' => '***REMOVED***',
-            'label'   => '***REMOVED***',
-            'why'     => '***REMOVED***',
-            'type'    => 'radio_other',
-            'options' => [
-                ['***REMOVED***', ''],
-            ],
-            'other_placeholder' => '***REMOVED***',
-        ],
-        [
-            'key'     => '***REMOVED***',
-            'num'     => 7,
-            'section' => '***REMOVED***',
-            ***REMOVED***
-            'why'     => '***REMOVED***',
-            'type'    => 'radio_other',
-            'options' => [
-                ['***REMOVED***', ''],
-            ],
-            'other_placeholder' => '***REMOVED***',
-        ],
-        // ---- ***REMOVED*** ----
-        [
-            'key'     => '***REMOVED***',
-            'num'     => 8,
-            'section' => '***REMOVED***',
-            'label'   => '***REMOVED***',
-            'why'     => '***REMOVED***',
-            'type'    => 'radio_other',
-            'options' => [
-                ['***REMOVED***', '***REMOVED***'],
-            ],
-            'other_placeholder' => '***REMOVED***',
-            'other_type'        => 'email',
-        ],
-        [
-            'key'     => '***REMOVED***',
-            'num'     => 9,
-            'section' => '***REMOVED***',
-            'label'   => '***REMOVED***',
-            'why'     => '***REMOVED***',
-            'type'    => 'radio',
-            'options' => [
-                ['***REMOVED***', ''],
-                ['***REMOVED***', ''],
-            ],
-        ],
-        // ---- Pricing (for Dad) ----
-        [
-            'key'     => '***REMOVED***',
-            'num'     => 10,
-            'section' => '***REMOVED***',
-            'label'   => '***REMOVED***',
-            'why'     => '***REMOVED***',
-            'type'    => 'radio_other',
-            'options' => [
-                ***REMOVED***
-                ***REMOVED***
-                ***REMOVED***
-            ],
-            'other_placeholder' => '***REMOVED***',
-        ],
-        [
-            'key'     => '***REMOVED***',
-            'num'     => 11,
-            'section' => '***REMOVED***',
-            'label'   => '***REMOVED***',
-            'why'     => '***REMOVED***',
-            'type'    => 'radio_other',
-            'options' => [
-                ***REMOVED***
-                ***REMOVED***
-                ***REMOVED***
-            ],
-            'other_placeholder' => '***REMOVED***',
-        ],
-        [
-            'key'     => '***REMOVED***',
-            'num'     => 12,
-            'section' => '***REMOVED***',
-            'label'   => '***REMOVED***',
-            'why'     => '***REMOVED***',
-            'type'    => 'radio',
-            'options' => [
-                ['***REMOVED***', '***REMOVED***'],
-                ['***REMOVED***', ''],
-            ],
-        ],
-        // ---- Shop review ----
-        [
-            'key'     => '***REMOVED***',
-            'section' => '***REMOVED***',
-            'label'   => '***REMOVED***',
-            'why'     => '***REMOVED***',
-            'type'    => 'radio_other',
-            'options' => [
-                ['***REMOVED***', '***REMOVED***'],
-            ],
-            'other_placeholder' => '***REMOVED***',
-        ],
-    ];
-
-    // Append admin-added custom questions, numbered after the built-ins.
-    $num = 0;
-    foreach ($questions as $hq) {
-        if (!empty($hq['num']) && $hq['num'] > $num) {
-            $num = (int) $hq['num'];
+function easy_mgmt_queue_add_question($section, $label, $why, $type, $options, $info_html = '') {
+    $label = trim((string) $label);
+    if ($label === '') {
+        return 'Question text is required.';
+    }
+    if (!in_array($type, array('radio', 'radio_other', 'textarea'), true)) {
+        $type = 'radio';
+    }
+    $clean_options = array();
+    if ($type !== 'textarea' && is_array($options)) {
+        foreach ($options as $opt) {
+            $line = trim((string) (is_array($opt) ? $opt[0] : $opt));
+            if ($line !== '') {
+                $clean_options[] = array($line, '');
+            }
         }
     }
-    foreach (easy_mgmt_queue_custom_questions() as $cq) {
-        // Only numbered types get a number; textarea/info types do not.
-        if ($cq['type'] !== 'textarea') {
-            $num++;
-            $cq['num'] = $num;
-        }
-        $questions[] = $cq;
+    $questions = easy_mgmt_queue_all_stored_questions();
+    $q = array(
+        'key'     => 'custom_' . substr(md5($label . microtime(true)), 0, 12),
+        'section' => trim((string) $section) !== '' ? trim((string) $section) : 'Additional questions',
+        'label'   => $label,
+        'why'     => trim((string) $why),
+        'type'    => $type,
+        'options' => $clean_options,
+        'custom'  => true,
+    );
+    if ($type === 'radio_other') {
+        $q['other_placeholder'] = 'Type an alternative';
     }
-    return $questions;
+    if ($type !== 'textarea') {
+        $q['num'] = easy_mgmt_queue_next_num($questions);
+    }
+    $info_html = trim((string) $info_html);
+    if ($info_html !== '') {
+        $q['info_html'] = $info_html;
+    }
+    $questions[] = $q;
+    update_option('easy_mgmt_queue_questions', $questions, false);
+    return $q;
 }
 
-/** Pricing research reference table, shown above the forklift pricing questions. */
-function easy_mgmt_queue_pricing_research_html() {
-    $rows = [
-        ***REMOVED***
-        ***REMOVED***
-        ***REMOVED***
-        ***REMOVED***
-        ***REMOVED***
-        ***REMOVED***
-        ***REMOVED***
-        ***REMOVED***
-        ***REMOVED***
-        ***REMOVED***
-        ***REMOVED***
-        ***REMOVED***
-        ***REMOVED***
-        ***REMOVED***
-        ***REMOVED***
-    ];
-    ***REMOVED***
-        . '***REMOVED***'
-        . '***REMOVED***'
-        . '<div style="overflow-x:auto;"><table class="emq-price-table">'
-        . '<thead><tr><th>Provider</th><th>Price (CAD)</th><th>What it is</th></tr></thead><tbody>';
-    foreach ($rows as $r) {
-        $html .= '<tr><td><a href="' . esc_url($r[1]) . '" target="_blank" rel="noopener">' . esc_html($r[0]) . '</a></td>'
-            . '<td style="white-space:nowrap;">' . esc_html($r[2]) . '</td>'
-            . '<td>' . esc_html($r[3]) . '</td></tr>';
+/**
+ * Update an existing question's fields. Returns true on success,
+ * or an error message string on failure.
+ */
+function easy_mgmt_queue_update_question($key, $fields) {
+    $questions = easy_mgmt_queue_all_stored_questions();
+    $found = false;
+    foreach ($questions as &$q) {
+        if (!is_array($q) || ($q['key'] ?? '') !== $key) {
+            continue;
+        }
+        $found = true;
+        if (isset($fields['section'])) {
+            $section = trim((string) $fields['section']);
+            $q['section'] = $section !== '' ? $section : 'Additional questions';
+        }
+        if (isset($fields['label'])) {
+            $label = trim((string) $fields['label']);
+            if ($label === '') {
+                return 'Question text is required.';
+            }
+            $q['label'] = $label;
+        }
+        if (isset($fields['why'])) {
+            $q['why'] = trim((string) $fields['why']);
+        }
+        if (isset($fields['type']) && in_array($fields['type'], array('radio', 'radio_other', 'textarea'), true)) {
+            $q['type'] = $fields['type'];
+            if ($q['type'] === 'radio_other' && empty($q['other_placeholder'])) {
+                $q['other_placeholder'] = 'Type an alternative';
+            }
+            if ($q['type'] === 'textarea') {
+                unset($q['num']);
+            } elseif (empty($q['num'])) {
+                $q['num'] = easy_mgmt_queue_next_num($questions);
+            }
+        }
+        if (isset($fields['options']) && is_array($fields['options'])) {
+            $clean = array();
+            foreach ($fields['options'] as $opt) {
+                $line = trim((string) (is_array($opt) ? $opt[0] : $opt));
+                if ($line !== '') {
+                    $clean[] = array($line, '');
+                }
+            }
+            $q['options'] = $clean;
+        }
+        if (array_key_exists('info_html', $fields)) {
+            $info = trim((string) $fields['info_html']);
+            if ($info === '') {
+                unset($q['info_html']);
+            } else {
+                $q['info_html'] = $info;
+            }
+        }
     }
-    $html .= '</tbody></table></div>'
-        ***REMOVED***
-    return $html;
+    unset($q);
+    if (!$found) {
+        return 'Question not found.';
+    }
+    update_option('easy_mgmt_queue_questions', array_values($questions), false);
+    return true;
 }
+
+/**
+ * Delete a question and its saved answer, if any.
+ */
+function easy_mgmt_queue_delete_question($key) {
+    $questions = easy_mgmt_queue_all_stored_questions();
+    $questions = array_values(array_filter($questions, function ($q) use ($key) {
+        return !is_array($q) || ($q['key'] ?? '') !== $key;
+    }));
+    update_option('easy_mgmt_queue_questions', $questions, false);
+    $resp = easy_mgmt_queue_get_responses();
+    if (isset($resp['answers'][$key])) {
+        unset($resp['answers'][$key]);
+        $decided = isset($resp['decided']) ? (array) $resp['decided'] : array();
+        $resp['decided'] = array_values(array_diff($decided, array($key)));
+        update_option('easy_mgmt_queue_responses', $resp, false);
+    }
+    // Also drop it from the legacy custom-questions option if present there.
+    $legacy = get_option('easy_mgmt_queue_custom_questions', array());
+    if (is_array($legacy)) {
+        $legacy = array_values(array_filter($legacy, function ($q) use ($key) {
+            return !is_array($q) || ($q['key'] ?? '') !== $key;
+        }));
+        update_option('easy_mgmt_queue_custom_questions', $legacy, false);
+    }
+    return true;
+}
+
+
 
 /** Render one question. $saved = previously saved answer array for this key. */
-function easy_mgmt_queue_render_question($q, $saved) {
-    $key   = $q['key'];
-    $saved = is_array($saved) ? $saved : [];
-    $sel   = isset($saved['choice']) ? $saved['choice'] : '';
-    $other = isset($saved['other']) ? $saved['other'] : '';
+/** Render one question. $answers = full saved answers array (keyed by question key). */
+function easy_mgmt_queue_render_question($q, $answers) {
+    $key     = $q['key'];
+    $answers = is_array($answers) ? $answers : [];
+    $mine    = isset($answers[$key]) && is_array($answers[$key]) ? $answers[$key] : [];
+    $sel     = isset($mine['choice']) ? $mine['choice'] : '';
+    $other   = isset($mine['other']) ? $mine['other'] : '';
 
     $dep_attr = '';
     if (!empty($q['depends_on'])) {
-        $dep_attr = ' data-depends-on="' . esc_attr($q['depends_on'][0]) . '" data-depends-val="' . esc_attr($q['depends_on'][1]) . '"';
-        // Shown/hidden by JS; initial state set inline.
-        $dep_attr .= $sel === $q['depends_on'][1] ? '' : ' style="display:none"';
+        [$pkey, $pval] = $q['depends_on'];
+        $dep_attr = ' data-depends-on="' . esc_attr($pkey) . '" data-depends-val="' . esc_attr($pval) . '"';
+        $pans = isset($answers[$pkey]) && is_array($answers[$pkey]) ? $answers[$pkey] : null;
+        $pchoice = (is_array($pans) && isset($pans['choice'])) ? $pans['choice'] : '';
+        // open_questions() only includes a dependent when the decided parent's
+        // answer matches; then it renders visible. Otherwise it starts hidden
+        // and the JS toggles it against the on-page parent radios.
+        if ($pchoice !== $pval) {
+            $dep_attr .= ' style="display:none"';
+        }
     }
 
+    if (!empty($q['info_html'])) {
+        // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped — admin-entered reference HTML
+        echo '<div class="emq-info">' . $q['info_html'] . '</div>';
+    }
     echo '<div class="emq-q"' . $dep_attr . ' data-qkey="' . esc_attr($key) . '">';
     echo '<h3>';
     if (!empty($q['num'])) {
@@ -383,8 +314,8 @@ function easy_mgmt_queue_render_question($q, $saved) {
         }
         echo '</div>';
     } elseif ($type === 'textarea') {
-        $val = isset($saved['text']) ? $saved['text'] : '';
-        echo '<textarea class="emq-free-input" name="emq[' . esc_attr($key) . '][text]" placeholder="' . esc_attr($q['placeholder']) . '">' . esc_textarea($val) . '</textarea>';
+        $val = isset($mine['text']) ? $mine['text'] : '';
+        echo '<textarea class="emq-free-input" name="emq[' . esc_attr($key) . '][text]" placeholder="' . esc_attr($q['placeholder'] ?? '') . '">' . esc_textarea($val) . '</textarea>';
     }
     echo '</div>';
 }
@@ -457,8 +388,16 @@ function easy_mgmt_queue_handle_submit() {
     }
 
     // Merge new answers over previous; newly answered questions become decided
-    // and clear from the queue.
+    // and clear from the queue. Stamp who decided each question and when —
+    // the page and the REST feed show this per-question attribution.
     $merged = array_merge($prev_answers, $clean);
+    $now = current_time('mysql');
+    foreach ($clean as $ckey => &$cans) {
+        $cans['decided_by'] = $user->user_login;
+        $cans['decided_at'] = $now;
+        $merged[$ckey] = $cans;
+    }
+    unset($cans);
     $newly_decided = [];
     foreach ($clean as $key => $ans) {
         if (!in_array($key, $prev_decided, true)) {
@@ -501,8 +440,13 @@ function easy_mgmt_queue_handle_submit() {
         }
     }
 
-    // Redirect to avoid resubmission.
-    wp_safe_redirect(add_query_arg('emq_saved', '1', get_permalink()));
+    // Redirect to avoid resubmission. Pass the decided question key so the
+    // notice can name it (per-question saves).
+    $saved_arg = '1';
+    if (!empty($newly_decided)) {
+        $saved_arg = reset($newly_decided);
+    }
+    wp_safe_redirect(add_query_arg('emq_saved', $saved_arg, get_permalink()));
     exit;
 }
 add_action('template_redirect', 'easy_mgmt_queue_handle_submit');
@@ -601,7 +545,17 @@ function easy_mgmt_queue_shortcode() {
     $saved_all = easy_mgmt_queue_get_responses();
     $saved = isset($saved_all['answers']) ? $saved_all['answers'] : [];
     $decided = isset($saved_all['decided']) ? (array) $saved_all['decided'] : [];
-    $just_saved = isset($_GET['emq_saved']);
+    $just_saved = false;
+    if (isset($_GET['emq_saved'])) {
+        $saved_key = sanitize_key(wp_unslash($_GET['emq_saved']));
+        $just_saved = 'Answer saved. Brandon has been notified.';
+        foreach (easy_mgmt_queue_questions() as $qq) {
+            if (($qq['key'] ?? '') === $saved_key) {
+                $just_saved = 'Answer saved for "' . $qq['label'] . '". Brandon has been notified.';
+                break;
+            }
+        }
+    }
     $open = easy_mgmt_queue_open_questions();
     $total = count(easy_mgmt_queue_questions());
     $done_count = count($decided);
@@ -610,7 +564,7 @@ function easy_mgmt_queue_shortcode() {
     ?>
     <div class="emq-wrap">
         <h2>Management queue</h2>
-        ***REMOVED***
+        
         <p class="emq-progress"><strong><?php echo (int) $done_count; ?> of <?php echo (int) $total; ?></strong> decided.</p>
         <section class="emq-section">
             
@@ -620,30 +574,35 @@ function easy_mgmt_queue_shortcode() {
             ?>
         </section>
         <?php if ($just_saved): ?>
-            <div class="emq-notice">Decisions saved. Brandon has been notified.</div>
+            <div class="emq-notice"><?php echo esc_html($just_saved); ?></div>
         <?php endif; ?>
         <?php if (empty($open)): ?>
             <div class="emq-notice">All decisions are in. Thank you.</div>
         <?php else: ?>
-        <form method="post" action="">
-            <?php wp_nonce_field('emq_submit', 'emq_nonce'); ?>
             <?php
+            // One form per question: saving an answer only ever submits that
+            // question, so a stray selection elsewhere is never recorded.
             $last_section = null;
             foreach ($open as $q) {
-                if ($q['section'] !== $last_section) {
+                $section = $q['section'] ?? 'Questions';
+                if ($section !== $last_section) {
                     if ($last_section !== null) {
                         echo '</section>';
                     }
-                    echo '<section class="emq-section"><div class="emq-section-head"><h3>' . esc_html($q['section']) . '</h3></div>';
-                    if ($q['section'] === '***REMOVED***') {
-                        // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped — built with escaping above
-                        echo easy_mgmt_queue_pricing_research_html();
-                    }
-                    $last_section = $q['section'];
+                    echo '<section class="emq-section"><div class="emq-section-head"><h3>' . esc_html($section) . '</h3></div>';
+                    $last_section = $section;
                 }
-                easy_mgmt_queue_render_question($q, null);
+                ?>
+                <form method="post" action="" class="emq-qform">
+                    <?php wp_nonce_field('emq_submit', 'emq_nonce'); ?>
+                    <?php easy_mgmt_queue_render_question($q, $saved); ?>
+                    <button type="submit" class="emq-submit emq-save-one">Save this answer</button>
+                </form>
+                <?php
             }
-            echo '</section>';
+            if ($last_section !== null) {
+                echo '</section>';
+            }
             ?>
             <section class="emq-section">
                 
@@ -704,10 +663,8 @@ function easy_mgmt_queue_shortcode() {
                 <?php endif; ?>
             </section>
             <div class="emq-finish">
-                ***REMOVED***
-                <button type="submit" class="emq-submit">Submit decisions</button>
+                
             </div>
-        </form>
         <?php endif; ?>
     </div>
     <style>
@@ -743,6 +700,9 @@ function easy_mgmt_queue_shortcode() {
         .emq-finish { background: #fff; border: 1.5px solid #1e6b3c; border-radius: 12px; padding: 1.2rem; margin-top: 2rem; }
         .emq-submit { font: inherit; font-size: 1.05rem; font-weight: 700; color: #fff; background: #1e6b3c; border: none; border-radius: 10px; padding: 0.9rem 1.4rem; cursor: pointer; margin-top: 0.6rem; }
         .emq-submit:hover { filter: brightness(1.08); }
+        .emq-qform { margin: 0; }
+        .emq-save-one { font-size: 0.95rem; padding: 0.6rem 1.1rem; margin: 0 0 1.2rem; }
+        .emq-info { margin: 0 0 1rem; }
         .emq-action-btn { display: inline-block; font-size: 1.02rem; font-weight: 700; color: #ffffff; background: #1e6b3c; border-radius: 10px; padding: 0.85rem 1.2rem; text-decoration: none; margin-top: 0.4rem; }
         .emq-action-btn:hover { filter: brightness(1.08); color: #ffffff; }
     </style>
@@ -762,8 +722,13 @@ function easy_mgmt_queue_shortcode() {
                 if (depKey) {
                     var depVal = q.getAttribute('data-depends-val');
                     var depQ = document.querySelector('.emq-q[data-qkey="' + depKey + '"]');
-                    var depChecked = depQ ? depQ.querySelector('input[type="radio"]:checked') : null;
-                    q.style.display = (depChecked && depChecked.value === depVal) ? '' : 'none';
+                    if (depQ) {
+                        var depChecked = depQ.querySelector('input[type="radio"]:checked');
+                        q.style.display = (depChecked && depChecked.value === depVal) ? '' : 'none';
+                    }
+                    // No parent on the page: it is already decided, and the
+                    // server only shows this question when it applies, so
+                    // leave it visible.
                 }
             }
             radios.forEach(function (r) { r.addEventListener('change', syncAll); });
@@ -780,8 +745,13 @@ function easy_mgmt_queue_shortcode() {
                 if (depKey) {
                     var depVal = q.getAttribute('data-depends-val');
                     var depQ = document.querySelector('.emq-q[data-qkey="' + depKey + '"]');
-                    var depChecked = depQ ? depQ.querySelector('input[type="radio"]:checked') : null;
-                    q.style.display = (depChecked && depChecked.value === depVal) ? '' : 'none';
+                    if (depQ) {
+                        var depChecked = depQ.querySelector('input[type="radio"]:checked');
+                        q.style.display = (depChecked && depChecked.value === depVal) ? '' : 'none';
+                    }
+                    // No parent on the page: it is already decided, and the
+                    // server only shows this question when it applies, so
+                    // leave it visible.
                 }
             });
         }
@@ -803,61 +773,62 @@ function easy_mgmt_queue_admin_handle() {
     if (!current_user_can('manage_options')) {
         return;
     }
-    // Add a custom question.
+    // Add a question (stored in the database, not in code).
     if (isset($_POST['emq_add_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['emq_add_nonce'])), 'emq_add_question')) {
-        $label = isset($_POST['emq_new_label']) ? trim(sanitize_text_field(wp_unslash($_POST['emq_new_label']))) : '';
-        if ($label !== '') {
-            $section = isset($_POST['emq_new_section']) ? trim(sanitize_text_field(wp_unslash($_POST['emq_new_section']))) : '';
-            $why = isset($_POST['emq_new_why']) ? trim(sanitize_textarea_field(wp_unslash($_POST['emq_new_why']))) : '';
-            $type = isset($_POST['emq_new_type']) ? sanitize_key(wp_unslash($_POST['emq_new_type'])) : 'radio';
-            if (!in_array($type, ['radio', 'radio_other', 'textarea'], true)) {
-                $type = 'radio';
-            }
-            $options = [];
-            if ($type !== 'textarea' && isset($_POST['emq_new_options'])) {
-                foreach (preg_split('/[\r\n]+/', (string) wp_unslash($_POST['emq_new_options'])) as $line) {
-                    $line = trim(sanitize_text_field($line));
-                    if ($line !== '') {
-                        $options[] = [$line, ''];
-                    }
+        $options = array();
+        if (isset($_POST['emq_new_options'])) {
+            foreach (preg_split('/[\r\n]+/', (string) wp_unslash($_POST['emq_new_options'])) as $line) {
+                $line = trim(sanitize_text_field($line));
+                if ($line !== '') {
+                    $options[] = $line;
                 }
             }
-            $key = 'custom_' . substr(md5($label . microtime(true)), 0, 12);
-            $q = [
-                'key'     => $key,
-                'section' => $section !== '' ? $section : 'Additional questions',
-                'label'   => $label,
-                'why'     => $why,
-                'type'    => $type,
-                'options' => $options,
-                'custom'  => true,
-            ];
-            if ($type === 'radio_other') {
-                $q['other_placeholder'] = 'Type an alternative';
-            }
-            $all = easy_mgmt_queue_custom_questions();
-            // easy_mgmt_queue_custom_questions filters invalid ones; keep raw here.
-            $raw = get_option('easy_mgmt_queue_custom_questions', []);
-            $raw = is_array($raw) ? $raw : [];
-            $raw[] = $q;
-            update_option('easy_mgmt_queue_custom_questions', $raw, false);
+        }
+        $result = easy_mgmt_queue_add_question(
+            isset($_POST['emq_new_section']) ? sanitize_text_field(wp_unslash($_POST['emq_new_section'])) : '',
+            isset($_POST['emq_new_label']) ? sanitize_text_field(wp_unslash($_POST['emq_new_label'])) : '',
+            isset($_POST['emq_new_why']) ? sanitize_textarea_field(wp_unslash($_POST['emq_new_why'])) : '',
+            isset($_POST['emq_new_type']) ? sanitize_key(wp_unslash($_POST['emq_new_type'])) : 'radio',
+            $options,
+            isset($_POST['emq_new_info']) ? wp_kses_post(wp_unslash($_POST['emq_new_info'])) : ''
+        );
+        if (is_string($result)) {
+            add_settings_error('emq_admin', 'emq_add_failed', $result, 'error');
+        } else {
             add_settings_error('emq_admin', 'emq_added', 'Question added.', 'success');
         }
     }
-    // Delete a custom question (and its saved answer, if any).
+    // Edit a question.
+    if (isset($_POST['emq_edit_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['emq_edit_nonce'])), 'emq_edit_question')) {
+        $edit_key = isset($_POST['emq_edit_key']) ? sanitize_key(wp_unslash($_POST['emq_edit_key'])) : '';
+        $options = array();
+        if (isset($_POST['emq_edit_options'])) {
+            foreach (preg_split('/[\r\n]+/', (string) wp_unslash($_POST['emq_edit_options'])) as $line) {
+                $line = trim(sanitize_text_field($line));
+                if ($line !== '') {
+                    $options[] = $line;
+                }
+            }
+        }
+        $result = easy_mgmt_queue_update_question($edit_key, array(
+            'section'   => isset($_POST['emq_edit_section']) ? sanitize_text_field(wp_unslash($_POST['emq_edit_section'])) : '',
+            'label'     => isset($_POST['emq_edit_label']) ? sanitize_text_field(wp_unslash($_POST['emq_edit_label'])) : '',
+            'why'       => isset($_POST['emq_edit_why']) ? sanitize_textarea_field(wp_unslash($_POST['emq_edit_why'])) : '',
+            'type'      => isset($_POST['emq_edit_type']) ? sanitize_key(wp_unslash($_POST['emq_edit_type'])) : 'radio',
+            'options'   => $options,
+            'info_html' => isset($_POST['emq_edit_info']) ? wp_kses_post(wp_unslash($_POST['emq_edit_info'])) : '',
+        ));
+        if ($result === true) {
+            add_settings_error('emq_admin', 'emq_edited', 'Question updated.', 'success');
+        } else {
+            add_settings_error('emq_admin', 'emq_edit_failed', is_string($result) ? $result : 'Could not update the question.', 'error');
+        }
+    }
+    // Delete a question (and its saved answer, if any).
     if (isset($_POST['emq_del_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['emq_del_nonce'])), 'emq_del_question')) {
         $del_key = isset($_POST['emq_del_key']) ? sanitize_key(wp_unslash($_POST['emq_del_key'])) : '';
         if ($del_key !== '') {
-            $raw = get_option('easy_mgmt_queue_custom_questions', []);
-            $raw = is_array($raw) ? array_values(array_filter($raw, function ($q) use ($del_key) {
-                return !is_array($q) || ($q['key'] ?? '') !== $del_key;
-            })) : [];
-            update_option('easy_mgmt_queue_custom_questions', $raw, false);
-            $resp = easy_mgmt_queue_get_responses();
-            if (isset($resp['answers'][$del_key])) {
-                unset($resp['answers'][$del_key]);
-                update_option('easy_mgmt_queue_responses', $resp, false);
-            }
+            easy_mgmt_queue_delete_question($del_key);
             add_settings_error('emq_admin', 'emq_deleted', 'Question deleted.', 'success');
         }
     }
@@ -873,6 +844,7 @@ function easy_mgmt_queue_admin_handle() {
         }
     }
 }
+
 
 function easy_mgmt_queue_format_answer($q, $a) {
     if (!is_array($a)) {
@@ -914,12 +886,19 @@ function easy_mgmt_queue_admin_page() {
     } else {
         echo '<p>Submitted by <strong>' . esc_html($responses['submitted_by'] ?? '?') . '</strong> at ' . esc_html($responses['submitted_at'] ?? '?') . ' (site time). '
             . count($decided) . ' of ' . count($questions) . ' decided.</p>';
-        echo '<table class="widefat striped"><thead><tr><th style="width:35%">Question</th><th>Answer</th><th style="width:12%">Status</th><th style="width:10%"></th></tr></thead><tbody>';
+        echo '<table class="widefat striped"><thead><tr><th style="width:30%">Question</th><th>Answer</th><th style="width:14%">Decided by</th><th style="width:10%">Status</th><th style="width:10%"></th></tr></thead><tbody>';
         foreach ($questions as $q) {
             $label = (!empty($q['num']) ? $q['num'] . '. ' : '') . $q['label'];
             $ans = isset($answers[$q['key']]) ? easy_mgmt_queue_format_answer($q, $answers[$q['key']]) : '(skipped)';
             $is_decided = in_array($q['key'], $decided, true);
-            echo '<tr><td>' . esc_html($label) . '</td><td>' . esc_html($ans) . '</td>';
+            $by = '?';
+            if ($is_decided) {
+                $a = isset($answers[$q['key']]) && is_array($answers[$q['key']]) ? $answers[$q['key']] : array();
+                $who = isset($a['decided_by']) ? $a['decided_by'] : ($responses['submitted_by'] ?? '?');
+                $when = isset($a['decided_at']) ? $a['decided_at'] : ($responses['submitted_at'] ?? '');
+                $by = esc_html($who) . ($when !== '' ? '<br><span style="color:#666">' . esc_html($when) . '</span>' : '');
+            }
+            echo '<tr><td>' . esc_html($label) . '</td><td>' . esc_html($ans) . '</td><td>' . ($is_decided ? $by : '<span style="color:#8a6d1a">—</span>') . '</td>';
             echo '<td>' . ($is_decided ? '<span style="color:#1e6b3c;font-weight:600">Decided</span>' : '<span style="color:#8a6d1a">Open</span>') . '</td>';
             echo '<td>';
             if ($is_decided) {
@@ -934,22 +913,61 @@ function easy_mgmt_queue_admin_page() {
         echo '</tbody></table>';
     }
 
-    // --- Custom questions ---
-    echo '<h2>Custom questions</h2>';
-    $custom = easy_mgmt_queue_custom_questions();
-    if (empty($custom)) {
-        echo '***REMOVED***';
+    // --- Questions (all stored in the database) ---
+    echo '<h2>Questions</h2>';
+    echo '<p>Questions live in the site database, not in the plugin code. Editing a question keeps its saved answer.</p>';
+    $stored = easy_mgmt_queue_all_stored_questions();
+    $edit_key = isset($_GET['emq_edit']) ? sanitize_key(wp_unslash($_GET['emq_edit'])) : '';
+    $edit_q = null;
+    if ($edit_key !== '') {
+        foreach ($stored as $sq) {
+            if (is_array($sq) && ($sq['key'] ?? '') === $edit_key) {
+                $edit_q = $sq;
+                break;
+            }
+        }
+    }
+    if (empty($stored)) {
+        echo '<p><em>No questions yet. Add the first one below.</em></p>';
     } else {
-        echo '<table class="widefat striped"><thead><tr><th>Question</th><th>Section</th><th>Type</th><th></th></tr></thead><tbody>';
-        foreach ($custom as $cq) {
-            echo '<tr><td>' . esc_html($cq['label']) . '</td><td>' . esc_html($cq['section']) . '</td><td>' . esc_html($cq['type']) . '</td>';
-            echo '<td><form method="post" action="" style="margin:0">';
+        echo '<table class="widefat striped"><thead><tr><th style="width:6%">No.</th><th>Question</th><th>Section</th><th>Type</th><th style="width:16%"></th></tr></thead><tbody>';
+        foreach ($stored as $sq) {
+            $qlabel = (!empty($sq['num']) ? $sq['num'] . '. ' : '') . ($sq['label'] ?? '(untitled)');
+            echo '<tr><td>' . esc_html(!empty($sq['num']) ? (string) (int) $sq['num'] : '—') . '</td>';
+            echo '<td>' . esc_html($qlabel) . '</td><td>' . esc_html($sq['section'] ?? '') . '</td><td>' . esc_html($sq['type'] ?? '') . '</td>';
+            echo '<td><a class="button button-small" href="' . esc_url(add_query_arg('emq_edit', $sq['key'])) . '">Edit</a> ';
+            echo '<form method="post" action="" style="display:inline;margin:0">';
             wp_nonce_field('emq_del_question', 'emq_del_nonce');
-            echo '<input type="hidden" name="emq_del_key" value="' . esc_attr($cq['key']) . '">';
-            echo '<button type="submit" class="button button-link-delete" onclick="return confirm(\'Delete this question and its saved answer?\')">Delete</button>';
+            echo '<input type="hidden" name="emq_del_key" value="' . esc_attr($sq['key']) . '">';
+            echo '<button type="submit" class="button button-small button-link-delete" onclick="return confirm(\'Delete this question and its saved answer?\')">Delete</button>';
             echo '</form></td></tr>';
         }
         echo '</tbody></table>';
+    }
+
+    if ($edit_q) {
+        echo '<h3>Edit question</h3>';
+        echo '<form method="post" action="">';
+        wp_nonce_field('emq_edit_question', 'emq_edit_nonce');
+        echo '<input type="hidden" name="emq_edit_key" value="' . esc_attr($edit_q['key']) . '">';
+        echo '<table class="form-table"><tbody>';
+        echo '<tr><th scope="row"><label for="emq_edit_section">Section heading</label></th><td><input type="text" id="emq_edit_section" name="emq_edit_section" class="regular-text" value="' . esc_attr($edit_q['section'] ?? '') . '"></td></tr>';
+        echo '<tr><th scope="row"><label for="emq_edit_label">Question</label></th><td><input type="text" id="emq_edit_label" name="emq_edit_label" class="large-text" value="' . esc_attr($edit_q['label'] ?? '') . '" required></td></tr>';
+        echo '<tr><th scope="row"><label for="emq_edit_why">Context / help text</label></th><td><textarea id="emq_edit_why" name="emq_edit_why" rows="3" class="large-text">' . esc_textarea($edit_q['why'] ?? '') . '</textarea></td></tr>';
+        echo '<tr><th scope="row"><label for="emq_edit_type">Answer type</label></th><td><select id="emq_edit_type" name="emq_edit_type">';
+        foreach (array('radio' => 'Multiple choice', 'radio_other' => 'Multiple choice + write-in', 'textarea' => 'Free text') as $tv => $tlabel) {
+            echo '<option value="' . esc_attr($tv) . '"' . (($edit_q['type'] ?? '') === $tv ? ' selected' : '') . '>' . esc_html($tlabel) . '</option>';
+        }
+        echo '</select></td></tr>';
+        $opt_lines = array();
+        foreach ((array) ($edit_q['options'] ?? array()) as $opt) {
+            $opt_lines[] = is_array($opt) ? $opt[0] : $opt;
+        }
+        echo '<tr><th scope="row"><label for="emq_edit_options">Choices</label></th><td><textarea id="emq_edit_options" name="emq_edit_options" rows="5" class="large-text code" placeholder="One choice per line">' . esc_textarea(implode("\n", $opt_lines)) . '</textarea><p class="description">One choice per line. Only used for multiple-choice types.</p></td></tr>';
+        echo '<tr><th scope="row"><label for="emq_edit_info">Reference HTML</label></th><td><textarea id="emq_edit_info" name="emq_edit_info" rows="4" class="large-text code" placeholder="Optional HTML shown above the question">' . esc_textarea($edit_q['info_html'] ?? '') . '</textarea><p class="description">Optional. Shown above the question on the queue page.</p></td></tr>';
+        echo '</tbody></table>';
+        submit_button('Save changes');
+        echo '</form>';
     }
 
     echo '<h3>Add a question</h3>';
@@ -965,7 +983,117 @@ function easy_mgmt_queue_admin_page() {
         . '<option value="textarea">Free text</option>'
         . '</select></td></tr>';
     echo '<tr><th scope="row"><label for="emq_new_options">Choices</label></th><td><textarea id="emq_new_options" name="emq_new_options" rows="5" class="large-text code" placeholder="One choice per line"></textarea><p class="description">One choice per line. Only used for multiple-choice types.</p></td></tr>';
+    echo '<tr><th scope="row"><label for="emq_new_info">Reference HTML</label></th><td><textarea id="emq_new_info" name="emq_new_info" rows="4" class="large-text code" placeholder="Optional HTML shown above the question"></textarea><p class="description">Optional. Shown above the question on the queue page.</p></td></tr>';
     echo '</tbody></table>';
     submit_button('Add question');
     echo '</form></div>';
 }
+
+/* ------------------------------------------------------------------
+ * REST: management-queue feed + question management (companion app).
+ * Admin-only: answers contain business decisions.
+ * ------------------------------------------------------------------ */
+
+function easy_mgmt_queue_rest_can_read() {
+    return is_user_logged_in() && current_user_can('manage_options');
+}
+
+function easy_mgmt_queue_rest_get() {
+    $all = easy_mgmt_queue_get_responses();
+    $answers = isset($all['answers']) && is_array($all['answers']) ? $all['answers'] : array();
+    $decided = isset($all['decided']) ? (array) $all['decided'] : array();
+
+    $summarize = function ($q) use ($answers, $decided, $all) {
+        $item = array(
+            'key'     => $q['key'],
+            'section' => isset($q['section']) ? $q['section'] : '',
+            'label'   => $q['label'],
+            'type'    => $q['type'],
+        );
+        if (!empty($q['options'])) {
+            $item['options'] = array_map(function ($opt) {
+                return is_array($opt) ? $opt[0] : $opt;
+            }, $q['options']);
+        }
+        if (in_array($q['key'], $decided, true)) {
+            $item['decided'] = true;
+            $ans = isset($answers[$q['key']]) && is_array($answers[$q['key']]) ? $answers[$q['key']] : array();
+            $item['answer'] = easy_mgmt_queue_format_answer($q, $ans);
+            // Per-question attribution; falls back to the last submitter for
+            // answers decided before attribution was tracked.
+            $item['decided_by'] = isset($ans['decided_by']) ? $ans['decided_by'] : (isset($all['submitted_by']) ? $all['submitted_by'] : null);
+            $item['decided_at'] = isset($ans['decided_at']) ? $ans['decided_at'] : (isset($all['submitted_at']) ? $all['submitted_at'] : null);
+        } else {
+            $item['decided'] = false;
+        }
+        return $item;
+    };
+
+    // Open list mirrors the page: undecided, visible questions only
+    // (dependent questions stay hidden until their parent is decided).
+    $open = array_map($summarize, easy_mgmt_queue_open_questions());
+
+    $decided_out = array();
+    foreach (easy_mgmt_queue_questions() as $q) {
+        if (in_array($q['key'], $decided, true)) {
+            $decided_out[] = $summarize($q);
+        }
+    }
+
+    return array(
+        'open'    => array_values($open),
+        'decided' => $decided_out,
+        'counts'  => array(
+            'open'    => count($open),
+            'decided' => count($decided_out),
+            'total'   => count($open) + count($decided_out),
+        ),
+        'last_activity' => array(
+            'by' => isset($all['submitted_by']) ? $all['submitted_by'] : null,
+            'at' => isset($all['submitted_at']) ? $all['submitted_at'] : null,
+        ),
+    );
+}
+
+/**
+ * POST /easy/v1/management-queue/questions — add a queue question (admin).
+ * JSON body: { section, label, why, type: radio|radio_other|textarea,
+ *              options: ["a","b"], info_html }.
+ */
+function easy_mgmt_queue_rest_add_question($request) {
+    $params = $request->get_json_params();
+    if (!is_array($params)) {
+        $params = array();
+    }
+    $info_html = '';
+    if (isset($params['info_html'])) {
+        // Same treatment as the admin form: admins may include HTML,
+        // limited to the tags WordPress allows in post content.
+        $info_html = wp_kses_post((string) $params['info_html']);
+    }
+    $result = easy_mgmt_queue_add_question(
+        isset($params['section']) ? $params['section'] : '',
+        isset($params['label']) ? $params['label'] : '',
+        isset($params['why']) ? $params['why'] : '',
+        isset($params['type']) ? $params['type'] : 'radio',
+        isset($params['options']) ? $params['options'] : array(),
+        $info_html
+    );
+    if (is_string($result)) {
+        return new WP_Error('easy_mgmt_queue_bad_question', $result, array('status' => 400));
+    }
+    return array('question' => $result);
+}
+
+add_action('rest_api_init', function () {
+    register_rest_route('easy/v1', '/management-queue', array(
+        'methods'             => 'GET',
+        'callback'            => 'easy_mgmt_queue_rest_get',
+        'permission_callback' => 'easy_mgmt_queue_rest_can_read',
+    ));
+    register_rest_route('easy/v1', '/management-queue/questions', array(
+        'methods'             => 'POST',
+        'callback'            => 'easy_mgmt_queue_rest_add_question',
+        'permission_callback' => 'easy_mgmt_queue_rest_can_read',
+    ));
+});
