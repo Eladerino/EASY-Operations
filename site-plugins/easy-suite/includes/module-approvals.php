@@ -215,7 +215,21 @@ function easy_approvals_reject($request) {
         return $user;
     }
     $id = $user->ID;
-    update_user_meta($id, 'account_status', 'rejected');
+
+    // Prefer UltimateMember's own routine so its emails/hooks fire;
+    // fall back to a direct meta update if UM is unavailable.
+    $done = false;
+    if (function_exists('um_fetch_user')) {
+        um_fetch_user($id);
+        $um_user = UM()->user();
+        if (is_object($um_user) && method_exists($um_user, 'reject')) {
+            $um_user->reject();
+            $done = true;
+        }
+    }
+    if (!$done) {
+        update_user_meta($id, 'account_status', 'rejected');
+    }
     easy_approvals_clear_um_cache($id);
     return ['ok' => true, 'id' => $id, 'status' => 'rejected'];
 }

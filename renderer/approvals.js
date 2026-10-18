@@ -153,7 +153,7 @@
         if (!probe.canReview) {
           const banner = $('approvPermBanner');
           banner.textContent = probe.missing
-            ? 'The approvals snippet is not installed on the site yet. Ask an admin to install the EASY Approvals Bridge plugin, then reopen this tab.'
+            ? 'The approvals feature is not active on the site yet. Ask an admin to install or update the EASY Suite plugin, then reopen this tab.'
             : 'This WordPress account cannot review new accounts. An admin needs to grant it user-management rights (promote_users).';
           banner.classList.remove('hidden');
           return;

@@ -459,6 +459,10 @@ const WHATS_NEW_FILE = () => path.join(app.getPath('userData'), 'whats-new.json'
 // Keep notes short and plain-language: Pam reads these. Nothing
 // business-internal here — instructors see these notes too.
 const WHATS_NEW_NOTES = {
+  '1.2.5': [
+    'Fixed: rejecting an account request now follows the website\'s own steps instead of skipping them.',
+    'Fixed: a clearer message when the saved login stops working, and the Approvals tab no longer mentions the old bridge plugin.',
+  ],
   '1.2.4': [
     'Fixed: the student list can no longer be accidentally overwritten when a seat sells online while it is open. You will see the fresh list and can try again.',
     'Fixed: students who paid online can only be removed by cancelling or refunding the order.',
@@ -600,9 +604,17 @@ ipcMain.handle('test-connection', async (_event, args = {}) => {
     return { ok: false, error: 'Site URL, username and application password are all required.' };
   }
   try {
-    const res = await fetch(`${base}/wp-json/wp/v2/users/me`, {
+    // Edit context includes the capabilities field (used as the upload
+    // fallback below). Some limited accounts cannot use edit context, so
+    // fall back to the plain call instead of failing setup for them.
+    let res = await fetch(`${base}/wp-json/wp/v2/users/me?context=edit`, {
       headers: { Authorization: basicAuth({ user, appPassword }) },
     });
+    if (res.status === 401 || res.status === 403) {
+      res = await fetch(`${base}/wp-json/wp/v2/users/me`, {
+        headers: { Authorization: basicAuth({ user, appPassword }) },
+      });
+    }
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
       if (res.status === 401 || res.status === 403) {
@@ -1793,7 +1805,12 @@ async function downloadCertPdf(config, numId, prefix = 'reprint') {
   const headers = { Authorization: basicAuth(auth) };
   const certRes = await fetch(`${base}/wp-json/wp/v2/cert/${numId}?_fields=acf`, { headers });
   const certJson = await certRes.json().catch(() => ({}));
-  if (!certRes.ok) throw new Error('Could not read this certificate.');
+  if (!certRes.ok) {
+    if (certRes.status === 401 || certRes.status === 403) {
+      throw new Error('The saved WordPress login no longer works. The application password may have been revoked. Re-run Setup to sign in again.');
+    }
+    throw new Error('Could not read this certificate.');
+  }
   const acf = certJson && certJson.acf;
   const ref = resolvePdfRef(acf);
   if (!ref) throw new Error('No PDF is attached to this certificate yet.');
