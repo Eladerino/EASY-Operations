@@ -609,6 +609,11 @@ function easy_licenses_redeem($user_id, $input) {
     if ((string) $locked === '0') {
         return new WP_Error('easy_key_busy', 'Another try from your account is still going. Please try again in a moment.', ['status' => 429]);
     }
+    if ((string) $locked !== '1') {
+        // GET_LOCK returned NULL (an error): fail closed rather than running
+        // without the lock and voiding the concurrency guarantee.
+        return new WP_Error('easy_key_lock_error', 'Something went wrong on our end. Please try again in a moment.', ['status' => 500]);
+    }
     try {
         return easy_licenses_redeem_one($user_id, $input);
     } finally {

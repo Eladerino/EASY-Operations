@@ -127,7 +127,7 @@
     } else {
       cb.checked = false;
       cb.disabled = true;
-      if (small) small.textContent = 'No card printer configured \u2014 open Setup to set one.';
+      if (small) small.textContent = 'No card printer configured: open Setup to set one.';
     }
   }
 
@@ -149,7 +149,7 @@
     const note = document.createElement('div');
     note.id = 'instructorProxyNote';
     note.className = 'lock-note';
-    note.textContent = 'You can post for another instructor \u2014 enter their name and email.';
+    note.textContent = 'You can post for another instructor: enter their name and email.';
     $('instructorEmailError').after(note);
   }
 

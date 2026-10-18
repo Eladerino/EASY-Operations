@@ -235,7 +235,7 @@
       if (parent) names.push(decodeEntities(parent.name));
       if (child) names.push(decodeEntities(child.name));
       if (!names.length) {
-        line.textContent = 'No matching site category — the class will file under none.';
+        line.textContent = 'No matching site category, so the class will not be filed under one.';
         line.classList.remove('hidden');
         return;
       }
@@ -724,7 +724,15 @@
     $('evStudents').classList.add('hidden');
   }
 
-  function openEventModal({ date, courseLabel, courseValue, event } = {}) {
+  async function openEventModal({ date, courseLabel, courseValue, event } = {}) {
+    // Reference data loads at init, but a transient failure there left the
+    // editor's dropdowns empty for the whole session. Retry here so opening
+    // the editor heals itself (ensureReferenceData skips caches already filled).
+    if (!venueCache.length || !organizerCache.length || !categoryCache.length) {
+      await ensureReferenceData();
+      fillVenueSelect(venueCache, null);
+      fillOrganizerSelect(organizerCache, null);
+    }
     resetModal();
     if (event) {
       // Edit mode: keep the event's existing categories unless the course changes.
@@ -762,7 +770,12 @@
       const matchedCourse = matchCourseForEvent(event);
       if (matchedCourse) {
         $('evCourse').value = matchedCourse;
-        modalCategoryIds = resolveCourseCategories(matchedCourse).ids;
+        // Merge the course's categories with the event's existing ones so
+        // manually-added site categories are never silently dropped.
+        const merged = new Set();
+        for (const id of (event.categoryIds || [])) merged.add(Number(id));
+        for (const id of resolveCourseCategories(matchedCourse).ids) merged.add(Number(id));
+        modalCategoryIds = [...merged].filter((id) => id);
       }
       updateCategoryLine();
     } else {
@@ -848,7 +861,7 @@
     if (!editingId) return;
     const yes = await schedConfirm(
       'Delete this class?',
-      'The class is moved to the trash on the website (recoverable in wp-admin). This cannot be undone from here. Classes with sold seats cannot be deleted.',
+      'The class is moved to the trash on the website (you can restore it from the trash there if you change your mind). This cannot be undone from here. Classes with sold seats cannot be deleted.',
       'Delete'
     );
     if (!yes) return;

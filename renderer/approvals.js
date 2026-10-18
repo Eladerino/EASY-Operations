@@ -97,8 +97,8 @@
       rejectBtn.type = 'button';
       rejectBtn.className = 'btn btn-secondary btn-small';
       rejectBtn.textContent = 'Reject';
-      approveBtn.addEventListener('click', () => decide(u, 'approve'));
-      rejectBtn.addEventListener('click', () => decide(u, 'reject'));
+      approveBtn.addEventListener('click', (e) => decide(u, 'approve', e.currentTarget));
+      rejectBtn.addEventListener('click', (e) => decide(u, 'reject', e.currentTarget));
       actions.appendChild(approveBtn);
       actions.appendChild(rejectBtn);
 
@@ -108,13 +108,14 @@
     }
   }
 
-  async function decide(user, action) {
+  async function decide(user, action, btn) {
     const label = action === 'approve' ? 'Approve' : 'Reject';
     const detail = action === 'approve'
       ? `${user.name || user.email} will be able to log in to the site.`
       : `${user.name || user.email} will be blocked from logging in.`;
     const yes = await confirmDialog(`${label} this account?`, detail, label);
     if (!yes) return;
+    if (btn) btn.disabled = true;
     try {
       const res = await api()[action](user.id);
       if (!res.ok) throw new Error(res.error || `${label} failed.`);
@@ -122,6 +123,8 @@
       await loadQueue();
     } catch (err) {
       toast(`Could not ${action} the account: ${err.message}`, 'error', 8000);
+    } finally {
+      if (btn) btn.disabled = false;
     }
   }
 

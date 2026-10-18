@@ -159,7 +159,7 @@
       pubBtn.type = 'button';
       pubBtn.className = 'btn btn-primary btn-small';
       pubBtn.textContent = 'Publish';
-      pubBtn.addEventListener('click', () => publishClass(ev));
+      pubBtn.addEventListener('click', (e) => publishClass(ev, e.currentTarget));
       actions.appendChild(editBtn);
       actions.appendChild(calBtn);
       actions.appendChild(pubBtn);
@@ -182,13 +182,14 @@
     }
   }
 
-  async function publishClass(ev) {
+  async function publishClass(ev, btn) {
     const yes = await confirmDialog(
       'Publish this class?',
       `"${ev.title}" on ${ev.startDate} will become visible on the site.`,
       'Publish'
     );
     if (!yes) return;
+    if (btn) btn.disabled = true;
     try {
       const res = await api().updateEvent(ev.id, { status: 'publish' });
       if (!res.ok) throw new Error(res.error || 'Publish failed.');
@@ -203,6 +204,8 @@
       if (window.EasySchedule) window.EasySchedule.refreshCalendar();
     } catch (err) {
       toast(`Could not publish the class: ${err.message}`, 'error', 8000);
+    } finally {
+      if (btn) btn.disabled = false;
     }
   }
 

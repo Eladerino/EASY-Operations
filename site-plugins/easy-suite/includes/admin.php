@@ -371,7 +371,7 @@ function easy_suite_settings_page() {
 
         $users = [];
         foreach (preg_split('/[\s,]+/', (string) wp_unslash($_POST['easy_product_users'] ?? '')) as $u) {
-            $u = sanitize_user($u, true);
+            $u = strtolower(sanitize_user($u, true));
             if ($u !== '') {
                 $users[] = $u;
             }

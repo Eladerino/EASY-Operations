@@ -27,8 +27,8 @@
 
   const inquiries = [
     { id: 1, student: 'Jenna Clarke', course: 'MEWP', when: '2 hours ago', question: 'Does the pre-start inspection checklist differ for electric vs diesel lifts?' },
-    { id: 2, student: 'Dave Mercer', course: 'MEWP', when: '5 hours ago', question: 'The module says three points of contact \u2014 does that apply getting off the platform too?' },
-    { id: 3, student: 'Aisha Rahman', course: 'Confined Space Rescue', when: 'yesterday', question: 'Stuck on the ventilation calculation in module 4 \u2014 the numbers don\u2019t match mine.' },
+    { id: 2, student: 'Dave Mercer', course: 'MEWP', when: '5 hours ago', question: 'The module says three points of contact. Does that apply getting off the platform too?' },
+    { id: 3, student: 'Aisha Rahman', course: 'Confined Space Rescue', when: 'yesterday', question: 'Stuck on the ventilation calculation in module 4: the numbers don\u2019t match mine.' },
   ];
 
   const toBook = [
@@ -170,7 +170,7 @@
 
   function openReplyModal(q) {
     replyTarget = q;
-    $('replyTo').value = `${q.student} \u2014 ${q.course}`;
+    $('replyTo').value = `${q.student}, ${q.course}`;
     $('replyQuestion').textContent = `\u201C${q.question}\u201D`;
     $('replyBody').value = '';
     $('replyModal').classList.remove('hidden');
@@ -266,7 +266,7 @@
 
   function openBookModal(p) {
     bookingTarget = p;
-    $('bookStudentName').value = `${p.student} \u2014 ${p.course}`;
+    $('bookStudentName').value = `${p.student}, ${p.course}`;
     $('bookDate').value = '';
     $('bookTime').value = '09:00';
     $('bookLocation').value = 'EASY Training Room';

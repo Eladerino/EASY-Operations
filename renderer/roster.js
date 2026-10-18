@@ -159,7 +159,7 @@
     xBtn.textContent = '×';
     xBtn.title = 'Remove student';
     xBtn.setAttribute('aria-label', `Remove ${name}`);
-    xBtn.addEventListener('click', () => removeStudent(index));
+    xBtn.addEventListener('click', (e) => removeStudent(index, e.currentTarget));
     chip.appendChild(xBtn);
 
     return chip;
@@ -237,20 +237,32 @@
 
   /* ---------------- delete ---------------- */
 
-  async function removeStudent(index) {
+  async function removeStudent(index, btn) {
     const student = roster[index];
     if (!student) return;
     const name = String(student.name || '').trim() || 'this student';
+    // Online buyers manage themselves through their order: the server
+    // rejects removing checkout records anyway, so say so up front in
+    // plain language instead of offering a confirm that cannot work.
+    if (student.source === 'checkout') {
+      rosterError('This student paid online. Cancel or refund their order on the website to remove them.');
+      return;
+    }
     const confirm = window.EasySchedule && window.EasySchedule.confirm;
     if (typeof confirm !== 'function') return; // fail closed: never delete without a confirm
-    const yes = await confirm(
-      'Remove student?',
-      `"${name}" will be taken off this class.`,
-      'Remove'
-    );
-    if (!yes) return;
-    const next = roster.filter((_, i) => i !== index);
-    await saveRoster(next, 'Student removed.');
+    if (btn) btn.disabled = true;
+    try {
+      const yes = await confirm(
+        'Remove student?',
+        `"${name}" will be taken off this class.`,
+        'Remove'
+      );
+      if (!yes) return;
+      const next = roster.filter((_, i) => i !== index);
+      await saveRoster(next, 'Student removed.');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   }
 
   /* ---------------- save (full roster PUT) ---------------- */
@@ -264,11 +276,15 @@
         if (res.conflict) {
           // Someone else changed the list since it was loaded (e.g. an
           // online seat sale). Show the fresh copy; nothing was overwritten.
+          // The in-progress entry is kept in the form so it is not lost:
+          // it becomes a plain add onto the fresh list, and the user can
+          // check the reloaded list before saving it again.
           roster = Array.isArray(res.roster) ? res.roster : [];
           rosterRevision = res.revision !== undefined ? res.revision : null;
-          hideForm();
+          editingIndex = -1;
+          $('rosterFormSave').textContent = 'Add student';
           render();
-          rosterError(res.error || 'The student list changed. It has been reloaded — please check it and try again.');
+          rosterError(res.error || 'The student list changed. It has been reloaded and your entry was kept — please check the list, then save it again.');
           return;
         }
         throw new Error(res.error || 'Could not save the student list.');
