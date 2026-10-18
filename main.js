@@ -121,15 +121,15 @@ async function maybeGateForPendingUpdate() {
   }
 }
 
-// Background updater: update-electron-app checks on launch and every 10
-// minutes. Downloading is silent; a downloaded update notifies gently and
+// Background updater: update-electron-app checks on launch and every
+// hour. Downloading is silent; a downloaded update notifies gently and
 // records itself so the next launch can enforce it (see
 // maybeGateForPendingUpdate).
 function initUpdater() {
   if (!app.isPackaged) return;
   try {
     const { autoUpdater } = require('electron');
-    require('update-electron-app').updateElectronApp({ notifyUser: false });
+    require('update-electron-app').updateElectronApp({ notifyUser: false, updateInterval: '1 hour' });
     autoUpdater.on('update-downloaded', (event, releaseNotes, releaseName) => {
       const version = String(releaseName || '').trim() || 'new version';
       writePendingUpdate(version);
@@ -459,6 +459,9 @@ const WHATS_NEW_FILE = () => path.join(app.getPath('userData'), 'whats-new.json'
 // Keep notes short and plain-language: Pam reads these. Nothing
 // business-internal here — instructors see these notes too.
 const WHATS_NEW_NOTES = {
+  '1.2.6': [
+    'The app now checks for updates once an hour instead of every 10 minutes.',
+  ],
   '1.2.5': [
     'Fixed: rejecting an account request now follows the website\'s own steps instead of skipping them.',
     'Fixed: a clearer message when the saved login stops working, and the Approvals tab no longer mentions the old bridge plugin.',
