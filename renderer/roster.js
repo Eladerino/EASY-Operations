@@ -222,6 +222,8 @@
       source: (base && base.source) || 'manual',
     };
     if (base) {
+      if (base.id !== undefined) record.id = base.id;
+      if (base.order_id !== undefined) record.order_id = base.order_id;
       if (base.added !== undefined) record.added = base.added;
       if (base.added_by !== undefined) record.added_by = base.added_by;
     }

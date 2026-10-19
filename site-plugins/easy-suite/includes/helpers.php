@@ -24,6 +24,24 @@ function easy_cert_rest_can_access() {
     return current_user_can($cap);
 }
 
+/**
+ * Office-level accounts, for reads that hand out full student PII
+ * (class rosters, the expiring-certificates list): site admins, plus
+ * the proxy posters (office staff who act on behalf of instructors,
+ * listed under EASY Suite → Settings). Instructors are not office-level:
+ * their own calendar feed shows roster names only.
+ */
+function easy_suite_is_office_user($user = null) {
+    $user = $user ?: wp_get_current_user();
+    if (!$user || !$user->ID) {
+        return false;
+    }
+    if (user_can($user, 'manage_options')) {
+        return true;
+    }
+    return function_exists('easy_suite_is_proxy_poster') && easy_suite_is_proxy_poster($user);
+}
+
 /* --- Settings getters (EASY Suite → Settings), each with its historical default --- */
 
 function easy_core_get_notification_thresholds() {

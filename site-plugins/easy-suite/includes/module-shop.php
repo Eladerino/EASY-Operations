@@ -127,12 +127,12 @@ function easy_user_can_list_products() {
 /**
  * The accounts allowed to see the product-submission page. Set under
  * EASY Suite → Settings (option easy_product_form_allowed_users, one
- * username per line); falls back to the original hardcoded list.
+ * username per line). An empty list means nobody: the page stays hidden
+ * until at least one account is listed.
  */
 function easy_suite_product_form_users() {
     $raw = (string) get_option('easy_product_form_allowed_users', '');
-    $users = array_values(array_filter(array_map('trim', preg_split('/[\s,]+/', $raw))));
-    return $users ? $users : ['sglynn', 'bglynn', 'bglynn1'];
+    return array_values(array_filter(array_map('trim', preg_split('/[\s,]+/', $raw))));
 }
 
 /**

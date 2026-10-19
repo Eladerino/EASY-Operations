@@ -16,7 +16,7 @@ defined('ABSPATH') || exit;
 
 /** Usernames allowed to view the management queue page. */
 function easy_mgmt_queue_allowed_users() {
-    $raw = get_option('easy_mgmt_queue_users', "sglynn");
+    $raw = get_option('easy_mgmt_queue_users', '');
     $users = [];
     foreach (preg_split('/[\s,]+/', (string) $raw) as $u) {
         $u = strtolower(sanitize_user($u, true));

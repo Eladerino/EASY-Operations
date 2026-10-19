@@ -460,7 +460,7 @@ add_filter('rest_pre_insert_cert', function ($prepared, $request) {
 function easy_suite_proxy_posters() {
     $raw = get_option('easy_proxy_posters', false);
     if ($raw === false) {
-        return ['pevans']; // The list the app shipped with.
+        return []; // Never configured: nobody is a proxy poster until Settings is saved.
     }
     return array_values(array_filter(array_map('strtolower', array_map('trim', preg_split('/[\s,]+/', (string) $raw)))));
 }

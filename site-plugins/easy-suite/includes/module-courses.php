@@ -15,7 +15,8 @@
  *   easy_course_snap  one private post per review snapshot (post_parent =
  *                     the course): version, state, who sent and decided it.
  *
- * Roles. Authors (EASY Suite → Settings, default sglynn) create and edit.
+ * Roles. Authors (listed under EASY Suite → Settings; nobody until
+ * configured) create and edit.
  * Reviewers are admins, anyone who can publish certificates, and any extra
  * usernames listed in Settings. Everyone else gets 403.
  *
@@ -42,7 +43,7 @@ defined('ABSPATH') || exit;
 
 define('EASY_COURSE_ID_PATTERN', '[a-z0-9_-]{1,64}');
 define('EASY_COURSE_MAX_BYTES', 2 * 1024 * 1024);
-define('EASY_COURSE_DEFAULT_AUTHORS', ['sglynn']);
+define('EASY_COURSE_DEFAULT_AUTHORS', []);
 
 add_action('init', function () {
     $common = [
@@ -609,8 +610,10 @@ add_action('rest_api_init', function () {
             }
             [$snap, $course] = $found;
             easy_course_decide_snapshot($snap, 'sent_back', $note);
-            update_post_meta($course->ID, '_easy_course_status', 'draft');
-            update_post_meta($course->ID, '_easy_course_edited_since', 0);
+            // An earlier approved version still stands; otherwise back to draft.
+            $approved = (int) get_post_meta($course->ID, '_easy_course_approved_version', true);
+            update_post_meta($course->ID, '_easy_course_status', $approved > 0 ? 'approved' : 'draft');
+            update_post_meta($course->ID, '_easy_course_edited_since', $approved > 0 ? 1 : 0);
             update_post_meta($course->ID, '_easy_course_review_note', wp_slash($note));
             $out = easy_course_export(get_post($course->ID));
             $out['review'] = easy_course_export_snapshot(get_post($snap->ID));
