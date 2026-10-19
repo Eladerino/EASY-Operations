@@ -75,8 +75,9 @@ All routes are under `/wp-json/easy/v1/`.
 | Routes | Who can call them |
 |---|---|
 | `pending-users…` | Accounts that can promote users |
-| `expiring-certs`, `cert-number` | Accounts that can edit certificates |
-| `roster/<id>` (GET) | Accounts that can edit certificates |
+| `expiring-certs` | Accounts that can edit certificates (office accounts see all; others see only certificates they authored) |
+| `cert-number` | Accounts that can edit certificates |
+| `roster/<id>` (GET) | Office accounts (admins and proxy posters) |
 | `roster/<id>` (PUT) | Accounts that can edit the class |
 | `sale-state/<id>` | Accounts that can edit certificates |
 | `management-queue` | Admins |

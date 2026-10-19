@@ -9,7 +9,8 @@
 // player consumes.
 //
 // Authorship model: the signed-in WordPress username (from getAppInfo)
-// is compared against a small editable authors list (seeded with sglynn).
+// is compared against a small editable authors list kept on this machine
+// (empty until someone is added; site sync overrides it).
 // Authors can always edit. Everyone else gets read-only + the review inbox.
 // Editing after "send for review" never locks the author out — it just marks the
 // live course as newer than the snapshot under review.
@@ -122,7 +123,7 @@
 
   let courses = loadJSON(LS_COURSES, []);
   let inbox = loadJSON(LS_INBOX, []);
-  let authors = loadJSON(LS_AUTHORS, ['sglynn']);
+  let authors = loadJSON(LS_AUTHORS, []);
 
   // Every local save also queues an upload to the site (when synced) and a
   // file backup on this computer.
@@ -573,7 +574,7 @@
   // Apply to anything already loaded from localStorage, including review
   // snapshots parked in the inbox (their previews render the same way).
   courses = courses.filter((c) => c && typeof c === 'object').map(normalizeCourse);
-  if (!Array.isArray(authors) || !authors.length) authors = ['sglynn'];
+  if (!Array.isArray(authors)) authors = [];
   inbox.forEach((item) => {
     if (item && item.payload && item.payload.course) {
       try { item.payload.course = normalizeCourse(item.payload.course); } catch (e) { /* leave as-is */ }

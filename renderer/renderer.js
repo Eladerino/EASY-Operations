@@ -965,11 +965,10 @@
         return;
       }
       applyAppMode(info);
-      // Course Builder tab: only allowlisted accounts may see
-      // it. Everyone else gets the tab hidden; showView() also refuses the
-      // 'builder' view for them as a backstop.
-      const builderUser = (info && info.accountUser ? String(info.accountUser) : '').toLowerCase();
-      window.EasyCourseBuilderAllowed = builderUser === 'author1' || builderUser === 'sglynn';
+      // Course Builder tab: shown to office-level accounts until the
+      // site answers. Everyone else gets the tab hidden; showView() also
+      // refuses the 'builder' view for them as a backstop.
+      window.EasyCourseBuilderAllowed = Boolean(info && (info.proxyPosting || info.mode === 'office'));
       const builderTab = $('tabCourseBuilder');
       if (builderTab) builderTab.style.display = window.EasyCourseBuilderAllowed ? '' : 'none';
       // When the site runs EASY Suite's Course Builder module, it decides

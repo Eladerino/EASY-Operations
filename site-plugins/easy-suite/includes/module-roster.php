@@ -210,6 +210,13 @@ function easy_roster_rest_get($request) {
     if (get_post_type($event_id) !== 'tribe_events') {
         return new WP_Error('easy_roster_bad_event', 'Not a class event.', array('status' => 404));
     }
+    // Full rosters carry student phone numbers, emails and payment
+    // state, so reads are office-only. (There is no account-to-
+    // instructor mapping on the site, so "their own classes" cannot be
+    // resolved; instructors see names only, in their calendar feed.)
+    if (!easy_suite_is_office_user()) {
+        return new WP_Error('easy_roster_forbidden', 'Class student lists are only available to office accounts.', array('status' => 403));
+    }
     return array(
         'event_id' => $event_id,
         'roster'   => easy_roster_get($event_id),

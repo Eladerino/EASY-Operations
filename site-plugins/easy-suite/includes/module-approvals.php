@@ -84,7 +84,10 @@ function easy_expiring_certs($request) {
 
     // Fetch all published certs that have an expiry_date; filter by actual
     // date in PHP so both Ymd and Y-m-d stored formats are handled.
-    $q = new WP_Query([
+    // Office accounts see every certificate; other cert editors only see
+    // certificates they authored (the list carries student emails and
+    // employer contacts).
+    $query_args = [
         'post_type'      => 'cert',
         'post_status'    => 'publish',
         'posts_per_page' => -1,
@@ -96,7 +99,11 @@ function easy_expiring_certs($request) {
                 'compare' => 'EXISTS',
             ],
         ],
-    ]);
+    ];
+    if (!easy_suite_is_office_user()) {
+        $query_args['author'] = get_current_user_id();
+    }
+    $q = new WP_Query($query_args);
 
     $out = [];
     foreach ($q->posts as $pid) {
@@ -184,6 +191,35 @@ function easy_approvals_clear_um_cache($id) {
     delete_option('um_cache_userdata_' . (int) $id);
 }
 
+/**
+ * Apply an approve/reject decision and VERIFY it landed. UM's own
+ * routine runs first so its emails/hooks fire, but UM can bail
+ * internally without reporting failure, so the account_status meta is
+ * re-read afterwards; if UM did not change it, write it directly and
+ * verify again. Only a verified change counts as success.
+ */
+function easy_approvals_apply_decision($id, $um_method, $expected_status) {
+    if (function_exists('um_fetch_user')) {
+        um_fetch_user($id);
+        $um_user = UM()->user();
+        if (is_object($um_user) && method_exists($um_user, $um_method)) {
+            $um_user->{$um_method}();
+        }
+    }
+    if (get_user_meta($id, 'account_status', true) !== $expected_status) {
+        update_user_meta($id, 'account_status', $expected_status);
+    }
+    easy_approvals_clear_um_cache($id);
+    if (get_user_meta($id, 'account_status', true) !== $expected_status) {
+        return new WP_Error(
+            'easy_decision_not_saved',
+            'That decision could not be saved. The account is still waiting for review; please try again.',
+            ['status' => 500]
+        );
+    }
+    return true;
+}
+
 function easy_approvals_approve($request) {
     $user = easy_approvals_target_or_error($request['id']);
     if (is_wp_error($user)) {
@@ -191,21 +227,10 @@ function easy_approvals_approve($request) {
     }
     $id = $user->ID;
 
-    // Prefer UltimateMember's own routine so its emails/hooks fire;
-    // fall back to a direct meta update if UM is unavailable.
-    $done = false;
-    if (function_exists('um_fetch_user')) {
-        um_fetch_user($id);
-        $um_user = UM()->user();
-        if (is_object($um_user) && method_exists($um_user, 'approve')) {
-            $um_user->approve();
-            $done = true;
-        }
+    $result = easy_approvals_apply_decision($id, 'approve', 'approved');
+    if (is_wp_error($result)) {
+        return $result;
     }
-    if (!$done) {
-        update_user_meta($id, 'account_status', 'approved');
-    }
-    easy_approvals_clear_um_cache($id);
     return ['ok' => true, 'id' => $id, 'status' => 'approved'];
 }
 
@@ -216,21 +241,10 @@ function easy_approvals_reject($request) {
     }
     $id = $user->ID;
 
-    // Prefer UltimateMember's own routine so its emails/hooks fire;
-    // fall back to a direct meta update if UM is unavailable.
-    $done = false;
-    if (function_exists('um_fetch_user')) {
-        um_fetch_user($id);
-        $um_user = UM()->user();
-        if (is_object($um_user) && method_exists($um_user, 'reject')) {
-            $um_user->reject();
-            $done = true;
-        }
+    $result = easy_approvals_apply_decision($id, 'reject', 'rejected');
+    if (is_wp_error($result)) {
+        return $result;
     }
-    if (!$done) {
-        update_user_meta($id, 'account_status', 'rejected');
-    }
-    easy_approvals_clear_um_cache($id);
     return ['ok' => true, 'id' => $id, 'status' => 'rejected'];
 }
 

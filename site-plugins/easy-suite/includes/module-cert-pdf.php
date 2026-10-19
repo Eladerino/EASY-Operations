@@ -514,6 +514,9 @@ add_action('template_redirect', function () {
  *  - untrash_post on a cert   → restore its PDF attachment too.
  *  - before_delete_post       → permanently delete the PDF attachment + file.
  *
+ * Attachments can be shared (duplicated certs, re-attached media): before
+ * trashing or deleting one, check no other cert still points at it.
+ *
  * Guards: only acts on the 'cert' post type, only on real attachments, and
  * never loops (attachment trash/delete fires the same hooks but the post-type
  * check returns early for non-cert posts).
@@ -524,6 +527,10 @@ function easy_core_pdf_autotrash_trash($post_id) {
     }
     $att_id = easy_core_cert_attachment_id($post_id);
     if (!$att_id || get_post_type($att_id) !== 'attachment') {
+        return;
+    }
+    // Another cert may share this attachment; leave it live for them.
+    if (function_exists('easy_suite_cert_pdf_in_use') && easy_suite_cert_pdf_in_use($att_id, $post_id)) {
         return;
     }
     if (get_post_status($att_id) !== 'trash') {
@@ -550,6 +557,10 @@ function easy_core_pdf_autotrash_delete($post_id) {
     }
     $att_id = easy_core_cert_attachment_id($post_id);
     if (!$att_id || get_post_type($att_id) !== 'attachment') {
+        return;
+    }
+    // Another cert may share this attachment; deleting it would break theirs.
+    if (function_exists('easy_suite_cert_pdf_in_use') && easy_suite_cert_pdf_in_use($att_id, $post_id)) {
         return;
     }
     // true = force delete, bypass trash; removes the file from easy-certs/.

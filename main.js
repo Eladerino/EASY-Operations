@@ -53,9 +53,11 @@ function clearPendingUpdate() {
 }
 
 // Minimal semver compare: true when a is strictly newer than b.
+// Tolerates a leading "v" (GitHub release titles are "v1.2.7").
 function isNewerVersion(a, b) {
-  const pa = String(a).split('.').map((x) => parseInt(x, 10) || 0);
-  const pb = String(b).split('.').map((x) => parseInt(x, 10) || 0);
+  const parts = (v) => String(v).trim().replace(/^v/i, '').split('.').map((x) => parseInt(x, 10) || 0);
+  const pa = parts(a);
+  const pb = parts(b);
   for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
     const x = pa[i] || 0;
     const y = pb[i] || 0;
@@ -131,7 +133,7 @@ function initUpdater() {
     const { autoUpdater } = require('electron');
     require('update-electron-app').updateElectronApp({ notifyUser: false, updateInterval: '1 hour' });
     autoUpdater.on('update-downloaded', (event, releaseNotes, releaseName) => {
-      const version = String(releaseName || '').trim() || 'new version';
+      const version = String(releaseName || '').trim().replace(/^v/i, '') || 'new version';
       writePendingUpdate(version);
       if (gateCheckInFlight) return; // the gate is handling this one
       dialog.showMessageBox({
@@ -285,20 +287,55 @@ function configMode(config) {
   return config.wpUser && config.wpUser.user ? 'instructor' : 'office';
 }
 
+// The signed-in account's WordPress identity (id + capabilities), fetched
+// from users/me and cached per username. Used wherever the app needs to
+// know "who is this and what may they do" (proxy posting, queue scoping).
+let currentUserCache = null; // { user, value: { id, capabilities } }
+
+async function fetchCurrentUser(config) {
+  const u = config && config.ok && config.wpUser && config.wpUser.user;
+  if (!u) return null;
+  if (currentUserCache && currentUserCache.user === u) return currentUserCache.value;
+  const base = config.wpBaseUrl.replace(/\/+$/, '');
+  const headers = { Authorization: basicAuth(effectiveAuth(config).post) };
+  let value = null;
+  try {
+    // Edit context carries the capabilities field; some limited accounts
+    // cannot use it, so fall back to the plain call (same as setup).
+    let res = await fetch(`${base}/wp-json/wp/v2/users/me?context=edit`, {
+      headers,
+      signal: AbortSignal.timeout(8000),
+    });
+    if (res.status === 401 || res.status === 403) {
+      res = await fetch(`${base}/wp-json/wp/v2/users/me`, {
+        headers,
+        signal: AbortSignal.timeout(8000),
+      });
+    }
+    if (res.ok) {
+      const json = await res.json().catch(() => null);
+      if (json && json.id) {
+        value = { id: Number(json.id), capabilities: json.capabilities || {} };
+      }
+    }
+  } catch (e) { /* offline or unreachable: no identity this time */ }
+  if (value) currentUserCache = { user: u, value };
+  return value;
+}
+
 // Accounts allowed to post certificates on behalf of other instructors
 // (e.g. office staff). The list lives on the site (EASY Suite → Settings)
-// and is read from /easy/v1/app-config; PROXY_POSTER_FALLBACK only applies
-// when the site is older than EASY Suite 2.1 or can't be reached. Everyone
-// else in instructor mode stays locked to their own identity, in the UI and
-// at submit time (and the site enforces the same rule).
-const PROXY_POSTER_FALLBACK = ['pevans'];
+// and is read from /easy/v1/app-config. When the site can't answer (older
+// than EASY Suite 2.1, or unreachable), fall back to the account's own
+// capabilities: an account that can manage site options is office-level.
+// Everyone else in instructor mode stays locked to their own identity, in
+// the UI and at submit time (and the site enforces the same rule).
 let proxyPosterCache = null; // { user, value }
 
 async function isProxyPoster(config) {
   const u = config && config.ok && config.wpUser && config.wpUser.user;
   if (!u) return false;
   if (proxyPosterCache && proxyPosterCache.user === u) return proxyPosterCache.value;
-  let value = PROXY_POSTER_FALLBACK.includes(String(u).trim().toLowerCase());
   try {
     const base = config.wpBaseUrl.replace(/\/+$/, '');
     const res = await fetch(`${base}/wp-json/easy/v1/app-config`, {
@@ -308,11 +345,14 @@ async function isProxyPoster(config) {
     });
     if (res.ok) {
       const json = await res.json().catch(() => ({}));
-      if (typeof json.proxyPoster === 'boolean') value = json.proxyPoster;
-      proxyPosterCache = { user: u, value };
+      if (typeof json.proxyPoster === 'boolean') {
+        proxyPosterCache = { user: u, value: json.proxyPoster };
+        return json.proxyPoster;
+      }
     }
-  } catch (e) { /* offline: use the fallback, and ask again next time */ }
-  return value;
+  } catch (e) { /* site can't answer: use the capability fallback below */ }
+  const me = await fetchCurrentUser(config);
+  return Boolean(me && me.capabilities && me.capabilities.manage_options === true);
 }
 
 /* ------------------------------------------------------------------ */
@@ -467,6 +507,10 @@ const WHATS_NEW_FILE = () => path.join(app.getPath('userData'), 'whats-new.json'
 // Keep notes short and plain-language: Pam reads these. Nothing
 // business-internal here — instructors see these notes too.
 const WHATS_NEW_NOTES = {
+  '1.2.7': [
+    'Fixed: editing a student in the Students list keeps their link to the online order they booked with, so refunds still take them off the list.',
+    'Fixed: a required update can no longer be skipped by mistake. If an update is waiting, the app asks you to restart before continuing.',
+  ],
   '1.2.6': [
     'The app now checks for updates once an hour instead of every 10 minutes.',
     'Removing a student who paid online now explains itself instead of failing: cancel or refund their order on the website.',
@@ -739,6 +783,7 @@ ipcMain.handle('reset-setup', async () => {
     cachedConfig = null;
     printerCache = null;
     proxyPosterCache = null;
+    currentUserCache = null;
     return { ok: true };
   } catch (err) {
     return { ok: false, error: `Could not reset the setup: ${err.message}` };
@@ -1630,6 +1675,18 @@ async function certApprovalsRequest(config, path, { method = 'GET', body } = {})
   return { status: res.status, json, total: res.headers.get('x-wp-total') };
 }
 
+// Who is looking at the certificate queue? Office-level accounts (office
+// mode, proxy posters, site admins) review everyone's drafts. Everyone
+// else (instructors) sees only drafts they authored, so student details
+// on other instructors' drafts are never handed to them.
+async function certQueueViewer(config) {
+  const me = await fetchCurrentUser(config);
+  const office = configMode(config) === 'office'
+    || (await isProxyPoster(config))
+    || Boolean(me && me.capabilities && me.capabilities.manage_options === true);
+  return { office, userId: me ? me.id : null };
+}
+
 // Probe: can this account review draft certs? Listing drafts requires the
 // edit capability for the cert post type; publishing needs publish rights
 // (checked again at action time, with a clear error if missing).
@@ -1637,7 +1694,15 @@ ipcMain.handle('cert-approvals-probe', async () => {
   const config = getConfig();
   if (!config.ok) return { ok: false, error: config.error };
   try {
-    const r = await certApprovalsRequest(config, '?status=draft&per_page=1');
+    const viewer = await certQueueViewer(config);
+    let scope = '';
+    if (!viewer.office) {
+      // Fail closed: without a confirmed identity there is no safe way to
+      // scope the queue to this account's own drafts.
+      if (!viewer.userId) return { ok: true, canReview: false };
+      scope = `&author=${viewer.userId}`;
+    }
+    const r = await certApprovalsRequest(config, `?status=draft&per_page=1${scope}`);
     if (r.status === 200) {
       return { ok: true, canReview: true, count: parseInt(r.total || '0', 10) || 0 };
     }
@@ -1675,6 +1740,7 @@ function normalizeDraftCert(c) {
   }
   return {
     id: c.id,
+    author: c.author != null ? Number(c.author) : null,
     date: c.date,
     title,
     student: acf.student_name || student || '(no name)',
@@ -1716,9 +1782,17 @@ ipcMain.handle('cert-approvals-list', async () => {
   const config = getConfig();
   if (!config.ok) return { ok: false, error: config.error };
   try {
+    const viewer = await certQueueViewer(config);
+    let scope = '';
+    if (!viewer.office) {
+      if (!viewer.userId) {
+        return { ok: false, error: 'Could not confirm which WordPress account is signed in, so the draft list cannot be limited to your own certificates.' };
+      }
+      scope = `&author=${viewer.userId}`;
+    }
     const r = await certApprovalsRequest(
       config,
-      '?status=draft&per_page=100&orderby=date&order=desc&_fields=id,date,title,acf,author'
+      `?status=draft&per_page=100&orderby=date&order=desc&_fields=id,date,title,acf,author${scope}`
     );
     if (r.status !== 200) {
       return { ok: false, error: (r.json && r.json.message) || `WordPress returned HTTP ${r.status}.` };
