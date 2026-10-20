@@ -1,11 +1,14 @@
 # Builds the EASY Manager Android APK (mobile/) on GitHub's runners.
 #
-# - "Run workflow" (workflow_dispatch) builds a signed release APK and
-#   uploads it as a workflow artifact.
-# - When a GitHub release is published (the desktop app's Release workflow
-#   creates those), this builds the APK and attaches it to that same
-#   release as easy-manager-<version>.apk. The app's self-update check
-#   scans recent releases for exactly that asset name.
+# - "Run workflow" (workflow_dispatch) builds a signed release APK,
+#   uploads it as a workflow artifact, and attaches it to the newest
+#   published release as easy-manager-<version>.apk.
+# - When a human publishes a GitHub release, this builds the APK and
+#   attaches it to that same release. Releases created by other
+#   workflows do not fire this trigger (GitHub blocks token-triggered
+#   cascades), which is why manual runs attach on their own above.
+#   The app's self-update check scans recent releases for exactly that
+#   asset name.
 #
 # Signing comes from repository secrets, never from committed files:
 #   ANDROID_KEYSTORE_BASE64   base64 of the .keystore file
@@ -146,3 +149,22 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           TAG: ${{ github.event.release.tag_name }}
         run: gh release upload "$TAG" "easy-manager-$VERSION.apk" --clobber
+
+      # Manual runs also attach the APK, to the newest published release.
+      # Releases created by other workflows never fire the release event
+      # above (GitHub blocks token-triggered cascades), so without this
+      # step a hand-run build only ever produced an artifact and the
+      # app's self-update check never saw it.
+      - name: Attach the APK to the newest release (manual runs)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          TAG=$(gh release list --limit 1 --json tagName --jq '.[0].tagName')
+          if [ -z "$TAG" ] || [ "$TAG" = "null" ]; then
+            echo "No published release exists yet; skipping the attach."
+            exit 0
+          fi
+          echo "Attaching easy-manager-$VERSION.apk to release $TAG"
+          gh release upload "$TAG" "easy-manager-$VERSION.apk" --clobber
