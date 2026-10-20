@@ -619,30 +619,43 @@
     return payload;
   }
 
-  // Save (create or update) with publish verification. When the intent
-  // is publish, the saved event is re-read from the server and the save
-  // only counts as published when the re-read says so; WordPress can
-  // answer 200 while silently keeping a draft when the account lacks
-  // publish rights, and this app never reports that as success. If the
-  // re-read itself fails (a network hiccup), the save response's own
-  // status is the fallback evidence.
+  // Save (create or update) with status verification in both
+  // directions. The saved event is re-read from the server and the
+  // save only counts when the re-read shows the intended status;
+  // WordPress can answer 200 while silently keeping a draft when the
+  // account lacks publish rights (and, symmetrically, a class that
+  // was meant to go back to draft must not be reported as a draft
+  // while it is still live). This app never reports either as
+  // success. If the re-read itself fails (a network hiccup), the
+  // save response's own status is the fallback evidence.
   async function saveEvent(idOrNull, payload) {
     const saved = idOrNull ? await updateEvent(idOrNull, payload) : await createEvent(payload);
-    if (payload && payload.status === 'publish') {
-      let confirmed = !!(saved && saved.status === 'publish');
+    const wanted =
+      payload && (payload.status === 'publish' || payload.status === 'draft')
+        ? payload.status
+        : null;
+    if (wanted) {
+      let confirmed = !!(saved && saved.status === wanted);
       if (saved && saved.id) {
         try {
           const fresh = await eventById(saved.id);
-          if (fresh && fresh.status) confirmed = fresh.status === 'publish';
+          if (fresh && fresh.status) confirmed = fresh.status === wanted;
         } catch (e) {
           // Keep the save response's status as the evidence.
         }
       }
       if (!confirmed) {
         invalidateCache();
+        if (wanted === 'publish') {
+          throw new Error(
+            'WordPress kept the class as a draft. This account cannot publish classes ' +
+              '(it needs the publish_tribe_events capability). The class itself was saved as a draft.'
+          );
+        }
         throw new Error(
-          'WordPress kept the class as a draft. This account cannot publish classes ' +
-            '(it needs the publish_tribe_events capability). The class itself was saved as a draft.'
+          idOrNull
+            ? 'WordPress did not move the class back to draft. It may still be live on the site. The edits themselves were saved.'
+            : 'WordPress published the class instead of saving it as a draft. Check the class on the website.'
         );
       }
     }

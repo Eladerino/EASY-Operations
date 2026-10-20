@@ -35,7 +35,7 @@
     venues: [],
     organizers: [],
     categories: [],
-    listsLoaded: false,
+    listsReady: { venues: false, organizers: false, categories: false },
     editing: null,
     editCategories: undefined,
     feedsState: 'idle',
@@ -222,17 +222,44 @@
 
   /* ---------------- editor lists ---------------- */
 
+  // Each list is marked ready only when its fetch actually succeeds,
+  // so a list that failed (a weak connection, a site hiccup) is
+  // retried the next time the editor opens instead of staying empty
+  // for the whole session. The desktop editor heals itself the same
+  // way when its reference data failed to load at startup.
   async function ensureLists() {
-    if (state.listsLoaded) return;
-    const results = await Promise.all([
-      window.EasyApi.venuesList().catch(() => []),
-      window.EasyApi.organizersList().catch(() => []),
-      window.EasyApi.categoriesList().catch(() => []),
-    ]);
-    state.venues = results[0];
-    state.organizers = results[1];
-    state.categories = results[2];
-    state.listsLoaded = true;
+    const jobs = [];
+    if (!state.listsReady.venues) {
+      jobs.push(
+        window.EasyApi.venuesList()
+          .then((list) => {
+            state.venues = list;
+            state.listsReady.venues = true;
+          })
+          .catch(() => {})
+      );
+    }
+    if (!state.listsReady.organizers) {
+      jobs.push(
+        window.EasyApi.organizersList()
+          .then((list) => {
+            state.organizers = list;
+            state.listsReady.organizers = true;
+          })
+          .catch(() => {})
+      );
+    }
+    if (!state.listsReady.categories) {
+      jobs.push(
+        window.EasyApi.categoriesList()
+          .then((list) => {
+            state.categories = list;
+            state.listsReady.categories = true;
+          })
+          .catch(() => {})
+      );
+    }
+    await Promise.all(jobs);
   }
 
   function categoryName(id) {
@@ -270,6 +297,7 @@
           const opt = document.createElement('option');
           opt.value = 'c' + kid.id;
           opt.dataset.ids = JSON.stringify([Number(kid.id), Number(parent.id)]);
+          opt.dataset.slug = kid.slug || '';
           opt.textContent = kid.name;
           group.appendChild(opt);
         }
@@ -278,6 +306,7 @@
         const opt = document.createElement('option');
         opt.value = 'p' + parent.id;
         opt.dataset.ids = JSON.stringify([Number(parent.id)]);
+        opt.dataset.slug = parent.slug || '';
         opt.textContent = parent.name;
         sel.appendChild(opt);
       }
@@ -290,6 +319,7 @@
         const opt = document.createElement('option');
         opt.value = 'c' + c.id;
         opt.dataset.ids = JSON.stringify([Number(c.id), parent]);
+        opt.dataset.slug = c.slug || '';
         opt.textContent = c.name;
         sel.appendChild(opt);
       }
@@ -330,6 +360,47 @@
     line.classList.remove('hidden');
   }
 
+  // Preset course descriptions, mirroring the desktop editor: when a
+  // course is picked (or the editor opens on a class), the course's
+  // preset text goes into the description box, but only when the box
+  // is empty. An existing description, and anything typed or edited,
+  // is never replaced; clearing the box and picking a course again
+  // fills the new course's preset. The course is identified by the
+  // picked category's slug (the preset keys are the desktop catalog's
+  // course values, which the site slugs match), falling back to the
+  // course label, the same identity fallback the desktop uses when
+  // it matches a class back to a course by title.
+  function presetForSelection() {
+    const presets = window.EasyCoursePresets;
+    if (!presets) return '';
+    const sel = $('evCourse');
+    const opt = sel.options[sel.selectedIndex];
+    if (!opt || !opt.value) return '';
+    const bySlug = presets.descriptions[(opt.dataset.slug || '').toLowerCase()];
+    if (bySlug) return bySlug;
+    const key = presets.byLabel[(opt.textContent || '').trim().toLowerCase()];
+    return key ? presets.descriptions[key] || '' : '';
+  }
+
+  function prefillDescription(fallbackTitle) {
+    const box = $('evDesc');
+    if (!box || box.value.trim()) return;
+    let text = presetForSelection();
+    if (!text && fallbackTitle) {
+      // The editor opened on a class whose course the picker did not
+      // resolve (no matching site category): the desktop still
+      // repairs a barren description by matching the class title to a
+      // course, so do the same for the description only. The picker
+      // and the class's categories are left exactly as they were.
+      const presets = window.EasyCoursePresets;
+      if (presets) {
+        const key = presets.byLabel[String(fallbackTitle).trim().toLowerCase()];
+        if (key) text = presets.descriptions[key] || '';
+      }
+    }
+    if (text) box.value = text;
+  }
+
   function onCourseChange() {
     const sel = $('evCourse');
     const opt = sel.options[sel.selectedIndex];
@@ -340,6 +411,7 @@
     }
     state.editCategories = JSON.parse(opt.dataset.ids || '[]');
     if (opt.textContent) $('evTitle').value = opt.textContent;
+    prefillDescription();
     updateCatLine();
   }
 
@@ -432,7 +504,7 @@
     $('evVenueName').value = '';
     $('evVenueAddress').value = '';
     $('evVenueCity').value = '';
-    $('evVenueProvince').value = '';
+    $('evVenueProvince').value = 'NL';
     $('evVenueZip').value = '';
     $('evVenuePhone').value = '';
     $('evOrgName').value = '';
@@ -441,6 +513,10 @@
     $('evCost').value = ev ? String(ev.cost || '') : '';
     $('evSeats').value = ev && ev.seats !== '' && ev.seats !== null && ev.seats !== undefined ? String(ev.seats) : '';
     setStatusRadio(ev && ev.status === 'publish' ? 'publish' : 'draft');
+    // Same repair the desktop editor does on open: a class whose
+    // course is recognized and whose description is empty gets the
+    // course's preset text. Anything already written stays.
+    prefillDescription(ev ? ev.title : '');
     const saleLine = $('evSaleLine');
     saleLine.classList.add('hidden');
     saleLine.textContent = '';
@@ -810,6 +886,14 @@
     $('evInstructor').addEventListener('change', () => {
       $('evNewOrgBox').classList.toggle('hidden', $('evInstructor').value !== '__new__');
     });
+    const feedsToggle = $('feedsToggle');
+    if (feedsToggle) {
+      feedsToggle.addEventListener('click', () => {
+        const body = $('feedsBody');
+        const nowHidden = body.classList.toggle('hidden');
+        feedsToggle.setAttribute('aria-expanded', nowHidden ? 'false' : 'true');
+      });
+    }
   }
 
   window.EasySchedule = { show, init, closeEditor };

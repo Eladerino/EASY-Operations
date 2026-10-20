@@ -19,7 +19,9 @@ WordPress credentials at runtime.
   versus capacity from the seat sale state). Tapping a class opens its
   roster, read-only, with Call and Email actions for students who have
   contact details on file. Below the classes: counts of everything waiting
-  for action (including course reviews waiting), the last few decisions
+  for action (including course reviews waiting). The count boxes tap
+  through to the screen holding the work, except course reviews, which
+  has no screen in this app and is display only. Then the last few decisions
   made from this app, and a footer line showing the EASY Suite version
   on the site, which doubles as a "did the site answer" check. The last
   good class list is kept on the device, so the screen paints straight
@@ -30,17 +32,24 @@ WordPress credentials at runtime.
   (picked from the site's own event categories, which also sets the
   title and files the class under that course), title, description,
   dates and times or all day, instructor, location, cost, and seats.
-  New instructors and locations can be created from the same form. A
-  class is saved as a draft or published live, and publishing is
-  verified by re-reading the class from the server, never just by the
-  save answering OK. Publishing, moving a published class back to
-  draft, and deleting each ask first with a confirmation that says
+  Picking a course also fills the description with that course's
+  preset text when the description is still empty, the same presets
+  and the same fill-only-when-empty rule the desktop editor uses; an
+  existing or edited description is never replaced. New instructors
+  and locations can be created from the same form. A class is saved
+  as a draft or published live, and the saved status is verified by
+  re-reading the class from the server, never just by the save
+  answering OK, in both directions (a class can no more be falsely
+  reported as a draft than falsely reported as published).
+  Publishing, moving a published class back to draft, and deleting
+  each ask first with a confirmation that says
   exactly what will happen; deleting moves the class to the trash on
   the website. Classes use the same Events Calendar REST contract as
   the desktop Schedule, so a class created here is indistinguishable
   from one created there. An account that cannot publish classes gets
-  a view-only schedule. Below the calendar, each instructor's private
-  calendar subscription link is listed with a Copy button, read from
+  a view-only schedule. Below the calendar, a collapsible Instructor
+  calendar links section lists each instructor's private
+  calendar subscription link with a Copy button, read from
   the site; resetting a link stays in EASY Suite, never in this app.
 - **Approvals**: the triage inbox. Certificate drafts, class drafts, and
   account signups, one card per item, decided one at a time. There is
@@ -52,9 +61,10 @@ WordPress credentials at runtime.
   through the API, so they show no Undo button. The last good queues
   are kept on the device, so the screen paints straight away and says
   when a refresh failed and a saved copy is showing. A certificate
-  search at the bottom looks up any certificate, published or draft,
-  by student name or certificate number (read only).
-- **Queue**: the management queue feed. Open questions are answered
+  search at the top of the screen looks up any certificate, published
+  or draft, by student name or certificate number (read only).
+- **Queue**: the management queue feed. The tab carries a badge with
+  the open question count, like the Approvals badge. Open questions are answered
   right in the app: tap a choice (or type a free-text answer), confirm,
   and the answer saves through the Suite with the same validation and
   notification email as the website queue form. Decided questions show
@@ -68,19 +78,22 @@ WordPress credentials at runtime.
   actually ran; a check that fails is named on screen instead. Tapping
   the expiring-certificates row opens the list itself, soonest first,
   with email and contact actions. No push notifications in this version.
-  A Site health section below the list shows the Suite health checks
-  plus the last and next runs of the expiry email check and the
-  employer digest; a failed health check is named, never hidden. Below
-  that, a Next expiry email run section previews the certificates
-  sitting in the Suite's reminder windows (30 day and 7 day) with the
-  student, course, expiry date, and days left, which is who the next
-  daily expiry checks will email.
+  Below the list, an Upcoming expiry reminder emails section previews
+  the certificates sitting in the Suite's reminder windows (30 day
+  and 7 day) with the student, course, expiry date, and days left,
+  which is who the next daily expiry checks will email. The section
+  is collapsed until tapped; its summary line always shows how many
+  certificates are in a window and when the next check runs. Last, a
+  Site health section shows the Suite health checks plus the last and
+  next runs of the expiry email check and the employer digest; a
+  failed health check is named, never hidden.
 
 The app follows the phone's light or dark setting by default; a Theme
 setting (System, Light, Dark) at the foot of the Today screen can
-force either look, and the choice is applied before first paint. The
-app has a floating Refresh button reachable by thumb on every tab, and
-the Android Back button closes dialogs and subviews first, then
+force either look, and the choice is applied before first paint.
+Every tab reloads its data when it is opened, and Today, Approvals,
+and the Queue carry their own Refresh buttons. The Android Back
+button closes dialogs and subviews first, then
 returns to Today, then exits.
 
 A home-screen widget shows the waiting counts the app itself last saw
@@ -270,10 +283,6 @@ Every route mirrors the desktop app and the EASY Suite plugin:
 - **No recurring classes.** The Events Calendar REST API does not
   support recurrence, so a repeating class is created as individual
   classes, the same limit the desktop Schedule has.
-- **The phone course picker has no preset descriptions.** The desktop
-  Schedule fills a new class's description from its built-in course
-  catalog; the phone picker uses the site's live categories instead
-  and leaves the description blank to type or paste.
 - **The native side is only compiled in CI.** This project is authored
   on a VM with no Android SDK, so Gradle compilation is proven by the
   Build APK workflow runs, not locally.

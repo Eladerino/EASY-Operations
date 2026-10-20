@@ -46,7 +46,6 @@
   --sp-5: 24px;
   --sp-6: 32px;
   --tabbar-h: 64px;
-  --fab-h: 48px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -327,16 +326,15 @@ h3.section-title {
 
 .pages {
   /* The pages are the app's one scroll container (the tab bar sits in
-     flow below them, not over them). Bottom padding clears the
-     floating Refresh pill: the pill hangs one gap above the tab bar,
-     which is this scroller's bottom edge, so footer content such as
-     the Theme control can always be scrolled a full gap clear of the
-     pill's top, the same guarantee the 0.3.1 padding provided when
-     the bar still overlapped the scroller. */
+     flow below them, not over them). Padding is even on all sides:
+     nothing floats over the scroller any more (the old floating
+     Refresh pill was removed in 0.4.1, since each page has its own
+     Refresh button), so footer content such as the Theme control
+     only needs the standard gap at the bottom. */
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--sp-4) var(--sp-4) calc(var(--sp-4) + var(--fab-h) + var(--sp-4));
+  padding: var(--sp-4);
   max-width: 640px;
   margin: 0 auto;
   width: 100%;
@@ -351,10 +349,9 @@ h3.section-title {
 
 .tabbar {
   /* In flow as the shell's last child (see the shell note above), so
-     its position cannot depend on which tab is showing. The height
-     and inset padding are unchanged, so the floating Refresh pill
-     and the toasts, which offset from the screen bottom by
-     var(--tabbar-h), still land in the same place relative to it. */
+     its position cannot depend on which tab is showing. The toasts
+     offset from the screen bottom by var(--tabbar-h), so they land
+     just above the bar. */
   flex: none;
   height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
@@ -441,6 +438,8 @@ h3.section-title {
 }
 .count-num { display: block; font-size: 28px; line-height: 1.15; font-weight: 750; color: var(--accent-dark); }
 .count-label { font-size: 13px; color: var(--muted); }
+.count-box.count-link { cursor: pointer; }
+.count-box.count-link:active { background: var(--bg); }
 
 /* ---------- recent decisions ---------- */
 
@@ -479,25 +478,36 @@ h3.section-title {
 .alert-link:active { background: var(--bg); }
 .alert-failed { border-left-color: var(--error); }
 
-.float-refresh {
-  position: fixed;
-  right: var(--sp-4);
-  bottom: calc(var(--tabbar-h) + var(--sp-4) + env(safe-area-inset-bottom));
-  z-index: 25;
+/* ---------- collapsible sections ---------- */
+
+.collapse-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  width: 100%;
+  background: none;
   border: none;
-  border-radius: 999px;
-  background: var(--accent);
-  color: var(--on-accent);
+  padding: 0;
+  margin: var(--sp-5) 0 var(--sp-2);
   font-family: inherit;
-  font-size: 15px;
-  font-weight: 650;
-  min-height: var(--fab-h);
-  padding: var(--sp-3) var(--sp-5);
-  box-shadow: 0 4px 14px rgba(16, 32, 54, 0.28);
   cursor: pointer;
-  transition: transform 0.05s, box-shadow 0.15s;
+  text-align: left;
 }
-.float-refresh:active { transform: translateY(1px); }
+.collapse-title {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent-dark);
+}
+.collapse-chevron {
+  font-size: 20px;
+  line-height: 1;
+  color: var(--muted);
+  transition: transform 0.15s;
+}
+.collapse-head[aria-expanded="true"] .collapse-chevron { transform: rotate(90deg); }
 
 /* ---------- update banner / modal / toasts ---------- */
 
