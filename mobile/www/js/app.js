@@ -154,19 +154,18 @@
     else if (name === 'alerts') window.EasyAlerts.show();
   }
 
-  function refreshCurrent() {
-    if (currentTab === 'today') window.EasyToday.refresh();
-    else if (currentTab === 'schedule') window.EasySchedule.show();
-    else if (currentTab === 'approvals') window.EasyApprovals.refresh();
-    else if (currentTab === 'queue') window.EasyQueue.show();
-    else if (currentTab === 'alerts') window.EasyAlerts.show();
-  }
-
   function setApprovalsBadge(n) {
     const badge = $('tabApprovalsBadge');
     if (!badge) return;
     badge.textContent = String(n);
     badge.classList.toggle('hidden', n <= 0);
+  }
+
+  function setQueueBadge(n) {
+    const badge = $('tabQueueBadge');
+    if (!badge) return;
+    badge.textContent = String(n);
+    badge.classList.toggle('hidden', !(n > 0));
   }
 
   /* ---------------- hardware Back ---------------- */
@@ -286,7 +285,6 @@
     }
     $('todayRefresh').addEventListener('click', () => window.EasyToday.refresh());
     $('approvalsRefresh').addEventListener('click', () => window.EasyApprovals.refresh());
-    $('floatRefresh').addEventListener('click', refreshCurrent);
     window.EasyQueue.init();
     window.EasyToday.init();
     window.EasyAlerts.init();
@@ -323,6 +321,7 @@
     confirm,
     showTab,
     setApprovalsBadge,
+    setQueueBadge,
     showUpdateBanner,
     hideUpdateBanner,
     isModalOpen,

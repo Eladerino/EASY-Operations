@@ -193,7 +193,13 @@
       })
       .catch(() => set('countClasses', 'n/a'));
     window.EasyApi.mgmtQueue()
-      .then((q) => set('countQueue', String((q.counts && q.counts.open) || 0)))
+      .then((q) => {
+        const open = (q.counts && q.counts.open) || 0;
+        set('countQueue', String(open));
+        if (window.EasyUi && window.EasyUi.setQueueBadge) {
+          window.EasyUi.setQueueBadge(open);
+        }
+      })
       .catch(() => set('countQueue', 'n/a'));
     // Course reviews: a real count only when Brandon is a reviewer and
     // the site answers. Anything else is n/a, never a broken screen.
@@ -253,6 +259,19 @@
       if (window.EasyUi) window.EasyUi.closeSubview();
       else closeRoster();
     });
+    // Needs Attention boxes tap through to the screen that holds the
+    // work. Course reviews has no screen in this app, so its box is
+    // display only and gets no listener on purpose.
+    const tapThrough = [
+      ['boxCerts', 'approvals'],
+      ['boxClasses', 'approvals'],
+      ['boxAccounts', 'approvals'],
+      ['boxQueue', 'queue'],
+    ];
+    for (const [id, tab] of tapThrough) {
+      const box = $(id);
+      if (box) box.addEventListener('click', () => window.EasyUi.showTab(tab));
+    }
   }
 
   window.EasyToday = { show, refresh: show, init, closeRoster, wasLoaded: () => loaded };

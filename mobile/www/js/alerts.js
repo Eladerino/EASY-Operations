@@ -13,16 +13,16 @@
 // Tapping the expiring-certificates row opens the actual list (the
 // data is already on the phone from the count), soonest first.
 //
-// Below the list, a Site health section shows the Suite Overview
-// health rows and the expiry email / digest run times from
+// Below the list, a collapsible section previews the certificates
+// sitting in one of the Suite's expiry reminder windows (the 30 day
+// and 7 day ladder from the plugin's notifications module), using
+// the expiring-certs data this screen already fetches. It is
+// informational only: it never sends anything.
+//
+// Last, a Site health section shows the Suite Overview health rows
+// and the expiry email / digest run times from
 // GET /easy/v1/site-health, with the same honesty rule: a failed
 // fetch says "Could not check: site health." and shows nothing else.
-//
-// Below that, a Next expiry email run section previews the
-// certificates sitting in one of the Suite's reminder windows (the
-// 30 day and 7 day ladder from the plugin's notifications module),
-// using the expiring-certs data this screen already fetches. It is
-// informational only: it never sends anything.
 //
 // Counts from sources that loaded are also written to the widget
 // snapshot the Android home-screen widget reads.
@@ -51,21 +51,6 @@
       },
     },
     {
-      key: 'accounts',
-      label: 'account signups',
-      run: async (counts, items) => {
-        const list = await window.EasyApi.pendingUsers();
-        counts.accounts = list.length;
-        if (list.length > 0) {
-          items.push({
-            key: 'accounts',
-            text: list.length + (list.length === 1 ? ' account signup' : ' account signups') + ' waiting for review',
-            tab: 'approvals',
-          });
-        }
-      },
-    },
-    {
       key: 'classes',
       label: 'class drafts',
       run: async (counts, items) => {
@@ -77,6 +62,21 @@
           items.push({
             key: 'classes',
             text: n + (n === 1 ? ' class draft' : ' class drafts') + ' waiting for review',
+            tab: 'approvals',
+          });
+        }
+      },
+    },
+    {
+      key: 'accounts',
+      label: 'account signups',
+      run: async (counts, items) => {
+        const list = await window.EasyApi.pendingUsers();
+        counts.accounts = list.length;
+        if (list.length > 0) {
+          items.push({
+            key: 'accounts',
+            text: list.length + (list.length === 1 ? ' account signup' : ' account signups') + ' waiting for review',
             tab: 'approvals',
           });
         }
@@ -189,7 +189,12 @@
     if (typeof counts.certs === 'number') widgetFields.certDrafts = counts.certs;
     if (typeof counts.classes === 'number') widgetFields.classDrafts = counts.classes;
     if (typeof counts.accounts === 'number') widgetFields.accountSignups = counts.accounts;
-    if (typeof counts.queue === 'number') widgetFields.queueOpen = counts.queue;
+    if (typeof counts.queue === 'number') {
+      widgetFields.queueOpen = counts.queue;
+      if (window.EasyUi && window.EasyUi.setQueueBadge) {
+        window.EasyUi.setQueueBadge(counts.queue);
+      }
+    }
     if (typeof counts.expiring === 'number') widgetFields.expiring30 = counts.expiring;
     if (Object.keys(widgetFields).length) {
       window.EasyStore.updateWidgetCounts(widgetFields).catch(() => {});
@@ -262,26 +267,31 @@
     }
   }
 
-  /* ---------------- next expiry email run preview ---------------- */
+  /* ---------------- upcoming expiry reminder emails ---------------- */
   // The Suite's daily expiry check emails a student when a
   // certificate enters the 30 day window, again inside the 7 day
   // window, and once it has expired (the notice ladder in the
   // plugin's notifications module). This preview lists the
   // certificates sitting in the 30 or 7 day window now, which is who
-  // the next runs will email. Already expired certificates are not
-  // in the expiring-certs data this uses, so they are not listed.
+  // the next checks will email. Already expired certificates are
+  // not in the expiring-certs data this uses, so they are not
+  // listed. The section is collapsed by default; the summary line
+  // above it always shows how many certificates are in a window and
+  // when the next check runs.
 
   async function loadExpiryPreview() {
     const box = $('expiryPreviewBox');
-    const note = $('expiryPreviewNote');
+    const summary = $('expirySummary');
     if (!box) return;
     box.innerHTML = '';
-    if (note) note.textContent = '';
     let list;
     try {
       list = await window.EasyApi.expiringCerts(30);
     } catch (e) {
-      box.appendChild(U.el('p', 'hint', 'Could not check the next expiry email run.'));
+      if (summary) summary.textContent = 'Could not check the reminder windows just now.';
+      box.appendChild(
+        U.el('p', 'hint', 'Could not check which certificates are in a reminder window.')
+      );
       return;
     }
     const rows = [];
@@ -311,15 +321,18 @@
       );
       box.appendChild(item);
     }
-    if (note) {
+    if (summary) {
       const nextRun =
         lastHealth && lastHealth.expiry_check && lastHealth.expiry_check.next_run
           ? lastHealth.expiry_check.next_run
           : null;
-      note.textContent =
-        'The daily expiry check emails students as their certificates enter these windows' +
-        (nextRun ? '; next check ' + nextRun : '') +
-        '. Anyone who already got that reminder for a certificate is not emailed it again.';
+      summary.textContent =
+        (rows.length
+          ? rows.length +
+            (rows.length === 1 ? ' certificate is' : ' certificates are') +
+            ' in a reminder window now.'
+          : 'No certificates are in a reminder window now.') +
+        (nextRun ? ' Next check ' + nextRun + '.' : '');
     }
   }
 
@@ -379,6 +392,14 @@
       if (window.EasyUi) window.EasyUi.closeSubview();
       else closeExpiring();
     });
+    const expiryToggle = $('expiryToggle');
+    if (expiryToggle) {
+      expiryToggle.addEventListener('click', () => {
+        const body = $('expiryBody');
+        const nowHidden = body.classList.toggle('hidden');
+        expiryToggle.setAttribute('aria-expanded', nowHidden ? 'false' : 'true');
+      });
+    }
   }
 
   window.EasyAlerts = { show, init, closeExpiring };
