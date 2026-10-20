@@ -17,7 +17,8 @@ WordPress credentials at runtime.
 
 - **Today**: classes running today (name, instructor, time, seats filled
   versus capacity from the seat sale state). Tapping a class opens its
-  roster, read-only. Below the classes: counts of everything waiting
+  roster, read-only, with Call and Email actions for students who have
+  contact details on file. Below the classes: counts of everything waiting
   for action (including course reviews waiting), the last few decisions
   made from this app, and a footer line showing the EASY Suite version
   on the site, which doubles as a "did the site answer" check. The last
@@ -30,22 +31,40 @@ WordPress credentials at runtime.
   certificate asks first, because publishing emails the student. Recent
   certificate and class publishes can be undone (they flip back to
   draft, and the undo asks first); account decisions cannot be reversed
-  through the API, so they show no Undo button.
-- **Queue**: the management queue feed. Open questions, decided questions
-  with who decided and when, and an "Ask the queue" form that adds a new
-  question for Colleen and Scott. Multiple choice questions need at
-  least two choices before the form will post.
+  through the API, so they show no Undo button. The last good queues
+  are kept on the device, so the screen paints straight away and says
+  when a refresh failed and a saved copy is showing.
+- **Queue**: the management queue feed. Open questions are answered
+  right in the app: tap a choice (or type a free-text answer), confirm,
+  and the answer saves through the Suite with the same validation and
+  notification email as the website queue form. Decided questions show
+  who decided and when, and an "Ask the queue" form adds a new question
+  for Colleen and Scott. Multiple choice questions need at least two
+  choices before the form will post. The last good feed is kept on the
+  device, like Today.
 - **Alerts**: a list of what needs attention right now (pending counts,
   certificates expiring within 30 days), with a note when a count has
   grown since the last check. "All clear" only appears when every check
   actually ran; a check that fails is named on screen instead. Tapping
   the expiring-certificates row opens the list itself, soonest first,
   with email and contact actions. No push notifications in this version.
+  A Site health section below the list shows the Suite health checks
+  plus the last and next runs of the expiry email check and the
+  employer digest; a failed health check is named, never hidden.
 
-The app follows the phone's light or dark setting, has a floating
-Refresh button reachable by thumb on every tab, and the Android Back
-button closes dialogs and subviews first, then returns to Today, then
-exits.
+The app follows the phone's light or dark setting by default; a Theme
+setting (System, Light, Dark) at the foot of the Today screen can
+force either look, and the choice is applied before first paint. The
+app has a floating Refresh button reachable by thumb on every tab, and
+the Android Back button closes dialogs and subviews first, then
+returns to Today, then exits.
+
+A home-screen widget shows the waiting counts the app itself last saw
+(certificate drafts, class drafts, account signups, open queue
+questions, certificates expiring in 30 days) with an "As of" time. It
+reads a small snapshot the app writes after successful Approvals and
+Alerts loads; the widget never talks to the network. The launcher
+icon and splash screens carry the EASY logo.
 
 ## Sign-in and credential storage
 
@@ -194,18 +213,13 @@ Every route mirrors the desktop app and the EASY Suite plugin:
 | Expiring certs | `GET /wp-json/easy/v1/expiring-certs?days=30` | plugin `module-approvals.php` |
 | Queue feed | `GET /wp-json/easy/v1/management-queue` | plugin `module-management-queue.php` (Suite 2.2.24) |
 | Ask the queue | `POST /wp-json/easy/v1/management-queue/questions` | plugin `module-management-queue.php` (Suite 2.2.24) |
+| Answer a question | `POST /wp-json/easy/v1/management-queue/answers` | plugin `module-management-queue.php` (Suite 2.2.27) |
+| Site health | `GET /wp-json/easy/v1/site-health` | plugin `includes/admin.php` (Suite 2.2.27) |
 | Suite version | `GET /wp-json/easy/v1/app-config` | plugin `module-cert-rest.php` |
 | Course reviews count | `GET /wp-json/easy/v1/course-builder/me` | plugin `module-courses.php` |
 
 ## Known gaps (honest list)
 
-- **Answering queue questions from the app is not possible yet.** EASY
-  Suite has no REST route that saves an answer; the website queue page
-  saves through its own form (the saving logic lives in that form
-  handler and needs extracting into a shared function first). The app
-  shows open and decided questions read-only and says so on the Queue
-  screen. Follow-up: add a `POST /wp-json/easy/v1/management-queue/answers`
-  route in a future EASY Suite version, unscheduled.
 - **No money glance and no new-order alerts.** Nothing in the desktop app
   or the plugin reads WooCommerce orders, so there is no existing route
   to mirror. The blocks were left out rather than inventing a contract.

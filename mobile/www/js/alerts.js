@@ -12,6 +12,14 @@
 //
 // Tapping the expiring-certificates row opens the actual list (the
 // data is already on the phone from the count), soonest first.
+//
+// Below the list, a Site health section shows the Suite Overview
+// health rows and the expiry email / digest run times from
+// GET /easy/v1/site-health, with the same honesty rule: a failed
+// fetch says "Could not check: site health." and shows nothing else.
+//
+// Counts from sources that loaded are also written to the widget
+// snapshot the Android home-screen widget reads.
 (function () {
   'use strict';
 
@@ -169,11 +177,22 @@
     }
     const prev = await window.EasyStore.getAlertsSnapshot();
     const { items, counts, failed } = await gather();
+    // Widget snapshot: only sources that actually loaded contribute.
+    const widgetFields = {};
+    if (typeof counts.certs === 'number') widgetFields.certDrafts = counts.certs;
+    if (typeof counts.classes === 'number') widgetFields.classDrafts = counts.classes;
+    if (typeof counts.accounts === 'number') widgetFields.accountSignups = counts.accounts;
+    if (typeof counts.queue === 'number') widgetFields.queueOpen = counts.queue;
+    if (typeof counts.expiring === 'number') widgetFields.expiring30 = counts.expiring;
+    if (Object.keys(widgetFields).length) {
+      window.EasyStore.updateWidgetCounts(widgetFields).catch(() => {});
+    }
     if (failed.length && saved && saved.data && Array.isArray(saved.data.items) && !items.length) {
       // Total failure with a saved copy: keep the saved copy on screen.
       renderItems(saved.data.items, prev, saved.data.counts || {}, failed);
       note.textContent =
         'Could not refresh, showing the last good copy from ' + U.fmtClock(saved.at) + '.';
+      await loadHealth();
       return;
     }
     renderItems(items, prev, counts, failed);
@@ -186,6 +205,50 @@
     } else {
       note.textContent =
         'Checked at ' + U.fmtClock(Date.now()) + ', but ' + failed.join(', ') + ' could not be checked.';
+    }
+    await loadHealth();
+  }
+
+  /* ---------------- site health ---------------- */
+
+  function healthRow(label, state, detail) {
+    const node = U.el('div', 'alert-row');
+    if (state === 'error') node.classList.add('alert-failed');
+    const main = U.el('span', 'alert-text');
+    main.appendChild(U.el('span', 'health-label', label || ''));
+    if (detail) main.appendChild(U.el('span', 'health-detail', detail));
+    node.appendChild(main);
+    const names = { ok: 'OK', warn: 'Attention', error: 'Problem', off: 'Off' };
+    const key = names[state] ? state : 'off';
+    node.appendChild(U.el('span', 'health-state health-' + key, names[key]));
+    return node;
+  }
+
+  function runText(label, pair) {
+    const last = pair && pair.last_run ? pair.last_run : 'never';
+    const next = pair && pair.next_run ? pair.next_run : 'not scheduled';
+    return label + ': last ran ' + last + '; next ' + next + '.';
+  }
+
+  async function loadHealth() {
+    const box = $('healthBox');
+    const note = $('healthUpdated');
+    if (!box) return;
+    box.innerHTML = '';
+    try {
+      const h = await window.EasyApi.siteHealth();
+      const rows = Array.isArray(h.health) ? h.health : [];
+      for (const row of rows) box.appendChild(healthRow(row.label, row.state, row.detail));
+      box.appendChild(U.el('p', 'hint', runText('Expiry email check', h.expiry_check)));
+      box.appendChild(U.el('p', 'hint', runText('Employer digest', h.employer_digest)));
+      note.textContent =
+        (h.suite_version ? 'EASY Suite ' + h.suite_version + '. ' : '') +
+        (h.server_time ? 'Site time ' + h.server_time + '.' : '');
+    } catch (e) {
+      const row = U.el('div', 'alert-row alert-failed');
+      row.appendChild(U.el('span', 'alert-text', 'Could not check: site health.'));
+      box.appendChild(row);
+      note.textContent = '';
     }
   }
 

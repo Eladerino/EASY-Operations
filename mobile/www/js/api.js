@@ -18,6 +18,8 @@
 //   Cert expiry     GET  /wp-json/easy/v1/expiring-certs?days=<n>
 //   Mgmt queue      GET  /wp-json/easy/v1/management-queue
 //                   POST /wp-json/easy/v1/management-queue/questions
+//                   POST /wp-json/easy/v1/management-queue/answers
+//   Site health     GET  /wp-json/easy/v1/site-health
 //   App config      GET  /wp-json/easy/v1/app-config (Suite version)
 //   Course builder  GET  /wp-json/easy/v1/course-builder/me (review count)
 //
@@ -403,6 +405,33 @@
     return r.json;
   }
 
+  // Save one answer. The Suite route applies the same validation as
+  // the website queue form: a choice must be one of the question's
+  // defined options (or '__other' with the write-in text in `other`
+  // for radio_other questions); value is the answer text itself for
+  // free-text questions. Returns { question } in the feed's shape.
+  async function answerQuestion(questionId, value, other) {
+    const body = { question_id: questionId, value };
+    if (other !== undefined) body.other = other;
+    const r = await request('/easy/v1/management-queue/answers', {
+      method: 'POST',
+      body,
+    });
+    invalidateCache();
+    return r.json;
+  }
+
+  /* ---------------- site health ---------------- */
+
+  // The Suite Overview health rows plus expiry email and digest run
+  // times, for the Alerts screen.
+  async function siteHealth() {
+    return cached('siteHealth', 120000, async () => {
+      const r = await request('/easy/v1/site-health');
+      return r.json || {};
+    });
+  }
+
   /* ---------------- site and course builder info ---------------- */
 
   // Suite version plus a reachability canary for the Today footer.
@@ -438,6 +467,8 @@
     expiringCerts,
     mgmtQueue,
     addQuestion,
+    answerQuestion,
+    siteHealth,
     appConfig,
     courseBuilderMe,
   };

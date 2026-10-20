@@ -147,6 +147,13 @@ add_filter('rest_pre_dispatch', function ($result, $server, $request) {
     if (strpos($route, '/wp/v2/cert') !== 0) {
         return $result;
     }
+    // CORS preflight (OPTIONS) requests never carry credentials, and their
+    // responses contain only CORS headers, no data. Let them through so
+    // browser based clients (the EASY Manager app WebView) can complete the
+    // preflight; the checks below still guard every real request method.
+    if ($request->get_method() === 'OPTIONS') {
+        return $result;
+    }
     if (!is_user_logged_in()) {
         return new WP_Error(
             'easy_cert_rest_forbidden',

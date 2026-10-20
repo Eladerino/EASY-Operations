@@ -82,6 +82,8 @@ All routes are under `/wp-json/easy/v1/`.
 | `sale-state/<id>` | Accounts that can edit certificates |
 | `management-queue` | Admins |
 | `management-queue/questions` (POST) | Admins |
+| `management-queue/answers` (POST) | Admins |
+| `site-health` | Admins |
 | `app-config`, `course-builder/me`, `learn/…` | Any signed-in user |
 | `course-builder/…` | Course authors and reviewers |
 | `licenses…`, `enrollments…` | Admins, certificate publishers and Course Builder reviewers |
