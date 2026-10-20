@@ -1,0 +1,8 @@
+{
+  "appId": "ca.easysafety.opsmobile",
+  "appName": "EASY Manager",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  }
+}

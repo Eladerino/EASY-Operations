@@ -1,0 +1,148 @@
+# Builds the EASY Manager Android APK (mobile/) on GitHub's runners.
+#
+# - "Run workflow" (workflow_dispatch) builds a signed release APK and
+#   uploads it as a workflow artifact.
+# - When a GitHub release is published (the desktop app's Release workflow
+#   creates those), this builds the APK and attaches it to that same
+#   release as easy-manager-<version>.apk. The app's self-update check
+#   scans recent releases for exactly that asset name.
+#
+# Signing comes from repository secrets, never from committed files:
+#   ANDROID_KEYSTORE_BASE64   base64 of the .keystore file
+#   ANDROID_KEYSTORE_PASSWORD keystore password
+#   ANDROID_KEY_ALIAS         key alias inside the keystore
+#   ANDROID_KEY_PASSWORD      key password
+# The same keystore must sign every build forever; see mobile/README.md.
+#
+# Capacitor 7 projects compile at Java 21 level, so the build uses JDK 21.
+
+name: Build APK
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Check signing secrets are present and valid
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          missing=0
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is not set. Add all four Android signing secrets listed at the top of this workflow before building."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+          # Decode the keystore and prove the store password and alias
+          # actually match it, so a typo fails here in seconds instead of
+          # surfacing as a cryptic Gradle signing error after the build.
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/easy-manager.keystore"
+          if ! keytool -list -keystore "$RUNNER_TEMP/easy-manager.keystore" \
+              -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+              -alias "$ANDROID_KEY_ALIAS" > /dev/null 2>&1; then
+            echo "::error::The keystore could not be opened with ANDROID_KEYSTORE_PASSWORD, or ANDROID_KEY_ALIAS is not in it. Check the signing secrets."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install mobile dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Sync web assets into the Android project
+        working-directory: mobile
+        run: npx cap sync android
+
+      - name: Stamp version from mobile/package.json
+        id: version
+        working-directory: mobile
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          # The in-app version constant must match, or the self-update
+          # comparison would run against the wrong number.
+          grep -q "APP_VERSION: '$VERSION'" www/js/config.js || {
+            echo "::error::www/js/config.js APP_VERSION does not match package.json version $VERSION."
+            exit 1
+          }
+          MAJOR=$(echo "$VERSION" | cut -d. -f1)
+          MINOR=$(echo "$VERSION" | cut -d. -f2)
+          PATCH=$(echo "$VERSION" | cut -d. -f3)
+          CODE=$((MAJOR * 10000 + MINOR * 100 + PATCH))
+          sed -i "s/versionName \".*\"/versionName \"$VERSION\"/" android/app/build.gradle
+          sed -i "s/versionCode [0-9]*/versionCode $CODE/" android/app/build.gradle
+          grep -q "versionName \"$VERSION\"" android/app/build.gradle
+          grep -q "versionCode $CODE" android/app/build.gradle
+
+      - name: Write signing config from secrets
+        working-directory: mobile/android
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > app/release.keystore
+          # printf '%s' writes each secret value literally, so a password
+          # containing a $ or a backtick reaches Gradle unchanged. Do not
+          # replace this with a heredoc that expands the values.
+          {
+            printf 'storeFile=%s\n' "$GITHUB_WORKSPACE/mobile/android/app/release.keystore"
+            printf 'storePassword=%s\n' "$KEYSTORE_PASSWORD"
+            printf 'keyAlias=%s\n' "$KEY_ALIAS"
+            printf 'keyPassword=%s\n' "$KEY_PASSWORD"
+          } > keystore.properties
+
+      - name: Build release APK
+        working-directory: mobile/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease
+
+      - name: Collect the APK under its release name
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          cp mobile/android/app/build/outputs/apk/release/app-release.apk \
+             "easy-manager-$VERSION.apk"
+          ls -la "easy-manager-$VERSION.apk"
+
+      - name: Upload APK as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: easy-manager-${{ steps.version.outputs.version }}
+          path: easy-manager-${{ steps.version.outputs.version }}.apk
+
+      - name: Attach the APK to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" "easy-manager-$VERSION.apk" --clobber
