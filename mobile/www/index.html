@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="viewport-fit=cover, width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <title>EASY Manager</title>
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+
+  <!-- Self-update banner -->
+  <div id="updateBanner" class="update-banner hidden">
+    <span id="updateText">A new version is available.</span>
+    <span class="update-actions">
+      <button id="updateInstall" type="button" class="btn btn-small btn-primary">Update</button>
+      <button id="updateDismiss" type="button" class="btn btn-small btn-ghost">Skip this version</button>
+    </span>
+  </div>
+
+  <!-- Sign-in -->
+  <section id="signinView" class="signin hidden">
+    <div class="signin-card">
+      <h1>EASY Manager</h1>
+      <p class="hint">Sign in with your WordPress username and an application password for easysafety.ca.</p>
+      <p class="hint">Application passwords are created in wp-admin under Users, then your profile, then Application Passwords.</p>
+      <form id="signinForm">
+        <label for="signinUser">Username</label>
+        <input id="signinUser" type="text" autocomplete="username" autocapitalize="none" />
+        <label for="signinPass">Application password</label>
+        <input id="signinPass" type="password" autocomplete="current-password" />
+        <p id="signinError" class="error-text hidden"></p>
+        <button id="signinBtn" type="submit" class="btn btn-primary btn-block">Sign in</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- App -->
+  <div id="appView" class="hidden">
+    <header class="app-header">
+      <div class="app-header-main">
+        <span class="app-name">EASY Manager</span>
+        <span id="signedInAs" class="signed-in-as"></span>
+      </div>
+      <button id="signOutBtn" type="button" class="btn btn-small btn-ghost">Sign out</button>
+    </header>
+
+    <main class="pages">
+      <!-- Today -->
+      <section id="tab-today" class="tab-page">
+        <div id="todayMain">
+          <div class="page-head">
+            <h2>Today</h2>
+            <button id="todayRefresh" type="button" class="btn btn-small btn-secondary">Refresh</button>
+          </div>
+          <h3 class="section-title">Classes today</h3>
+          <div id="todayClasses"></div>
+          <p id="todayClassesNote" class="hint"></p>
+          <h3 class="section-title">Needs attention</h3>
+          <div class="count-grid">
+            <div class="count-box"><span id="countCerts" class="count-num">...</span><span class="count-label">Certificate drafts</span></div>
+            <div class="count-box"><span id="countClasses" class="count-num">...</span><span class="count-label">Class drafts</span></div>
+            <div class="count-box"><span id="countAccounts" class="count-num">...</span><span class="count-label">Account signups</span></div>
+            <div class="count-box"><span id="countQueue" class="count-num">...</span><span class="count-label">Open queue questions</span></div>
+            <div class="count-box"><span id="countReviews" class="count-num">...</span><span class="count-label">Course reviews waiting</span></div>
+          </div>
+          <h3 class="section-title">Recently decided</h3>
+          <div id="todayRecent"></div>
+          <p id="suiteLine" class="hint"></p>
+          <p class="footer-note">
+            <button id="checkUpdatesBtn" type="button" class="btn btn-small btn-ghost">Check for app updates</button>
+          </p>
+        </div>
+        <div id="rosterView" class="hidden">
+          <div class="page-head">
+            <h2>Roster</h2>
+            <button id="rosterBack" type="button" class="btn btn-small btn-secondary">Back</button>
+          </div>
+          <h3 id="rosterTitle" class="section-title"></h3>
+          <div id="rosterList"></div>
+        </div>
+      </section>
+
+      <!-- Approvals -->
+      <section id="tab-approvals" class="tab-page hidden">
+        <div class="page-head">
+          <h2>Approvals</h2>
+          <button id="approvalsRefresh" type="button" class="btn btn-small btn-secondary">Refresh</button>
+        </div>
+        <p id="approvalsError" class="error-text hidden"></p>
+
+        <h3 class="section-title">Certificates <span id="badgeCerts" class="badge hidden">0</span></h3>
+        <p id="certsNote" class="hint hidden"></p>
+        <div id="queueCerts"></div>
+
+        <h3 class="section-title">Classes <span id="badgeClasses" class="badge hidden">0</span></h3>
+        <div id="queueClasses"></div>
+
+        <h3 class="section-title">Account signups <span id="badgeAccounts" class="badge hidden">0</span></h3>
+        <p id="accountsNote" class="hint hidden"></p>
+        <div id="queueAccounts"></div>
+
+        <h3 class="section-title">Recent decisions</h3>
+        <div id="approvalsRecent"></div>
+      </section>
+
+      <!-- Management queue -->
+      <section id="tab-queue" class="tab-page hidden">
+        <div class="page-head">
+          <h2>Management queue</h2>
+          <button id="queueRefresh" type="button" class="btn btn-small btn-secondary">Refresh</button>
+        </div>
+        <p id="queueCounts" class="hint"></p>
+        <p id="queueActivity" class="hint"></p>
+        <p id="queueError" class="error-text hidden"></p>
+
+        <h3 class="section-title">Open questions</h3>
+        <div id="queueOpen"></div>
+
+        <h3 class="section-title">Decided</h3>
+        <div id="queueDecided"></div>
+
+        <h3 class="section-title">Ask the queue</h3>
+        <form id="askForm" class="ask-form">
+          <label for="askSection">Section heading (optional)</label>
+          <input id="askSection" type="text" placeholder="Additional questions" />
+          <label for="askLabel">Question</label>
+          <input id="askLabel" type="text" required />
+          <label for="askWhy">Context (optional)</label>
+          <textarea id="askWhy" rows="3"></textarea>
+          <label for="askType">Answer type</label>
+          <select id="askType">
+            <option value="radio">Multiple choice</option>
+            <option value="radio_other">Multiple choice with write-in</option>
+            <option value="textarea">Free text</option>
+          </select>
+          <label for="askOptions">Choices (one per line, for multiple choice)</label>
+          <textarea id="askOptions" rows="4"></textarea>
+          <button id="askSubmit" type="submit" class="btn btn-primary btn-block">Add question</button>
+        </form>
+      </section>
+
+      <!-- Alerts -->
+      <section id="tab-alerts" class="tab-page hidden">
+        <div id="alertsMain">
+          <div class="page-head">
+            <h2>Alerts</h2>
+          </div>
+          <div id="alertsList"></div>
+          <p id="alertsUpdated" class="hint"></p>
+          <p class="hint">Alerts are checked when you open this screen. There are no push notifications in this version.</p>
+        </div>
+        <div id="expiringView" class="hidden">
+          <div class="page-head">
+            <h2>Expiring soon</h2>
+            <button id="expiringBack" type="button" class="btn btn-small btn-secondary">Back</button>
+          </div>
+          <h3 class="section-title">Certificates expiring in the next 30 days</h3>
+          <div id="expiringList"></div>
+        </div>
+      </section>
+    </main>
+
+    <button id="floatRefresh" type="button" class="float-refresh">Refresh</button>
+
+    <nav class="tabbar">
+      <button type="button" class="tab-btn active" data-tab="today">Today</button>
+      <button type="button" class="tab-btn" data-tab="approvals">Approvals <span id="tabApprovalsBadge" class="badge hidden">0</span></button>
+      <button type="button" class="tab-btn" data-tab="queue">Queue</button>
+      <button type="button" class="tab-btn" data-tab="alerts">Alerts</button>
+    </nav>
+  </div>
+
+  <!-- Confirm modal -->
+  <div id="modal" class="modal hidden">
+    <div class="modal-card">
+      <h3 id="modalTitle"></h3>
+      <p id="modalBody"></p>
+      <div class="modal-actions">
+        <button id="modalCancel" type="button" class="btn btn-secondary">Cancel</button>
+        <button id="modalOk" type="button" class="btn btn-primary">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toasts"></div>
+
+  <script src="js/config.js"></script>
+  <script src="js/util.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/updater.js"></script>
+  <script src="js/today.js"></script>
+  <script src="js/approvals.js"></script>
+  <script src="js/queue.js"></script>
+  <script src="js/alerts.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

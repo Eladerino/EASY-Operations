@@ -1,0 +1,10 @@
+node_modules/
+# Signing material: created by CI from repository secrets, never committed.
+android/keystore.properties
+android/app/*.keystore
+# Android build outputs and machine-local config.
+android/.gradle/
+android/local.properties
+android/app/build/
+android/build/
+android/app/src/main/assets/public/
