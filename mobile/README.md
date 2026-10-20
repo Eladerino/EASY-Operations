@@ -2,8 +2,8 @@
 
 A personal Android companion app for EASY Safety Training. It puts the
 management work that normally needs the desktop app or wp-admin into a
-phone-sized triage tool: today's classes, the three approval queues, and
-the management queue.
+phone-sized management tool: today's classes, the class schedule, the
+three approval queues, and the management queue.
 
 This app is for Brandon only. It is sideloaded (installed from an APK
 file), never published to an app store, and it is not part of the EASY
@@ -24,6 +24,24 @@ WordPress credentials at runtime.
   on the site, which doubles as a "did the site answer" check. The last
   good class list is kept on the device, so the screen paints straight
   away and says when it is showing a saved copy instead of fresh data.
+- **Schedule**: a month calendar of classes (dots mark days with
+  classes; a hollow dot means one of them is still a draft). Tapping a
+  day lists its classes; tapping a class opens the editor: course
+  (picked from the site's own event categories, which also sets the
+  title and files the class under that course), title, description,
+  dates and times or all day, instructor, location, cost, and seats.
+  New instructors and locations can be created from the same form. A
+  class is saved as a draft or published live, and publishing is
+  verified by re-reading the class from the server, never just by the
+  save answering OK. Publishing, moving a published class back to
+  draft, and deleting each ask first with a confirmation that says
+  exactly what will happen; deleting moves the class to the trash on
+  the website. Classes use the same Events Calendar REST contract as
+  the desktop Schedule, so a class created here is indistinguishable
+  from one created there. An account that cannot publish classes gets
+  a view-only schedule. Below the calendar, each instructor's private
+  calendar subscription link is listed with a Copy button, read from
+  the site; resetting a link stays in EASY Suite, never in this app.
 - **Approvals**: the triage inbox. Certificate drafts, class drafts, and
   account signups, one card per item, decided one at a time. There is
   deliberately no "approve all". Certificate cards show the expiry date
@@ -33,7 +51,9 @@ WordPress credentials at runtime.
   draft, and the undo asks first); account decisions cannot be reversed
   through the API, so they show no Undo button. The last good queues
   are kept on the device, so the screen paints straight away and says
-  when a refresh failed and a saved copy is showing.
+  when a refresh failed and a saved copy is showing. A certificate
+  search at the bottom looks up any certificate, published or draft,
+  by student name or certificate number (read only).
 - **Queue**: the management queue feed. Open questions are answered
   right in the app: tap a choice (or type a free-text answer), confirm,
   and the answer saves through the Suite with the same validation and
@@ -50,7 +70,11 @@ WordPress credentials at runtime.
   with email and contact actions. No push notifications in this version.
   A Site health section below the list shows the Suite health checks
   plus the last and next runs of the expiry email check and the
-  employer digest; a failed health check is named, never hidden.
+  employer digest; a failed health check is named, never hidden. Below
+  that, a Next expiry email run section previews the certificates
+  sitting in the Suite's reminder windows (30 day and 7 day) with the
+  student, course, expiry date, and days left, which is who the next
+  daily expiry checks will email.
 
 The app follows the phone's light or dark setting by default; a Theme
 setting (System, Light, Dark) at the foot of the Today screen can
@@ -64,7 +88,8 @@ A home-screen widget shows the waiting counts the app itself last saw
 questions, certificates expiring in 30 days) with an "As of" time. It
 reads a small snapshot the app writes after successful Approvals and
 Alerts loads; the widget never talks to the network. The launcher
-icon and splash screens carry the EASY logo.
+icon and splash screens carry the current EASY logo, the same artwork
+the website uses.
 
 ## Sign-in and credential storage
 
@@ -182,8 +207,8 @@ origins, so the first install is also the test of whether the site's
 REST responses are readable from that setup:
 
 1. Install the APK and sign in.
-2. Open all four tabs (Today, Approvals, Queue, Alerts) and let each
-   finish loading.
+2. Open all five tabs (Today, Schedule, Approvals, Queue, Alerts) and
+   let each finish loading.
 3. Publish nothing and decide nothing during this pass.
 4. Check that counts and lists appear on every tab.
 
@@ -208,6 +233,11 @@ Every route mirrors the desktop app and the EASY Suite plugin:
 | Cert publish | `POST /wp-json/wp/v2/cert/<id>` with `{status}` | desktop cert approvals |
 | Classes | `GET /wp-json/tribe/events/v1/events?start_date&end_date` | desktop schedule |
 | Class publish | `PUT /wp-json/tribe/events/v1/events/<id>` with `{status}` | desktop schedule |
+| Class create and edit | `POST` or `PUT /wp-json/tribe/events/v1/events[/<id>]` with the desktop payload shape | desktop schedule |
+| Class delete | `DELETE /wp-json/tribe/events/v1/events/<id>` (moves to trash) | desktop schedule |
+| Venues, instructors, categories | `GET` and `POST /wp-json/tribe/events/v1/venues`, `/organizers`, `/categories` | desktop schedule |
+| Cert search | `GET /wp-json/easy/v1/cert-search?q=<text>` | plugin `module-approvals.php` (Suite 2.2.28) |
+| Instructor calendar links | `GET /wp-json/easy/v1/instructor-feeds` | plugin `includes/admin.php` (Suite 2.2.28) |
 | Seats filled | `GET /wp-json/easy/v1/sale-state/<event_id>` | plugin `module-seat-sales.php` |
 | Class roster | `GET /wp-json/easy/v1/roster/<event_id>` | plugin `module-roster.php` |
 | Expiring certs | `GET /wp-json/easy/v1/expiring-certs?days=30` | plugin `module-approvals.php` |
@@ -237,7 +267,13 @@ Every route mirrors the desktop app and the EASY Suite plugin:
 - **Push notifications are deferred.** Alerts are computed when the
   Alerts screen opens. A future version could poll on an interval, but
   real push needs a server-side sender the site does not have yet.
-- **The native side has not been compiled on a developer machine.** This
-  project was authored on a VM with no Android SDK, so the first
-  CI run is the first real compile of the Java plugin and Gradle config.
-  Watch the first Build APK run; small fixes there would be normal.
+- **No recurring classes.** The Events Calendar REST API does not
+  support recurrence, so a repeating class is created as individual
+  classes, the same limit the desktop Schedule has.
+- **The phone course picker has no preset descriptions.** The desktop
+  Schedule fills a new class's description from its built-in course
+  catalog; the phone picker uses the site's live categories instead
+  and leaves the description blank to type or paste.
+- **The native side is only compiled in CI.** This project is authored
+  on a VM with no Android SDK, so Gradle compilation is proven by the
+  Build APK workflow runs, not locally.

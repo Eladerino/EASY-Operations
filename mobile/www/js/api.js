@@ -22,6 +22,13 @@
 //   Site health     GET  /wp-json/easy/v1/site-health
 //   App config      GET  /wp-json/easy/v1/app-config (Suite version)
 //   Course builder  GET  /wp-json/easy/v1/course-builder/me (review count)
+//   Schedule write  POST /wp-json/tribe/events/v1/events (create)
+//                   PUT  /wp-json/tribe/events/v1/events/<id> (update)
+//                   DELETE /wp-json/tribe/events/v1/events/<id> (trash)
+//                   GET  /wp-json/tribe/events/v1/venues|organizers|categories
+//                   POST /wp-json/tribe/events/v1/venues|organizers (create)
+//   Cert search     GET  /wp-json/easy/v1/cert-search?q=<text> (Suite 2.2.28)
+//   Calendar links  GET  /wp-json/easy/v1/instructor-feeds (Suite 2.2.28)
 //
 // Auth is a WordPress Application Password sent as HTTP Basic over HTTPS.
 //
@@ -363,6 +370,295 @@
   const publishEvent = (id) => setEventStatus(id, 'publish');
   const unpublishEvent = (id) => setEventStatus(id, 'draft');
 
+  /* ---------------- schedule: full events and writing ---------------- */
+  // The Schedule tab edits classes through the same TEC REST contract
+  // the desktop app uses (see main.js schedule handlers and
+  // renderer/schedule.js): wall-clock "YYYY-MM-DD HH:MM:SS" strings the
+  // site reads in its own timezone, venue as a bare number, organizer
+  // as a one-item array, blank optional fields omitted entirely.
+
+  // Everything normalizeEvent returns, plus what the editor needs:
+  // venue and organizer ids, the description, category ids, end stamp.
+  function normalizeEventFull(raw) {
+    const base = normalizeEvent(raw || {});
+    const venueObj = firstRef(raw && raw.venue);
+    const orgObj = firstRef(raw && raw.organizer);
+    const endStamp = String((raw && raw.end_date) || (raw && raw.start_date) || '');
+    return {
+      ...base,
+      endStamp,
+      venueId: venueObj ? venueObj.id : null,
+      organizerId: orgObj ? orgObj.id : null,
+      description: (raw && raw.description) || '',
+      categoryIds: Array.isArray(raw && raw.categories)
+        ? raw.categories.map((c) => c && c.id).filter(Boolean)
+        : [],
+    };
+  }
+
+  async function fetchEventsPageFull(start, end, page) {
+    const r = await request(
+      '/tribe/events/v1/events?start_date=' + encodeURIComponent(start) +
+        '&end_date=' + encodeURIComponent(end) +
+        '&per_page=50&page=' + page
+    );
+    const body = r.json || {};
+    const items = Array.isArray(body) ? body : Array.isArray(body.events) ? body.events : [];
+    const totalPages =
+      parseInt(r.headers.get('x-wp-totalpages') || '', 10) ||
+      parseInt(body.total_pages || '', 10) ||
+      1;
+    return { items: items.map(normalizeEventFull), totalPages };
+  }
+
+  async function eventsInRangeFull(start, end) {
+    return cached('eventsFull:' + start + ':' + end, 90000, async () => {
+      const first = await fetchEventsPageFull(start, end, 1);
+      const events = [...first.items];
+      if (first.totalPages > 1) {
+        const rest = await Promise.all(
+          Array.from({ length: first.totalPages - 1 }, (_, i) => fetchEventsPageFull(start, end, i + 2))
+        );
+        for (const page of rest) events.push(...page.items);
+      }
+      return events;
+    });
+  }
+
+  // One event, read fresh from the server. Used to verify a publish:
+  // the answer comes from a re-read, not from the save response alone.
+  async function eventById(id) {
+    const r = await request('/tribe/events/v1/events/' + id);
+    return normalizeEventFull(r.json || {});
+  }
+
+  // Write-access probe, same trick as the desktop: WordPress runs the
+  // permission check before validating the body, so an empty POST from
+  // a capable account answers 400 (missing title and dates) and creates
+  // nothing, while 401 or 403 means the account cannot write events.
+  async function probeEventWrite() {
+    const r = await rawRequest(WP + '/tribe/events/v1/events', { method: 'POST', body: {} });
+    if (r.status === 400) return true;
+    if (r.status === 401 || r.status === 403) return false;
+    throw apiError(r);
+  }
+
+  function unwrapList(json, key) {
+    if (Array.isArray(json)) return json;
+    if (json && Array.isArray(json[key])) return json[key];
+    return [];
+  }
+
+  async function fetchAllPages(path, key) {
+    const items = [];
+    let page = 1;
+    let totalPages = 1;
+    do {
+      const sep = path.includes('?') ? '&' : '?';
+      const r = await request(path + sep + 'per_page=50&page=' + page);
+      items.push(...unwrapList(r.json, key));
+      totalPages =
+        parseInt(r.headers.get('x-wp-totalpages') || '', 10) ||
+        parseInt((r.json && r.json.total_pages) || '', 10) ||
+        1;
+      page += 1;
+    } while (page <= totalPages);
+    return items;
+  }
+
+  function normalizeVenue(v) {
+    const raw = v || {};
+    return {
+      id: raw.id,
+      name: decodeEntities(raw.venue || raw.name || '') || '(unnamed location)',
+      address: raw.address || '',
+      city: raw.city || '',
+      province: raw.province || '',
+      zip: raw.zip || '',
+      phone: raw.phone || '',
+    };
+  }
+
+  function normalizeOrganizer(o) {
+    const raw = o || {};
+    return {
+      id: raw.id,
+      name: decodeEntities(raw.organizer || raw.name || '') || '(unnamed instructor)',
+      email: raw.email || '',
+      phone: raw.phone || '',
+    };
+  }
+
+  function normalizeCategory(c) {
+    const raw = c || {};
+    return {
+      id: raw.id,
+      name: decodeEntities(raw.name || ''),
+      slug: raw.slug || '',
+      parent: raw.parent || 0,
+    };
+  }
+
+  async function venuesList() {
+    return cached('venuesList', 300000, async () =>
+      (await fetchAllPages('/tribe/events/v1/venues', 'venues')).map(normalizeVenue)
+    );
+  }
+
+  async function organizersList() {
+    return cached('organizersList', 300000, async () =>
+      (await fetchAllPages('/tribe/events/v1/organizers', 'organizers')).map(normalizeOrganizer)
+    );
+  }
+
+  // hide_empty=0 matters: the endpoint hides categories with no events
+  // by default, which would make a brand new course unpickable. The
+  // string "0", not false: in PHP the string "false" is truthy.
+  async function categoriesList() {
+    return cached('categoriesList', 300000, async () =>
+      (await fetchAllPages('/tribe/events/v1/categories?hide_empty=0', 'categories')).map(
+        normalizeCategory
+      )
+    );
+  }
+
+  // Plain-language write errors, mirroring the desktop's wording.
+  function friendlyWriteError(r, action) {
+    const msg = (r.json && r.json.message) || '';
+    if (r.status === 401) {
+      return (
+        'WordPress rejected the sign-in while trying to ' +
+        action +
+        '. Sign out and sign in again with a fresh application password.'
+      );
+    }
+    if (r.status === 403) {
+      return 'This WordPress account is not allowed to ' + action + '.';
+    }
+    if (r.status === 400 && msg) return 'WordPress refused to ' + action + ': ' + msg;
+    return 'Could not ' + action + ' (HTTP ' + r.status + ').' + (msg ? ' ' + msg : '');
+  }
+
+  async function tribeWrite(method, path, body, action) {
+    const r = await rawRequest(WP + path, { method, body });
+    if (r.status === 200 || r.status === 201 || r.status === 204) return r;
+    throw new Error(friendlyWriteError(r, action));
+  }
+
+  async function createVenue(fields) {
+    const r = await tribeWrite('POST', '/tribe/events/v1/venues', fields, 'create the location');
+    invalidateCache();
+    return normalizeVenue(r.json || {});
+  }
+
+  async function createOrganizer(fields) {
+    const r = await tribeWrite('POST', '/tribe/events/v1/organizers', fields, 'create the instructor');
+    invalidateCache();
+    return normalizeOrganizer(r.json || {});
+  }
+
+  async function createEvent(payload) {
+    const r = await tribeWrite('POST', '/tribe/events/v1/events', payload, 'schedule the class');
+    return normalizeEventFull(r.json || {});
+  }
+
+  async function updateEvent(id, payload) {
+    const r = await tribeWrite('PUT', '/tribe/events/v1/events/' + id, payload, 'update the class');
+    return normalizeEventFull(r.json || {});
+  }
+
+  // DELETE moves the event to the trash on the website; it does not
+  // permanently delete it. The Schedule screen says so before asking.
+  async function deleteEvent(id) {
+    await tribeWrite('DELETE', '/tribe/events/v1/events/' + id, undefined, 'delete the class');
+    invalidateCache();
+    return true;
+  }
+
+  // The one payload builder for create and edit, with the desktop's
+  // field rules:
+  //   - dates are wall-clock strings; all day means 00:00:00 to
+  //     23:59:59, and blank times default to 09:00 and 17:00
+  //   - a blank description is omitted (this TEC version rejects empty
+  //     strings for some fields); the same for a blank cost
+  //   - venue is a bare number, never an array (an array falls into
+  //     TEC's create-new-venue path and fails); organizer is a
+  //     one-item array, which is what its handler loops over
+  //   - seats sent as an integer when set; when the class had seats
+  //     and the field was cleared (opts.hadSeats), an empty string
+  //     unsets them; when it never had seats, the field stays absent
+  //   - categories are sent only when the course picker was touched
+  //     (input.categoryIds an array with items); untouched means the
+  //     field is absent and the site keeps whatever the class has
+  function buildEventPayload(input, opts = {}) {
+    const data = input || {};
+    const startTime = data.allDay ? '00:00:00' : (data.startTime || '09:00') + ':00';
+    const endTime = data.allDay ? '23:59:59' : (data.endTime || '17:00') + ':00';
+    const payload = {
+      title: String(data.title || '').trim(),
+      start_date: data.startDate + ' ' + startTime,
+      end_date: (data.endDate || data.startDate) + ' ' + endTime,
+      all_day: Boolean(data.allDay),
+      status: data.status === 'publish' ? 'publish' : 'draft',
+    };
+    const desc = String(data.description || '').trim();
+    if (desc) payload.description = desc;
+    if (data.venueId) payload.venue = Number(data.venueId);
+    if (data.organizerId) payload.organizer = [Number(data.organizerId)];
+    const cost = String(data.cost === null || data.cost === undefined ? '' : data.cost).trim();
+    if (cost) payload.cost = cost;
+    const seatsRaw = String(data.seats === null || data.seats === undefined ? '' : data.seats).trim();
+    if (seatsRaw !== '') {
+      payload.easy_seats = Math.max(0, parseInt(seatsRaw, 10) || 0);
+    } else if (opts.hadSeats) {
+      payload.easy_seats = '';
+    }
+    if (Array.isArray(data.categoryIds) && data.categoryIds.length) {
+      payload.categories = data.categoryIds.slice();
+    }
+    return payload;
+  }
+
+  // Save (create or update) with publish verification. When the intent
+  // is publish, the saved event is re-read from the server and the save
+  // only counts as published when the re-read says so; WordPress can
+  // answer 200 while silently keeping a draft when the account lacks
+  // publish rights, and this app never reports that as success. If the
+  // re-read itself fails (a network hiccup), the save response's own
+  // status is the fallback evidence.
+  async function saveEvent(idOrNull, payload) {
+    const saved = idOrNull ? await updateEvent(idOrNull, payload) : await createEvent(payload);
+    if (payload && payload.status === 'publish') {
+      let confirmed = !!(saved && saved.status === 'publish');
+      if (saved && saved.id) {
+        try {
+          const fresh = await eventById(saved.id);
+          if (fresh && fresh.status) confirmed = fresh.status === 'publish';
+        } catch (e) {
+          // Keep the save response's status as the evidence.
+        }
+      }
+      if (!confirmed) {
+        invalidateCache();
+        throw new Error(
+          'WordPress kept the class as a draft. This account cannot publish classes ' +
+            '(it needs the publish_tribe_events capability). The class itself was saved as a draft.'
+        );
+      }
+    }
+    invalidateCache();
+    return saved;
+  }
+
+  // The site's timezone string (e.g. "America/St_Johns"), so the
+  // Schedule screen can say which clock class times run on.
+  async function siteTimezone() {
+    return cached('siteTimezone', 3600000, async () => {
+      const r = await request('/');
+      return (r.json && r.json.timezone_string) || null;
+    });
+  }
+
   /* ---------------- seat sales state ---------------- */
 
   async function saleState(eventId) {
@@ -432,6 +728,59 @@
     });
   }
 
+  /* ---------------- instructor calendar links (Suite 2.2.28) ------- */
+
+  // Pure shaping for one feed row, kept separate so it can be tested
+  // without the network.
+  function shapeFeed(f) {
+    const raw = f || {};
+    return {
+      id: raw.id,
+      name: String(raw.name || ''),
+      url: String(raw.url || ''),
+    };
+  }
+
+  // Each instructor's tokened calendar subscription link, read from
+  // the site. Read only on purpose: resetting a link stays in EASY
+  // Suite (wp-admin, Calendar feeds), never in this app. A site still
+  // on Suite 2.2.27 answers 404 and the Schedule screen says so.
+  async function instructorFeeds() {
+    const r = await request('/easy/v1/instructor-feeds');
+    const body = r.json || {};
+    const feeds = (Array.isArray(body.feeds) ? body.feeds : [])
+      .map(shapeFeed)
+      .filter((f) => f.url);
+    return { available: body.available !== false, feeds };
+  }
+
+  /* ---------------- certificate search (Suite 2.2.28) -------------- */
+
+  // Pure shaping for one search result row.
+  function shapeCertRow(row) {
+    const raw = row || {};
+    return {
+      id: raw.id,
+      title: String(raw.title || ''),
+      status: String(raw.status || ''),
+      student: String(raw.student || raw.student_name || '') || '(no name)',
+      course: String(raw.course || raw.course_title || raw.course_category || ''),
+      number: String(raw.certificate_number || ''),
+      completion: String(raw.completion_date || ''),
+      expiry: String(raw.expiry_date || ''),
+    };
+  }
+
+  // Search published and draft certificates by student name (matched
+  // against certificate titles on the server) or by certificate
+  // number (matched against the number field on the server). The
+  // route is gated by the same Suite permission as the cert queue.
+  async function certSearch(query) {
+    const r = await request('/easy/v1/cert-search?q=' + encodeURIComponent(query));
+    const rows = Array.isArray(r.json) ? r.json : Array.isArray(r.json && r.json.results) ? r.json.results : [];
+    return rows.map(shapeCertRow);
+  }
+
   /* ---------------- site and course builder info ---------------- */
 
   // Suite version plus a reachability canary for the Today footer.
@@ -462,6 +811,25 @@
     eventsInRange,
     publishEvent,
     unpublishEvent,
+    eventsInRangeFull,
+    eventById,
+    probeEventWrite,
+    venuesList,
+    organizersList,
+    categoriesList,
+    createVenue,
+    createOrganizer,
+    createEvent,
+    updateEvent,
+    deleteEvent,
+    buildEventPayload,
+    normalizeEventFull,
+    saveEvent,
+    siteTimezone,
+    instructorFeeds,
+    shapeFeed,
+    certSearch,
+    shapeCertRow,
     saleState,
     roster,
     expiringCerts,

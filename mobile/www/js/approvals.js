@@ -14,6 +14,11 @@
 // open, and refreshed in the background; a failed refresh keeps the
 // saved copy on screen and says so. Counts from queues that loaded
 // are also written to the home-screen widget snapshot.
+//
+// Below the queues, a certificate search looks up any certificate
+// (published or draft) by student name or certificate number through
+// the Suite's cert-search route. It is read only: results are shown,
+// never edited, and an empty result says so plainly.
 (function () {
   'use strict';
 
@@ -275,6 +280,75 @@
     }
   }
 
+  /* ---------------- certificate search ---------------- */
+
+  async function searchCerts(submitEv) {
+    if (submitEv) submitEv.preventDefault();
+    const input = $('certSearchInput');
+    const box = $('certSearchResults');
+    const q = input.value.trim();
+    box.innerHTML = '';
+    if (q.length < 2) {
+      box.appendChild(U.el('p', 'hint', 'Type at least 2 characters of a name or certificate number.'));
+      return;
+    }
+    const btn = $('certSearchBtn');
+    btn.disabled = true;
+    box.appendChild(U.el('p', 'hint', 'Searching...'));
+    try {
+      const rows = await window.EasyApi.certSearch(q);
+      box.innerHTML = '';
+      if (!rows.length) {
+        box.appendChild(
+          U.el('p', 'hint', 'No certificates match "' + q + '". Check the spelling, or try part of the name or number.')
+        );
+        return;
+      }
+      for (const row of rows) {
+        const card = U.el('div', 'card');
+        const head = U.el('div', 'card-head-row');
+        head.appendChild(U.el('span', 'card-title', row.student));
+        const statusLabel =
+          row.status === 'publish'
+            ? 'Published'
+            : row.status === 'draft'
+              ? 'Draft'
+              : row.status
+                ? row.status.charAt(0).toUpperCase() + row.status.slice(1)
+                : '';
+        head.appendChild(
+          U.el('span', 'chip ' + (row.status === 'publish' ? 'chip-live' : 'chip-draft'), statusLabel)
+        );
+        card.appendChild(head);
+        const meta = [
+          row.course || '',
+          row.number ? 'No. ' + row.number : '',
+          row.expiry ? 'expires ' + U.fmtDateLoose(row.expiry) : '',
+          row.completion ? 'completed ' + U.fmtDateLoose(row.completion) : '',
+        ]
+          .filter(Boolean)
+          .join(' · ');
+        if (meta) card.appendChild(U.el('div', 'card-meta', meta));
+        box.appendChild(card);
+      }
+    } catch (e) {
+      box.innerHTML = '';
+      if (e && e.status === 404) {
+        box.appendChild(
+          U.el(
+            'p',
+            'hint',
+            'Certificate search needs EASY Suite 2.2.28 or newer on the site. Once the site is updated, search will work here.'
+          )
+        );
+      } else {
+        box.appendChild(U.el('p', 'error-text', 'Could not search certificates: ' + e.message));
+      }
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
   /* ---------------- recent decisions + undo ---------------- */
 
   async function renderRecent() {
@@ -409,11 +483,11 @@
         accounts: state.accounts,
       });
       paintedSavedAt = Date.now();
-      if (note) note.textContent = 'Last updated ' + U.fmtClock(Date.now()) + '.';
+      if (note) note.textContent = 'Last updated ' + U.endPeriod(U.fmtClock(Date.now()));
     } else if (note && paintedSavedAt) {
       note.textContent =
         !ok.certs && !ok.classes && !ok.accounts
-          ? 'Could not refresh, showing the last good copy from ' + U.fmtClock(paintedSavedAt) + '.'
+          ? 'Could not refresh, showing the last good copy from ' + U.endPeriod(U.fmtClock(paintedSavedAt))
           : 'Checked at ' + U.fmtClock(Date.now()) + '; the queues that failed are still showing the last good copy.';
     }
   }
@@ -424,11 +498,16 @@
       applySnapshot(saved.data);
       paintedSavedAt = saved.at;
       const note = $('approvalsUpdated');
-      if (note) note.textContent = 'Last updated ' + U.fmtClock(saved.at) + '. Refreshing...';
+      if (note) note.textContent = 'Last updated ' + U.endPeriod(U.fmtClock(saved.at)) + ' Refreshing...';
       renderRecent();
     }
     await loadAll();
   }
 
-  window.EasyApprovals = { show, refresh: loadAll };
+  function init() {
+    const form = $('certSearchForm');
+    if (form) form.addEventListener('submit', searchCerts);
+  }
+
+  window.EasyApprovals = { show, refresh: loadAll, init };
 })();

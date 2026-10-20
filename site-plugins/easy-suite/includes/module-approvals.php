@@ -60,6 +60,18 @@ add_action('rest_api_init', function () {
             ],
         ],
     ]);
+    register_rest_route('easy/v1', '/cert-search', [
+        'methods'             => 'GET',
+        'callback'            => 'easy_cert_search',
+        'permission_callback' => 'easy_cert_rest_can_access',
+        'args'                => [
+            'q' => [
+                'required'          => true,
+                'type'              => 'string',
+                'sanitize_callback' => 'sanitize_text_field',
+            ],
+        ],
+    ]);
 });
 
 /**
@@ -140,6 +152,77 @@ function easy_expiring_certs($request) {
     usort($out, function ($a, $b) { return $a['_ts'] - $b['_ts']; });
     foreach ($out as &$row) { unset($row['_ts']); }
     return array_values($out);
+}
+
+/**
+ * Certificate search for the EASY Manager phone app (read only).
+ * Matches the query two ways and merges the results, newest first:
+ *   - WordPress post search over certificate titles, which are shaped
+ *     "YYYY-MM-DD - Course - Student Name", so a student name matches.
+ *   - A LIKE query over the certificate_number meta, which post
+ *     search cannot reach.
+ * Scoping mirrors easy_expiring_certs: office accounts search every
+ * certificate; other cert editors only search their own, because the
+ * rows carry student details. Capped at 25 rows, like a search box
+ * should be.
+ */
+function easy_cert_search($request) {
+    $q = trim((string) $request->get_param('q'));
+    if (strlen($q) < 2) {
+        return new WP_Error(
+            'easy_cert_search_short',
+            'Type at least 2 characters to search.',
+            ['status' => 400]
+        );
+    }
+    $base_args = [
+        'post_type'     => 'cert',
+        'post_status'   => ['publish', 'draft', 'pending', 'private'],
+        'posts_per_page' => 25,
+        'fields'        => 'ids',
+        'no_found_rows' => true,
+        'orderby'       => 'date',
+        'order'         => 'DESC',
+    ];
+    if (!easy_suite_is_office_user()) {
+        $base_args['author'] = get_current_user_id();
+    }
+    $by_text = new WP_Query(array_merge($base_args, ['s' => $q]));
+    $by_number = new WP_Query(array_merge($base_args, [
+        'meta_query' => [
+            [
+                'key'     => 'certificate_number',
+                'value'   => $q,
+                'compare' => 'LIKE',
+            ],
+        ],
+    ]));
+    $ids = [];
+    foreach (array_merge($by_text->posts, $by_number->posts) as $pid) {
+        $pid = (int) $pid;
+        if ($pid > 0 && !in_array($pid, $ids, true)) {
+            $ids[] = $pid;
+        }
+    }
+    $ids = array_slice($ids, 0, 25);
+    $out = [];
+    foreach ($ids as $pid) {
+        $f = get_fields($pid) ?: [];
+        $course = isset($f['course_title']) && $f['course_title'] !== ''
+            ? $f['course_title']
+            : (isset($f['course_category']) ? $f['course_category'] : '');
+        $out[] = [
+            'id'                 => $pid,
+            'title'              => get_the_title($pid),
+            'status'             => get_post_status($pid),
+            'student'            => isset($f['student_name']) ? $f['student_name'] : '',
+            'course'             => $course,
+            'certificate_number' => isset($f['certificate_number']) ? $f['certificate_number'] : '',
+            'completion_date'    => isset($f['completion_date']) ? $f['completion_date'] : '',
+            'expiry_date'        => isset($f['expiry_date']) ? $f['expiry_date'] : '',
+        ];
+    }
+    return $out;
 }
 
 function easy_approvals_pending_users() {

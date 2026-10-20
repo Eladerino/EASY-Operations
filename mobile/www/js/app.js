@@ -148,6 +148,7 @@
       btn.classList.toggle('active', btn.dataset.tab === name);
     }
     if (name === 'today') window.EasyToday.show();
+    else if (name === 'schedule') window.EasySchedule.show();
     else if (name === 'approvals') window.EasyApprovals.show();
     else if (name === 'queue') window.EasyQueue.show();
     else if (name === 'alerts') window.EasyAlerts.show();
@@ -155,6 +156,7 @@
 
   function refreshCurrent() {
     if (currentTab === 'today') window.EasyToday.refresh();
+    else if (currentTab === 'schedule') window.EasySchedule.show();
     else if (currentTab === 'approvals') window.EasyApprovals.refresh();
     else if (currentTab === 'queue') window.EasyQueue.show();
     else if (currentTab === 'alerts') window.EasyAlerts.show();
@@ -288,6 +290,8 @@
     window.EasyQueue.init();
     window.EasyToday.init();
     window.EasyAlerts.init();
+    window.EasySchedule.init();
+    window.EasyApprovals.init();
     setupBackButton();
     await initTheme();
 

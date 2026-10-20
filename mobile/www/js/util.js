@@ -76,10 +76,31 @@
     return Math.round((d.getTime() - today.getTime()) / 86400000);
   }
 
+  // The Suite's expiry reminder ladder (EASY Suite,
+  // module-notifications.php, due_thresholds): a certificate is in the
+  // 30 day window at 30 or fewer days left, the 7 day window at 7 or
+  // fewer (down to the day itself), and the expired window once the
+  // date has passed. Returns '30', '7', 'expired', or null when the
+  // certificate is in no window.
+  function expiryBand(daysLeft) {
+    if (daysLeft === null || daysLeft === undefined || isNaN(daysLeft)) return null;
+    if (daysLeft < 0) return 'expired';
+    if (daysLeft <= 7) return '7';
+    if (daysLeft <= 30) return '30';
+    return null;
+  }
+
   function fmtClock(ts) {
     const d = new Date(ts);
     if (isNaN(d.getTime())) return '';
     return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }
+
+  // Adds a sentence-ending period unless the text already ends with one.
+  // Some locales format the meridiem with its own period ("12:21 p.m."),
+  // so composers must not append '.' blindly after a clock string.
+  function endPeriod(s) {
+    return /[.]$/.test(s) ? s : s + '.';
   }
 
   function el(tag, className, text) {
@@ -89,5 +110,5 @@
     return node;
   }
 
-  window.EasyUtil = { fmtYmd, todayYmd, addDays, addMonths, fmtWhen, fmtDateTime, timeAgo, el, parseDateLoose, fmtDateLoose, daysUntil, fmtClock };
+  window.EasyUtil = { fmtYmd, todayYmd, addDays, addMonths, fmtWhen, fmtDateTime, timeAgo, el, parseDateLoose, fmtDateLoose, daysUntil, expiryBand, fmtClock, endPeriod };
 })();

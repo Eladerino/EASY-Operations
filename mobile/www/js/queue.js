@@ -75,7 +75,7 @@
         feed.last_activity = { by: item.decided_by || null, at: item.decided_at || null };
         render(feed);
         await window.EasyStore.setLastGood('queue', feed);
-        $('queueUpdated').textContent = 'Last updated ' + U.fmtClock(Date.now()) + '.';
+        $('queueUpdated').textContent = 'Last updated ' + U.endPeriod(U.fmtClock(Date.now()));
       }
       window.EasyUi.toast('Answer saved.', 'success');
     } catch (e) {
@@ -176,7 +176,7 @@
       feed = saved.data;
       render(feed);
       errBox.classList.add('hidden');
-      note.textContent = 'Last updated ' + U.fmtClock(saved.at) + '. Refreshing...';
+      note.textContent = 'Last updated ' + U.endPeriod(U.fmtClock(saved.at)) + ' Refreshing...';
     }
     try {
       const q = await window.EasyApi.mgmtQueue();
@@ -184,11 +184,11 @@
       render(feed);
       errBox.classList.add('hidden');
       await window.EasyStore.setLastGood('queue', feed);
-      note.textContent = 'Last updated ' + U.fmtClock(Date.now()) + '.';
+      note.textContent = 'Last updated ' + U.endPeriod(U.fmtClock(Date.now()));
     } catch (e) {
       if (saved && saved.data) {
         note.textContent =
-          'Could not refresh, showing the last good copy from ' + U.fmtClock(saved.at) + '.';
+          'Could not refresh, showing the last good copy from ' + U.endPeriod(U.fmtClock(saved.at));
       } else {
         errBox.textContent = 'Could not load the queue: ' + e.message;
         errBox.classList.remove('hidden');

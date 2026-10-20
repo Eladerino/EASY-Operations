@@ -46,6 +46,7 @@
   --sp-5: 24px;
   --sp-6: 32px;
   --tabbar-h: 64px;
+  --fab-h: 48px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -114,6 +115,31 @@ html, body {
 ::selection { background: var(--accent-ring); }
 
 .hidden { display: none !important; }
+
+/* App shell: body is a full-height flex column and #appView stacks the
+   header, the scrolling pages, and the tab bar in normal flow. The
+   tab bar used to be position:fixed against the layout viewport, but
+   Android pans that viewport when the keyboard opens (the Activity
+   declared no windowSoftInputMode, so it got adjustPan behaviour),
+   and a pan offset left over from a keyboard session in the Queue tab
+   (the only tab with text fields) left the fixed bar visibly shifted
+   until a tab switch forced a fresh layout. In flow, the bar's place
+   comes from the shell layout and is identical on every tab, keyboard
+   open or closed. MainActivity also declares adjustResize now, so the
+   WebView resizes for the keyboard instead of panning at all. */
+body {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+}
+
+#appView {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 
 /* type scale: headline 24, title 21, section label 13 caps, body 16 */
 h1 { font-size: 24px; line-height: 1.2; font-weight: 700; letter-spacing: 0.2px; margin: 0 0 var(--sp-2); color: var(--ink); }
@@ -198,14 +224,15 @@ h3.section-title {
 
 /* ---------- forms ---------- */
 
-.signin-card label, .ask-form label {
+.signin-card label, .ask-form label, .class-form label, .form-label {
   display: block;
   font-size: 13.5px;
   font-weight: 600;
   margin: var(--sp-4) 0 var(--sp-1);
   color: var(--ink);
 }
-.signin-card input, .ask-form input, .ask-form textarea, .ask-form select {
+.signin-card input, .ask-form input, .ask-form textarea, .ask-form select,
+.class-form input, .class-form textarea, .class-form select {
   width: 100%;
   min-height: 48px;
   padding: var(--sp-3);
@@ -217,19 +244,30 @@ h3.section-title {
   background: var(--input-bg);
   transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
-.ask-form textarea { min-height: 0; line-height: 1.45; }
+.ask-form textarea, .class-form textarea { min-height: 0; line-height: 1.45; }
 .signin-card input:focus, .ask-form input:focus,
-.ask-form textarea:focus, .ask-form select:focus {
+.ask-form textarea:focus, .ask-form select:focus,
+.class-form input:focus, .class-form textarea:focus, .class-form select:focus {
   outline: none;
   border-color: var(--accent);
   background: var(--card);
   box-shadow: 0 0 0 3px var(--accent-ring);
 }
+/* Checkboxes and radios inside the class form keep their natural size;
+   the full-width text-field rule above is for text entry only. */
+.class-form input[type="checkbox"], .class-form input[type="radio"] {
+  width: auto;
+  min-height: 0;
+  padding: 0;
+  accent-color: var(--accent);
+}
 
 /* ---------- sign-in ---------- */
 
 .signin {
-  min-height: 100vh;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -288,9 +326,20 @@ h3.section-title {
 .signed-in-as { display: block; font-size: 12.5px; color: var(--muted); line-height: 1.35; }
 
 .pages {
-  padding: var(--sp-4) var(--sp-4) calc(var(--tabbar-h) + var(--sp-5) + env(safe-area-inset-bottom));
+  /* The pages are the app's one scroll container (the tab bar sits in
+     flow below them, not over them). Bottom padding clears the
+     floating Refresh pill: the pill hangs one gap above the tab bar,
+     which is this scroller's bottom edge, so footer content such as
+     the Theme control can always be scrolled a full gap clear of the
+     pill's top, the same guarantee the 0.3.1 padding provided when
+     the bar still overlapped the scroller. */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--sp-4) var(--sp-4) calc(var(--sp-4) + var(--fab-h) + var(--sp-4));
   max-width: 640px;
   margin: 0 auto;
+  width: 100%;
 }
 .page-head {
   display: flex;
@@ -301,17 +350,18 @@ h3.section-title {
 }
 
 .tabbar {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  /* In flow as the shell's last child (see the shell note above), so
+     its position cannot depend on which tab is showing. The height
+     and inset padding are unchanged, so the floating Refresh pill
+     and the toasts, which offset from the screen bottom by
+     var(--tabbar-h), still land in the same place relative to it. */
+  flex: none;
   height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
   background: var(--card);
   border-top: 1px solid var(--line);
   box-shadow: 0 -4px 18px rgba(16, 32, 54, 0.06);
   display: flex;
-  z-index: 5;
 }
 .tab-btn {
   position: relative;
@@ -441,7 +491,7 @@ h3.section-title {
   font-family: inherit;
   font-size: 15px;
   font-weight: 650;
-  min-height: 48px;
+  min-height: var(--fab-h);
   padding: var(--sp-3) var(--sp-5);
   box-shadow: 0 4px 14px rgba(16, 32, 54, 0.28);
   cursor: pointer;
@@ -603,3 +653,154 @@ textarea.answer-input { line-height: 1.45; }
   outline: none;
   box-shadow: 0 0 0 3px var(--accent-ring);
 }
+
+/* ---------- schedule calendar ---------- */
+
+.cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+.cal-title { font-size: 17px; font-weight: 700; }
+.cal-dow {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-top: var(--sp-3);
+}
+.cal-dow span {
+  text-align: center;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-top: var(--sp-1);
+}
+.cal-cell {
+  position: relative;
+  min-height: 52px;
+  padding: var(--sp-1);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-small);
+  background: var(--card);
+  color: var(--ink);
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.cal-cell.cal-other { opacity: 0.45; }
+.cal-cell.cal-today { border-color: var(--accent); }
+.cal-cell.cal-selected { background: var(--accent-ring); border-color: var(--accent); }
+.cal-daynum { font-size: 14px; font-weight: 600; }
+.cal-dots { display: flex; align-items: center; gap: 3px; min-height: 8px; }
+.cal-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.cal-dot-draft { background: transparent; border: 1.5px solid var(--accent); }
+.cal-more { font-size: 10.5px; font-weight: 700; color: var(--muted); }
+
+/* ---------- cards: title row and chips ---------- */
+
+.card-head-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+.chip {
+  flex: none;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 2px var(--sp-2);
+  border-radius: 999px;
+  border: 1.5px solid var(--line);
+  color: var(--muted);
+  background: var(--card);
+}
+.chip-draft { border-color: var(--warn-line); background: var(--warn-bg); color: var(--ink); }
+.chip-live { border-color: var(--accent); color: var(--accent-dark); }
+.chip-band { border-color: var(--accent); color: var(--accent-dark); }
+
+/* ---------- class editor form ---------- */
+
+.form-grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-3);
+}
+.form-grid2 label { margin-top: var(--sp-4); }
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.check-row input { width: 20px; height: 20px; }
+.status-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-3);
+  margin-top: var(--sp-1);
+}
+.status-opt {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: var(--sp-3);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-input);
+  background: var(--input-bg);
+  cursor: pointer;
+  font-weight: 400;
+}
+.status-opt input { margin-top: 3px; width: 18px; height: 18px; }
+.class-form label.status-opt { margin: 0; font-weight: 400; }
+.class-form .btn-block { margin-top: var(--sp-4); }
+
+/* ---------- instructor calendar links ---------- */
+
+.feed-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: var(--sp-3);
+  margin-bottom: var(--sp-2);
+}
+.feed-main { min-width: 0; }
+.feed-name { font-weight: 700; font-size: 15px; }
+.feed-url {
+  font-size: 12px;
+  color: var(--muted);
+  word-break: break-all;
+  margin-top: 2px;
+}
+
+/* ---------- certificate search ---------- */
+
+.search-row {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: stretch;
+}
+.search-row input { flex: 1 1 auto; }
+.search-row .btn { flex: none; }
