@@ -80,7 +80,46 @@ add_action('rest_api_init', function () {
         'callback'            => 'easy_suite_rest_site_health',
         'permission_callback' => 'easy_suite_rest_can_view_health',
     ]);
+    register_rest_route('easy/v1', '/instructor-feeds', [
+        'methods'             => 'GET',
+        'callback'            => 'easy_suite_rest_instructor_feeds',
+        'permission_callback' => 'easy_suite_rest_can_view_health',
+    ]);
 });
+
+/**
+ * GET /easy/v1/instructor-feeds. The same instructor calendar feed
+ * links the Calendar feeds admin page lists, for the EASY Manager
+ * phone app:
+ *   available  bool  false when the calendar feed module is off
+ *   feeds      list of { id, name, url }, instructors A to Z
+ * Read only on purpose: regenerating a link stays on the Calendar
+ * feeds page (admin_post_easy_suite_regenerate_ics below), never in
+ * the app. easy_ics_feed_url() mints a token only when an instructor
+ * has none yet, exactly as opening the admin page does.
+ */
+function easy_suite_rest_instructor_feeds() {
+    if (!function_exists('easy_ics_feed_url')) {
+        return ['available' => false, 'feeds' => []];
+    }
+    $organizers = get_posts([
+        'post_type'      => 'tribe_organizer',
+        'post_status'    => 'publish',
+        'numberposts'    => 200,
+        'orderby'        => 'title',
+        'order'          => 'ASC',
+        'no_found_rows'  => true,
+    ]);
+    $feeds = [];
+    foreach ($organizers as $o) {
+        $feeds[] = [
+            'id'   => (int) $o->ID,
+            'name' => get_the_title($o),
+            'url'  => easy_ics_feed_url($o->ID),
+        ];
+    }
+    return ['available' => true, 'feeds' => $feeds];
+}
 
 /**
  * GET /easy/v1/site-health. Flat payload:

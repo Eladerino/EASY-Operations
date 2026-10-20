@@ -18,6 +18,12 @@
 // GET /easy/v1/site-health, with the same honesty rule: a failed
 // fetch says "Could not check: site health." and shows nothing else.
 //
+// Below that, a Next expiry email run section previews the
+// certificates sitting in one of the Suite's reminder windows (the
+// 30 day and 7 day ladder from the plugin's notifications module),
+// using the expiring-certs data this screen already fetches. It is
+// informational only: it never sends anything.
+//
 // Counts from sources that loaded are also written to the widget
 // snapshot the Android home-screen widget reads.
 (function () {
@@ -26,6 +32,7 @@
   const U = window.EasyUtil;
   const $ = (id) => document.getElementById(id);
   let expiringList = [];
+  let lastHealth = null;
 
   const SOURCES = [
     {
@@ -169,7 +176,7 @@
     const saved = await window.EasyStore.getLastGood('alerts');
     if (saved && saved.data && Array.isArray(saved.data.items)) {
       renderItems(saved.data.items, null, saved.data.counts || {}, []);
-      note.textContent = 'Last updated ' + U.fmtClock(saved.at) + '. Refreshing...';
+      note.textContent = 'Last updated ' + U.endPeriod(U.fmtClock(saved.at)) + ' Refreshing...';
     } else {
       const box = $('alertsList');
       box.innerHTML = '';
@@ -191,8 +198,9 @@
       // Total failure with a saved copy: keep the saved copy on screen.
       renderItems(saved.data.items, prev, saved.data.counts || {}, failed);
       note.textContent =
-        'Could not refresh, showing the last good copy from ' + U.fmtClock(saved.at) + '.';
+        'Could not refresh, showing the last good copy from ' + U.endPeriod(U.fmtClock(saved.at));
       await loadHealth();
+      await loadExpiryPreview();
       return;
     }
     renderItems(items, prev, counts, failed);
@@ -201,12 +209,13 @@
       // over the old one so nothing previously known is dropped.
       await window.EasyStore.setAlertsSnapshot({ ...(prev || {}), ...counts });
       await window.EasyStore.setLastGood('alerts', { items, counts });
-      note.textContent = 'Last updated ' + U.fmtClock(Date.now()) + '.';
+      note.textContent = 'Last updated ' + U.endPeriod(U.fmtClock(Date.now()));
     } else {
       note.textContent =
         'Checked at ' + U.fmtClock(Date.now()) + ', but ' + failed.join(', ') + ' could not be checked.';
     }
     await loadHealth();
+    await loadExpiryPreview();
   }
 
   /* ---------------- site health ---------------- */
@@ -237,6 +246,7 @@
     box.innerHTML = '';
     try {
       const h = await window.EasyApi.siteHealth();
+      lastHealth = h;
       const rows = Array.isArray(h.health) ? h.health : [];
       for (const row of rows) box.appendChild(healthRow(row.label, row.state, row.detail));
       box.appendChild(U.el('p', 'hint', runText('Expiry email check', h.expiry_check)));
@@ -249,6 +259,67 @@
       row.appendChild(U.el('span', 'alert-text', 'Could not check: site health.'));
       box.appendChild(row);
       note.textContent = '';
+    }
+  }
+
+  /* ---------------- next expiry email run preview ---------------- */
+  // The Suite's daily expiry check emails a student when a
+  // certificate enters the 30 day window, again inside the 7 day
+  // window, and once it has expired (the notice ladder in the
+  // plugin's notifications module). This preview lists the
+  // certificates sitting in the 30 or 7 day window now, which is who
+  // the next runs will email. Already expired certificates are not
+  // in the expiring-certs data this uses, so they are not listed.
+
+  async function loadExpiryPreview() {
+    const box = $('expiryPreviewBox');
+    const note = $('expiryPreviewNote');
+    if (!box) return;
+    box.innerHTML = '';
+    if (note) note.textContent = '';
+    let list;
+    try {
+      list = await window.EasyApi.expiringCerts(30);
+    } catch (e) {
+      box.appendChild(U.el('p', 'hint', 'Could not check the next expiry email run.'));
+      return;
+    }
+    const rows = [];
+    for (const c of list) {
+      const days = U.daysUntil(c.expiry_date);
+      const band = U.expiryBand(days);
+      if (!band || band === 'expired') continue;
+      rows.push({ cert: c, days, band });
+    }
+    rows.sort((a, b) => a.days - b.days);
+    if (!rows.length) {
+      box.appendChild(U.el('p', 'hint', 'No certificates are in a reminder window right now.'));
+    }
+    for (const row of rows) {
+      const c = row.cert;
+      const item = U.el('div', 'alert-row');
+      const text =
+        (c.student_name || '(no name)') +
+        ' · ' +
+        (c.course_title || c.course_category || 'certificate') +
+        ' · expires ' +
+        U.fmtDateLoose(c.expiry_date) +
+        ' (' + row.days + (row.days === 1 ? ' day' : ' days') + ' left)';
+      item.appendChild(U.el('span', 'alert-text', text));
+      item.appendChild(
+        U.el('span', 'chip chip-band', row.band === '7' ? '7 day reminder' : '30 day reminder')
+      );
+      box.appendChild(item);
+    }
+    if (note) {
+      const nextRun =
+        lastHealth && lastHealth.expiry_check && lastHealth.expiry_check.next_run
+          ? lastHealth.expiry_check.next_run
+          : null;
+      note.textContent =
+        'The daily expiry check emails students as their certificates enter these windows' +
+        (nextRun ? '; next check ' + nextRun : '') +
+        '. Anyone who already got that reminder for a certificate is not emailed it again.';
     }
   }
 

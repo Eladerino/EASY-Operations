@@ -79,7 +79,7 @@
     if (saved && Array.isArray(saved.data)) {
       todaysCache = saved.data;
       renderClasses(todaysCache);
-      note.textContent = 'Last updated ' + U.fmtClock(saved.at) + '. Refreshing...';
+      note.textContent = 'Last updated ' + U.endPeriod(U.fmtClock(saved.at)) + ' Refreshing...';
     } else {
       box.innerHTML = '';
       box.appendChild(U.el('p', 'hint', 'Loading...'));
@@ -94,11 +94,11 @@
       todaysCache = todays;
       await window.EasyStore.setLastGood('today_classes', todays);
       renderClasses(todays);
-      note.textContent = 'Last updated ' + U.fmtClock(Date.now()) + '.';
+      note.textContent = 'Last updated ' + U.endPeriod(U.fmtClock(Date.now()));
     } catch (e) {
       if (saved && Array.isArray(saved.data)) {
         note.textContent =
-          'Could not refresh, showing the last good copy from ' + U.fmtClock(saved.at) + '.';
+          'Could not refresh, showing the last good copy from ' + U.endPeriod(U.fmtClock(saved.at));
       } else {
         box.innerHTML = '';
         box.appendChild(U.el('p', 'error-text', 'Could not load today\'s classes: ' + e.message));

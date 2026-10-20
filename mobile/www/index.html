@@ -105,6 +105,113 @@
         </div>
       </section>
 
+      <!-- Schedule -->
+      <section id="tab-schedule" class="tab-page hidden">
+        <div id="scheduleMain">
+          <div class="page-head">
+            <h2>Schedule</h2>
+            <button id="schedNewBtn" type="button" class="btn btn-small btn-primary hidden">New class</button>
+          </div>
+          <p id="schedError" class="error-text hidden"></p>
+          <p id="schedPermBanner" class="hint hidden"></p>
+          <div class="cal-head">
+            <button id="schedPrev" type="button" class="btn btn-small btn-secondary">Previous</button>
+            <span id="schedMonthTitle" class="cal-title"></span>
+            <button id="schedNext" type="button" class="btn btn-small btn-secondary">Next</button>
+          </div>
+          <div class="cal-dow" aria-hidden="true">
+            <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+          </div>
+          <div id="schedGrid" class="cal-grid"></div>
+          <p id="schedTz" class="hint">Class times are site time.</p>
+          <h3 class="section-title">Classes on <span id="schedDayTitle"></span></h3>
+          <div id="schedDayList"></div>
+          <h3 class="section-title">Instructor calendar links</h3>
+          <p class="hint">Each instructor's private calendar subscription link. Copy one to send it to them. If a link ever needs to be reset, that is done in EASY Suite on the website, under Calendar feeds; this app only reads the current links.</p>
+          <div id="schedFeeds"></div>
+        </div>
+        <div id="classEditorView" class="hidden">
+          <div class="page-head">
+            <h2 id="evEditorTitle">New class</h2>
+            <button id="evBack" type="button" class="btn btn-small btn-secondary">Back</button>
+          </div>
+          <form id="evForm" class="class-form">
+            <label for="evCourse">Course</label>
+            <select id="evCourse"></select>
+            <p id="evCatLine" class="hint hidden"></p>
+            <label for="evTitle">Class title</label>
+            <input id="evTitle" type="text" />
+            <label for="evDesc">Description (optional)</label>
+            <textarea id="evDesc" rows="4"></textarea>
+            <div class="form-grid2">
+              <label for="evStartDate">Start date
+                <input id="evStartDate" type="date" />
+              </label>
+              <label for="evEndDate">End date
+                <input id="evEndDate" type="date" />
+              </label>
+            </div>
+            <div class="form-grid2">
+              <label id="evStartTimeWrap" for="evStartTime">Start time
+                <input id="evStartTime" type="time" />
+              </label>
+              <label id="evEndTimeWrap" for="evEndTime">End time
+                <input id="evEndTime" type="time" />
+              </label>
+            </div>
+            <label class="check-row" for="evAllDay">
+              <input id="evAllDay" type="checkbox" />
+              <span>All day (no set times)</span>
+            </label>
+            <label for="evInstructor">Instructor</label>
+            <select id="evInstructor"></select>
+            <div id="evNewOrgBox" class="hidden">
+              <label for="evOrgName">New instructor name</label>
+              <input id="evOrgName" type="text" />
+              <label for="evOrgEmail">Instructor email (optional)</label>
+              <input id="evOrgEmail" type="email" />
+              <label for="evOrgPhone">Instructor phone (optional)</label>
+              <input id="evOrgPhone" type="tel" />
+            </div>
+            <label for="evVenue">Location</label>
+            <select id="evVenue"></select>
+            <div id="evNewVenueBox" class="hidden">
+              <label for="evVenueName">New location name</label>
+              <input id="evVenueName" type="text" />
+              <label for="evVenueAddress">Street address (optional)</label>
+              <input id="evVenueAddress" type="text" />
+              <label for="evVenueCity">City (optional)</label>
+              <input id="evVenueCity" type="text" />
+              <label for="evVenueProvince">Province (optional)</label>
+              <input id="evVenueProvince" type="text" />
+              <label for="evVenueZip">Postal code (optional)</label>
+              <input id="evVenueZip" type="text" />
+              <label for="evVenuePhone">Location phone (optional)</label>
+              <input id="evVenuePhone" type="tel" />
+            </div>
+            <label for="evCost">Cost (optional)</label>
+            <input id="evCost" type="text" inputmode="decimal" placeholder="Leave blank if not set" />
+            <label for="evSeats">Seats (capacity, optional)</label>
+            <input id="evSeats" type="number" min="0" step="1" />
+            <p id="evSaleLine" class="hint hidden"></p>
+            <span class="form-label">Status</span>
+            <div class="status-options">
+              <label class="status-opt" for="evStatusDraft">
+                <input id="evStatusDraft" type="radio" name="evStatus" value="draft" checked />
+                <span><strong>Draft</strong><br />Not on the website yet</span>
+              </label>
+              <label class="status-opt" for="evStatusPublish">
+                <input id="evStatusPublish" type="radio" name="evStatus" value="publish" />
+                <span><strong>Published</strong><br />Live on the website</span>
+              </label>
+            </div>
+            <p id="evFormError" class="error-text hidden"></p>
+            <button id="evSaveBtn" type="submit" class="btn btn-primary btn-block">Save class</button>
+            <button id="evDeleteBtn" type="button" class="btn btn-danger btn-block hidden">Delete this class</button>
+          </form>
+        </div>
+      </section>
+
       <!-- Approvals -->
       <section id="tab-approvals" class="tab-page hidden">
         <div class="page-head">
@@ -124,6 +231,17 @@
         <h3 class="section-title">Account signups <span id="badgeAccounts" class="badge hidden">0</span></h3>
         <p id="accountsNote" class="hint hidden"></p>
         <div id="queueAccounts"></div>
+
+        <h3 class="section-title">Certificate search</h3>
+        <p class="hint">Look up any certificate, published or draft, by student name or certificate number.</p>
+        <form id="certSearchForm" class="ask-form">
+          <label for="certSearchInput">Name or certificate number</label>
+          <div class="search-row">
+            <input id="certSearchInput" type="search" placeholder="e.g. Jane Smith or 251015FORK03" />
+            <button id="certSearchBtn" type="submit" class="btn btn-primary">Search</button>
+          </div>
+        </form>
+        <div id="certSearchResults"></div>
 
         <h3 class="section-title">Recent decisions</h3>
         <div id="approvalsRecent"></div>
@@ -178,6 +296,9 @@
           <h3 class="section-title">Site health</h3>
           <div id="healthBox"></div>
           <p id="healthUpdated" class="hint"></p>
+          <h3 class="section-title">Next expiry email run</h3>
+          <div id="expiryPreviewBox"></div>
+          <p id="expiryPreviewNote" class="hint"></p>
         </div>
         <div id="expiringView" class="hidden">
           <div class="page-head">
@@ -194,6 +315,7 @@
 
     <nav class="tabbar">
       <button type="button" class="tab-btn active" data-tab="today">Today</button>
+      <button type="button" class="tab-btn" data-tab="schedule">Schedule</button>
       <button type="button" class="tab-btn" data-tab="approvals">Approvals <span id="tabApprovalsBadge" class="badge hidden">0</span></button>
       <button type="button" class="tab-btn" data-tab="queue">Queue</button>
       <button type="button" class="tab-btn" data-tab="alerts">Alerts</button>
@@ -223,6 +345,7 @@
   <script src="js/approvals.js"></script>
   <script src="js/queue.js"></script>
   <script src="js/alerts.js"></script>
+  <script src="js/schedule.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
