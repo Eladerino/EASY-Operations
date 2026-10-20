@@ -191,9 +191,6 @@
     if (typeof counts.accounts === 'number') widgetFields.accountSignups = counts.accounts;
     if (typeof counts.queue === 'number') {
       widgetFields.queueOpen = counts.queue;
-      if (window.EasyUi && window.EasyUi.setQueueBadge) {
-        window.EasyUi.setQueueBadge(counts.queue);
-      }
     }
     if (typeof counts.expiring === 'number') widgetFields.expiring30 = counts.expiring;
     if (Object.keys(widgetFields).length) {

@@ -62,12 +62,15 @@
     </header>
 
     <main class="pages">
+      <div id="ptrIndicator" class="ptr-indicator" aria-hidden="true">
+        <span id="ptrSpinner" class="ptr-spinner"></span>
+        <span id="ptrLabel" class="ptr-label">Pull to refresh</span>
+      </div>
       <!-- Today -->
       <section id="tab-today" class="tab-page">
         <div id="todayMain">
           <div class="page-head">
             <h2>Today</h2>
-            <button id="todayRefresh" type="button" class="btn btn-small btn-secondary">Refresh</button>
           </div>
           <h3 class="section-title">Classes today</h3>
           <div id="todayClasses"></div>
@@ -221,7 +224,6 @@
       <section id="tab-approvals" class="tab-page hidden">
         <div class="page-head">
           <h2>Approvals</h2>
-          <button id="approvalsRefresh" type="button" class="btn btn-small btn-secondary">Refresh</button>
         </div>
         <p id="approvalsError" class="error-text hidden"></p>
         <p id="approvalsUpdated" class="hint"></p>
@@ -256,7 +258,6 @@
       <section id="tab-queue" class="tab-page hidden">
         <div class="page-head">
           <h2>Management queue</h2>
-          <button id="queueRefresh" type="button" class="btn btn-small btn-secondary">Refresh</button>
         </div>
         <p id="queueCounts" class="hint"></p>
         <p id="queueActivity" class="hint"></p>
@@ -326,7 +327,7 @@
       <button type="button" class="tab-btn active" data-tab="today">Today</button>
       <button type="button" class="tab-btn" data-tab="schedule">Schedule</button>
       <button type="button" class="tab-btn" data-tab="approvals">Approvals <span id="tabApprovalsBadge" class="badge hidden">0</span></button>
-      <button type="button" class="tab-btn" data-tab="queue">Queue <span id="tabQueueBadge" class="badge hidden">0</span></button>
+      <button type="button" class="tab-btn" data-tab="queue">Queue</button>
       <button type="button" class="tab-btn" data-tab="alerts">Alerts</button>
     </nav>
   </div>

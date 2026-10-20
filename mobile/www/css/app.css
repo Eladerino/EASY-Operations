@@ -327,17 +327,49 @@ h3.section-title {
 .pages {
   /* The pages are the app's one scroll container (the tab bar sits in
      flow below them, not over them). Padding is even on all sides:
-     nothing floats over the scroller any more (the old floating
-     Refresh pill was removed in 0.4.1, since each page has its own
-     Refresh button), so footer content such as the Theme control
-     only needs the standard gap at the bottom. */
+     nothing floats over the scroller, so footer content such as the
+     Theme control only needs the standard gap at the bottom.
+     overscroll-behavior keeps a pull at the top from chaining into a
+     WebView rubber-band; pull-to-refresh (app.js) owns that gesture. */
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: none;
   padding: var(--sp-4);
   max-width: 640px;
   margin: 0 auto;
   width: 100%;
+}
+
+/* Pull-to-refresh indicator: first child of the scroller, height 0
+   until a pull expands it. The ring winds as the pull grows and
+   spins while the refresh runs. */
+.ptr-indicator {
+  height: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  transition: height 0.18s ease;
+}
+.ptr-indicator.ptr-dragging { transition: none; }
+.ptr-spinner {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2.5px solid var(--line);
+  border-top-color: var(--accent);
+}
+.ptr-spinner.ptr-spinning { animation: ptr-spin 0.8s linear infinite; }
+@keyframes ptr-spin {
+  to { transform: rotate(360deg); }
+}
+.ptr-label {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--muted);
 }
 .page-head {
   display: flex;

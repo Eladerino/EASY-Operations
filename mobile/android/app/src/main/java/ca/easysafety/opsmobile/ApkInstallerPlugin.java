@@ -1,5 +1,6 @@
 package ca.easysafety.opsmobile;
 
+import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
@@ -29,6 +30,11 @@ import java.io.File;
  * inside the app cache directory, which is the only place the updater
  * downloads to. Any failure rejects with a plain message the JS side can
  * show, not a raw Java exception.
+ *
+ * openFile() is the same hand-off generalized for certificate PDFs:
+ * same cache-only path check, same FileProvider, an ACTION_VIEW intent
+ * with the caller's MIME type. When no app on the phone can view the
+ * file it rejects with NO_VIEWER so the JS side can say so honestly.
  */
 @CapacitorPlugin(name = "ApkInstaller")
 public class ApkInstallerPlugin extends Plugin {
@@ -73,6 +79,48 @@ public class ApkInstallerPlugin extends Plugin {
             call.resolve();
         } catch (Exception e) {
             call.reject("Could not open the installer for the update. Download it from the GitHub release page instead.");
+        }
+    }
+
+    @PluginMethod
+    public void openFile(PluginCall call) {
+        try {
+            String path = call.getString("path");
+            if (path == null || path.isEmpty()) {
+                call.reject("Missing file path.");
+                return;
+            }
+            String mimeType = call.getString("mimeType");
+            if (mimeType == null || mimeType.isEmpty()) {
+                mimeType = "application/pdf";
+            }
+            File file = new File(path);
+            if (!file.exists() || !file.isFile()) {
+                call.reject("That file was not found on this phone.");
+                return;
+            }
+            String cachePath = getContext().getCacheDir().getCanonicalPath();
+            String filePath = file.getCanonicalPath();
+            if (!filePath.equals(cachePath) && !filePath.startsWith(cachePath + File.separator)) {
+                call.reject("That file is not in the app cache, so it will not be opened.");
+                return;
+            }
+            Uri uri = FileProvider.getUriForFile(
+                    getContext(),
+                    getContext().getPackageName() + ".fileprovider",
+                    file);
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setDataAndType(uri, mimeType);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            try {
+                getContext().startActivity(intent);
+            } catch (ActivityNotFoundException e) {
+                call.reject("NO_VIEWER");
+                return;
+            }
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("Could not open that file.");
         }
     }
 }

@@ -72,6 +72,11 @@ add_action('rest_api_init', function () {
             ],
         ],
     ]);
+    register_rest_route('easy/v1', '/cert-pdf/(?P<number>[^/]+)', [
+        'methods'             => 'GET',
+        'callback'            => 'easy_cert_pdf_stream',
+        'permission_callback' => 'easy_cert_rest_can_access',
+    ]);
 });
 
 /**
@@ -223,6 +228,64 @@ function easy_cert_search($request) {
         ];
     }
     return $out;
+}
+
+/**
+ * Stream one certificate's stored PDF to the phone app (read only).
+ * The REST twin of the /cert-pdf/ gatekeeper in module-cert-pdf.php:
+ * same resolver (easy_core_find_cert_by_number), same file chain
+ * (easy_core_cert_pdf_path, which never builds a path from request
+ * input), same streamer (easy_core_stream_pdf, which sends the PDF
+ * headers itself and exits, so the REST server never JSON-encodes a
+ * response). The certificate number is only a lookup key here.
+ *
+ * Access mirrors the gatekeeper plus the scoping the other cert
+ * routes use: office accounts reach every certificate, other cert
+ * editors reach certificates they authored, and the certificate's
+ * owner reaches their own by student_email match. Anyone else who
+ * passed the route permission (cert editors generally) is refused
+ * for certificates outside that scope.
+ */
+function easy_cert_pdf_stream($request) {
+    $number = sanitize_text_field(rawurldecode((string) $request['number']));
+    if ($number === '') {
+        return new WP_Error(
+            'easy_cert_not_found',
+            'Certificate not found.',
+            ['status' => 404]
+        );
+    }
+    $post_id = easy_core_find_cert_by_number($number);
+    if (!$post_id) {
+        return new WP_Error(
+            'easy_cert_not_found',
+            'Certificate not found.',
+            ['status' => 404]
+        );
+    }
+    $user = wp_get_current_user();
+    $is_author = (int) get_post_field('post_author', $post_id) === (int) $user->ID;
+    $owner_email = strtolower(trim((string) get_post_meta($post_id, 'student_email', true)));
+    $is_owner = $owner_email !== ''
+        && $owner_email === strtolower(trim((string) $user->user_email));
+    if (!easy_suite_is_office_user($user) && !$is_author && !$is_owner) {
+        return new WP_Error(
+            'easy_cert_forbidden',
+            'You are not authorized to view this certificate.',
+            ['status' => 403]
+        );
+    }
+    $path = easy_core_cert_pdf_path($post_id);
+    if (!$path) {
+        return new WP_Error(
+            'easy_cert_no_pdf',
+            'No PDF is on file for this certificate yet.',
+            ['status' => 404]
+        );
+    }
+    easy_core_stream_pdf($path, $number . '.pdf');
+    // Unreachable: easy_core_stream_pdf() exits after streaming.
+    exit;
 }
 
 function easy_approvals_pending_users() {

@@ -161,11 +161,139 @@
     badge.classList.toggle('hidden', n <= 0);
   }
 
-  function setQueueBadge(n) {
-    const badge = $('tabQueueBadge');
-    if (!badge) return;
-    badge.textContent = String(n);
-    badge.classList.toggle('hidden', !(n > 0));
+  /* ---------------- pull to refresh ---------------- */
+  // The .pages element is the app's one scroll container. A downward
+  // pull that starts with the scroller at the very top expands the
+  // indicator at the head of the content; releasing it past the
+  // threshold runs the active tab's own refresh, the same paths the
+  // old per-page Refresh buttons called (removed in 0.4.2). PTR stays
+  // off while a subview is open (roster, class editor, expiring list),
+  // while the sign-in screen is showing, and while a refresh it
+  // started is still running. The screens keep their last-good and
+  // "Last updated" behaviour, so that line stays the feedback after
+  // a pull.
+
+  const PTR_THRESHOLD = 70;
+  const PTR_MAX = 104;
+  const PTR_HOLD = 52;
+
+  function refreshActiveTab() {
+    if (currentTab === 'today') return window.EasyToday.refresh();
+    if (currentTab === 'schedule') return window.EasySchedule.show();
+    if (currentTab === 'approvals') return window.EasyApprovals.refresh();
+    if (currentTab === 'queue') return window.EasyQueue.show();
+    if (currentTab === 'alerts') return window.EasyAlerts.show();
+    return Promise.resolve();
+  }
+
+  function setupPullToRefresh() {
+    const scroller = document.querySelector('.pages');
+    const bar = $('ptrIndicator');
+    const spinner = $('ptrSpinner');
+    const label = $('ptrLabel');
+    if (!scroller || !bar || !spinner || !label) return;
+
+    let startY = null; // touch Y where a candidate pull began
+    let pull = 0; // current resisted pull distance, px
+    let armed = false; // pull is past the release threshold
+    let refreshing = false;
+
+    const ptrAllowed = () =>
+      !refreshing &&
+      !$('appView').classList.contains('hidden') &&
+      subviewClose === null &&
+      scroller.scrollTop <= 0;
+
+    function setBar(height, text, spinning) {
+      bar.style.height = height + 'px';
+      if (text !== null) label.textContent = text;
+      spinner.classList.toggle('ptr-spinning', !!spinning);
+      spinner.style.transform = spinning
+        ? ''
+        : 'rotate(' + Math.round(Math.min(180, (height / PTR_THRESHOLD) * 180)) + 'deg)';
+    }
+
+    function collapse() {
+      bar.classList.remove('ptr-dragging');
+      pull = 0;
+      armed = false;
+      setBar(0, 'Pull to refresh', false);
+    }
+
+    function endGesture() {
+      startY = null;
+      bar.classList.remove('ptr-dragging');
+    }
+
+    async function runRefresh() {
+      refreshing = true;
+      bar.classList.remove('ptr-dragging');
+      setBar(PTR_HOLD, 'Refreshing...', true);
+      try {
+        await refreshActiveTab();
+      } catch (e) {
+        // Screens report their own failures (last-good notes, error
+        // lines, toasts); PTR only has to fold itself away.
+      }
+      refreshing = false;
+      collapse();
+    }
+
+    scroller.addEventListener(
+      'touchstart',
+      (ev) => {
+        if (ev.touches.length !== 1 || !ptrAllowed()) {
+          startY = null;
+          return;
+        }
+        startY = ev.touches[0].clientY;
+        pull = 0;
+        armed = false;
+      },
+      { passive: true }
+    );
+
+    scroller.addEventListener(
+      'touchmove',
+      (ev) => {
+        if (startY === null || refreshing) return;
+        if (ev.touches.length !== 1 || subviewClose !== null || scroller.scrollTop > 0) {
+          // The gesture turned into something else (a second finger,
+          // a subview opened, the container scrolled): abandon it.
+          if (pull > 0) collapse();
+          endGesture();
+          return;
+        }
+        const dy = ev.touches[0].clientY - startY;
+        if (dy <= 0) {
+          // Finger back at or above the start point: cancel cleanly.
+          if (pull > 0) collapse();
+          pull = 0;
+          armed = false;
+          return;
+        }
+        // A genuine downward pull at the top: take over the gesture
+        // so the WebView does not also scroll or rubber-band.
+        if (ev.cancelable) ev.preventDefault();
+        bar.classList.add('ptr-dragging');
+        pull = Math.min(PTR_MAX, dy * 0.55);
+        armed = pull >= PTR_THRESHOLD;
+        setBar(pull, armed ? 'Release to refresh' : 'Pull to refresh', false);
+      },
+      { passive: false }
+    );
+
+    const finish = () => {
+      if (startY === null) return;
+      const shouldRefresh = armed && !refreshing;
+      pull = 0;
+      armed = false;
+      endGesture();
+      if (shouldRefresh) runRefresh();
+      else if (!refreshing) collapse();
+    };
+    scroller.addEventListener('touchend', finish);
+    scroller.addEventListener('touchcancel', finish);
   }
 
   /* ---------------- hardware Back ---------------- */
@@ -283,8 +411,7 @@
     for (const btn of document.querySelectorAll('.tab-btn')) {
       btn.addEventListener('click', () => showTab(btn.dataset.tab));
     }
-    $('todayRefresh').addEventListener('click', () => window.EasyToday.refresh());
-    $('approvalsRefresh').addEventListener('click', () => window.EasyApprovals.refresh());
+    setupPullToRefresh();
     window.EasyQueue.init();
     window.EasyToday.init();
     window.EasyAlerts.init();
@@ -321,7 +448,6 @@
     confirm,
     showTab,
     setApprovalsBadge,
-    setQueueBadge,
     showUpdateBanner,
     hideUpdateBanner,
     isModalOpen,

@@ -28,6 +28,7 @@
 //                   GET  /wp-json/tribe/events/v1/venues|organizers|categories
 //                   POST /wp-json/tribe/events/v1/venues|organizers (create)
 //   Cert search     GET  /wp-json/easy/v1/cert-search?q=<text> (Suite 2.2.28)
+//   Cert PDF        GET  /wp-json/easy/v1/cert-pdf/<number> (Suite 2.2.29)
 //   Calendar links  GET  /wp-json/easy/v1/instructor-feeds (Suite 2.2.28)
 //
 // Auth is a WordPress Application Password sent as HTTP Basic over HTTPS.
@@ -794,6 +795,56 @@
     return rows.map(shapeCertRow);
   }
 
+  /* ---------------- certificate PDF (Suite 2.2.29) ---------------- */
+
+  // Request path for one certificate's PDF, kept separate so it can
+  // be tested without the network. The number is a lookup key on the
+  // server, never part of a file path anywhere.
+  function certPdfPath(number) {
+    return '/easy/v1/cert-pdf/' + encodeURIComponent(String(number || ''));
+  }
+
+  // Plain-language text for a failed certPdf() call. A site still on
+  // Suite 2.2.28 answers rest_no_route (the route does not exist
+  // there); a 404 from the route itself means the certificate has no
+  // PDF on file, which is normal for certificates that have not been
+  // through the desktop app's PDF step.
+  function certPdfErrorText(err) {
+    if (err && err.code === 'rest_no_route') {
+      return 'Certificate PDFs need EASY Suite 2.2.29 or newer on the site. Once the site is updated, this will work.';
+    }
+    if (err && err.status === 404) {
+      return 'No PDF on file for this certificate yet.';
+    }
+    return (err && err.message) || 'Could not fetch the certificate PDF.';
+  }
+
+  function bufferToBase64(buf) {
+    const bytes = new Uint8Array(buf);
+    let raw = '';
+    const CHUNK = 0x8000;
+    for (let i = 0; i < bytes.length; i += CHUNK) {
+      raw += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+    }
+    return btoa(raw);
+  }
+
+  // Fetch one certificate's PDF with the saved sign-in and resolve
+  // with the file as base64, ready for Capacitor Filesystem. Throws
+  // an Error carrying .status and .code on any non-200; use
+  // certPdfErrorText() to word it for the screen.
+  async function certPdf(number) {
+    const auth = authHeader();
+    const res = await fetchWithTimeout(WP + certPdfPath(number), {
+      headers: { ...(auth ? { Authorization: auth } : {}) },
+    });
+    if (res.status !== 200) {
+      const json = await res.json().catch(() => null);
+      throw apiError({ status: res.status, json });
+    }
+    return bufferToBase64(await res.arrayBuffer());
+  }
+
   /* ---------------- site and course builder info ---------------- */
 
   // Suite version plus a reachability canary for the Today footer.
@@ -843,6 +894,9 @@
     shapeFeed,
     certSearch,
     shapeCertRow,
+    certPdf,
+    certPdfPath,
+    certPdfErrorText,
     saleState,
     roster,
     expiringCerts,
