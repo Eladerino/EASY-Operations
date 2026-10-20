@@ -136,6 +136,38 @@
   const getLastGood = (name) => get('lastgood_' + name, null);
   const setLastGood = (name, data) => set('lastgood_' + name, { at: Date.now(), data });
 
+  /* ---------------- theme choice ---------------- */
+  // 'system' | 'light' | 'dark'. Absent means 'system' (follow the
+  // phone). setTheme also mirrors the value into localStorage under
+  // the same key, because the inline script in index.html can only
+  // read localStorage synchronously before first paint; Preferences
+  // stays the source of truth and boot re-applies from it.
+
+  const getTheme = () => get('theme', null);
+
+  async function setTheme(value) {
+    await set('theme', value);
+    try {
+      window.localStorage.setItem(PREFIX + 'theme', JSON.stringify(value));
+    } catch (e) {
+      // Mirror is best-effort; Preferences already holds the choice.
+    }
+  }
+
+  /* ---------------- widget counts snapshot ---------------- */
+  // One small JSON snapshot for the Android home-screen widget, which
+  // reads this key straight out of the Capacitor Preferences storage
+  // (SharedPreferences file "CapacitorStorage"). Fields merge, so
+  // Approvals and Alerts each contribute the counts they loaded, and
+  // "at" always stamps the latest write (ISO 8601, UTC).
+
+  async function updateWidgetCounts(fields) {
+    const prev = (await get('widget_counts', null)) || {};
+    const next = { ...prev, ...fields, at: new Date().toISOString() };
+    await set('widget_counts', next);
+    return next;
+  }
+
   /* ---------------- one-time warnings ---------------- */
 
   const getFlag = (name) => get('flag_' + name, null);
@@ -159,6 +191,9 @@
     setSkippedVersion,
     getLastGood,
     setLastGood,
+    getTheme,
+    setTheme,
+    updateWidgetCounts,
     getFlag,
     setFlag,
   };

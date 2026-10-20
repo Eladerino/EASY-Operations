@@ -86,6 +86,44 @@
     return true;
   }
 
+  /* ---------------- theme ---------------- */
+  // System (follow the phone), Light, or Dark. The choice persists in
+  // Preferences (with a localStorage mirror the inline script in
+  // index.html reads before first paint). Applying it is just the
+  // data-theme attribute on <html>; the CSS decides which token set
+  // that means, and "system" leaves the media query in charge.
+
+  const THEME_CHOICES = ['system', 'light', 'dark'];
+
+  function applyTheme(choice) {
+    document.documentElement.setAttribute('data-theme', choice);
+    for (const btn of document.querySelectorAll('.seg-btn')) {
+      btn.classList.toggle('active', btn.dataset.themeChoice === choice);
+    }
+  }
+
+  async function initTheme() {
+    let choice = 'system';
+    try {
+      const saved = await window.EasyStore.getTheme();
+      if (THEME_CHOICES.includes(saved)) choice = saved;
+    } catch (e) {
+      // A store hiccup must never block boot; system stays the default.
+    }
+    applyTheme(choice);
+    for (const btn of document.querySelectorAll('.seg-btn')) {
+      btn.addEventListener('click', async () => {
+        const next = btn.dataset.themeChoice;
+        applyTheme(next);
+        try {
+          await window.EasyStore.setTheme(next);
+        } catch (e) {
+          toast('The theme changed for now, but the choice could not be saved.', 'error', 7000);
+        }
+      });
+    }
+  }
+
   /* ---------------- update banner ---------------- */
 
   function showUpdateBanner(version, onInstall) {
@@ -251,6 +289,7 @@
     window.EasyToday.init();
     window.EasyAlerts.init();
     setupBackButton();
+    await initTheme();
 
     const creds = await window.EasyStore.getCreds();
     if (!creds) {

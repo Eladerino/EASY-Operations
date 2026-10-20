@@ -1085,10 +1085,183 @@ function easy_mgmt_queue_rest_add_question($request) {
     return array('question' => $result);
 }
 
+/**
+ * Clean one answer for one question, exactly as the queue page's form
+ * handler (easy_mgmt_queue_handle_submit) cleans each submitted answer:
+ * free text is trim(sanitize_textarea_field(...)) and must be non-empty;
+ * a choice is sanitize_text_field(...) and must be one of the question's
+ * defined option values (or '__other', which the form also accepts);
+ * write-in text is kept only for radio_other questions, as
+ * trim(sanitize_text_field(...)), and only when non-empty.
+ * Returns the clean entry array, or a WP_Error when the answer is
+ * unusable. (The form silently skips unusable answers; a REST caller
+ * gets the reason instead, but nothing invalid is ever saved.)
+ */
+function easy_mgmt_queue_clean_answer($q, $params) {
+    if ($q['type'] === 'textarea') {
+        $text = isset($params['value']) ? trim(sanitize_textarea_field((string) $params['value'])) : '';
+        if ($text === '') {
+            return new WP_Error('easy_mgmt_queue_empty_answer', 'Write an answer first.', array('status' => 400));
+        }
+        return array('text' => $text);
+    }
+    $choice = isset($params['value']) ? sanitize_text_field((string) $params['value']) : '';
+    if ($choice === '') {
+        return new WP_Error('easy_mgmt_queue_empty_answer', 'Choose one of the answers first.', array('status' => 400));
+    }
+    $valid = array('__other');
+    foreach ((array) (isset($q['options']) ? $q['options'] : array()) as $opt) {
+        $valid[] = is_array($opt) ? $opt[0] : $opt;
+    }
+    if (!in_array($choice, $valid, true)) {
+        return new WP_Error('easy_mgmt_queue_bad_choice', 'That is not one of the choices for this question.', array('status' => 400));
+    }
+    $entry = array('choice' => $choice);
+    if ($choice === '__other' && $q['type'] === 'radio_other') {
+        $other = isset($params['other']) ? trim(sanitize_text_field((string) $params['other'])) : '';
+        if ($other !== '') {
+            $entry['other'] = $other;
+        }
+    }
+    return $entry;
+}
+
+/**
+ * Save one cleaned answer, mirroring the form handler's merge, stamps,
+ * decided-list handling and notification email. The answer replaces any
+ * previous answer for the question; the question joins the decided list
+ * (and Brandon is emailed) only when it was not already decided, just
+ * as the form only notifies about newly decided questions.
+ * Returns the full updated responses array.
+ */
+function easy_mgmt_queue_save_answer($key, $entry, $user) {
+    $all = easy_mgmt_queue_get_responses();
+    $prev_answers = isset($all['answers']) ? $all['answers'] : [];
+    $prev_decided = isset($all['decided']) ? (array) $all['decided'] : [];
+
+    $now = current_time('mysql');
+    $entry['decided_by'] = $user->user_login;
+    $entry['decided_at'] = $now;
+    $merged = $prev_answers;
+    $merged[$key] = $entry;
+
+    $newly_decided = [];
+    if (!in_array($key, $prev_decided, true)) {
+        $prev_decided[] = $key;
+        $newly_decided[] = $key;
+    }
+
+    $all['answers'] = $merged;
+    $all['decided'] = array_values(array_unique($prev_decided));
+    $all['submitted_by'] = $user->user_login;
+    $all['submitted_at'] = $now;
+    update_option('easy_mgmt_queue_responses', $all, false);
+
+    // Notify Brandon about the newly decided question only (same email
+    // the form handler sends).
+    if (!empty($newly_decided)) {
+        $by_key = [];
+        foreach (easy_mgmt_queue_questions() as $q) {
+            $by_key[$q['key']] = $q;
+        }
+        $lines = ['EASY Management Queue — new decisions', '', 'Decided by: ' . $user->user_login . ' (' . $user->display_name . ')', 'Decided at: ' . $all['submitted_at'] . ' (site time)', ''];
+        foreach ($newly_decided as $k) {
+            $q = isset($by_key[$k]) ? $by_key[$k] : null;
+            $label = $q ? ((!empty($q['num']) ? $q['num'] . '. ' : '') . $q['label']) : $k;
+            $a = $merged[$k];
+            if (isset($a['text'])) {
+                $lines[] = $label . ': ' . $a['text'];
+            } elseif ($a['choice'] === '__other') {
+                $lines[] = $label . ': ' . (isset($a['other']) ? $a['other'] : '(write-in selected; no text entered)');
+            } else {
+                $lines[] = $label . ': ' . $a['choice'];
+            }
+        }
+        $remaining = count(easy_mgmt_queue_questions()) - count($all['decided']);
+        $lines[] = '';
+        $lines[] = $remaining . ' question(s) still outstanding.';
+        $notify_email = easy_mgmt_queue_notify_email();
+        if ($notify_email !== '') {
+            wp_mail($notify_email, 'Management queue: ' . count($newly_decided) . ' new decision(s) by ' . $user->display_name, implode("\n", $lines));
+        }
+    }
+
+    return $all;
+}
+
+/**
+ * POST /easy/v1/management-queue/answers: save one answer (admin).
+ * JSON body: { question_id, value } where value is the chosen option
+ * for choice questions (or '__other' with an optional "other" write-in
+ * text for radio_other questions), or the answer text itself for
+ * free-text questions. Response: { question } in the same shape the
+ * GET feed returns for a decided question.
+ */
+function easy_mgmt_queue_rest_save_answer($request) {
+    $params = $request->get_json_params();
+    if (!is_array($params)) {
+        $params = array();
+    }
+    $key = isset($params['question_id']) ? trim((string) $params['question_id']) : '';
+    $question = null;
+    foreach (easy_mgmt_queue_questions() as $q) {
+        if ($q['key'] === $key) {
+            $question = $q;
+            break;
+        }
+    }
+    if ($question === null) {
+        return new WP_Error('easy_mgmt_queue_no_question', 'That question is not in the queue.', array('status' => 404));
+    }
+
+    $entry = easy_mgmt_queue_clean_answer($question, $params);
+    if (is_wp_error($entry)) {
+        return $entry;
+    }
+
+    // Dependency rule, mirroring the form handler: a dependent answer
+    // is only kept when the parent question's saved answer matches the
+    // required choice.
+    if (!empty($question['depends_on'])) {
+        [$pkey, $pval] = $question['depends_on'];
+        $saved = easy_mgmt_queue_get_responses();
+        $pans = isset($saved['answers'][$pkey]) && is_array($saved['answers'][$pkey]) ? $saved['answers'][$pkey] : null;
+        $pchoice = (is_array($pans) && isset($pans['choice'])) ? $pans['choice'] : '';
+        if ($pchoice !== $pval) {
+            return new WP_Error('easy_mgmt_queue_dependency', 'This question only applies once its parent question has been answered the matching way.', array('status' => 400));
+        }
+    }
+
+    $all = easy_mgmt_queue_save_answer($key, $entry, wp_get_current_user());
+    $ans = isset($all['answers'][$key]) && is_array($all['answers'][$key]) ? $all['answers'][$key] : array();
+
+    $item = array(
+        'key'     => $question['key'],
+        'section' => isset($question['section']) ? $question['section'] : '',
+        'label'   => $question['label'],
+        'type'    => $question['type'],
+    );
+    if (!empty($question['options'])) {
+        $item['options'] = array_map(function ($opt) {
+            return is_array($opt) ? $opt[0] : $opt;
+        }, $question['options']);
+    }
+    $item['decided'] = true;
+    $item['answer'] = easy_mgmt_queue_format_answer($question, $ans);
+    $item['decided_by'] = isset($ans['decided_by']) ? $ans['decided_by'] : null;
+    $item['decided_at'] = isset($ans['decided_at']) ? $ans['decided_at'] : null;
+    return array('question' => $item);
+}
+
 add_action('rest_api_init', function () {
     register_rest_route('easy/v1', '/management-queue', array(
         'methods'             => 'GET',
         'callback'            => 'easy_mgmt_queue_rest_get',
+        'permission_callback' => 'easy_mgmt_queue_rest_can_read',
+    ));
+    register_rest_route('easy/v1', '/management-queue/answers', array(
+        'methods'             => 'POST',
+        'callback'            => 'easy_mgmt_queue_rest_save_answer',
         'permission_callback' => 'easy_mgmt_queue_rest_can_read',
     ));
     register_rest_route('easy/v1', '/management-queue/questions', array(

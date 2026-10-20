@@ -67,6 +67,59 @@ function easy_suite_last_run($option) {
     return $dt->format('M j, g:i A');
 }
 
+/* --- REST: site health for the EASY Manager phone app -------------------- */
+
+/** Site health is admin data, same audience as the Suite Overview page. */
+function easy_suite_rest_can_view_health() {
+    return current_user_can('manage_options');
+}
+
+add_action('rest_api_init', function () {
+    register_rest_route('easy/v1', '/site-health', [
+        'methods'             => 'GET',
+        'callback'            => 'easy_suite_rest_site_health',
+        'permission_callback' => 'easy_suite_rest_can_view_health',
+    ]);
+});
+
+/**
+ * GET /easy/v1/site-health. Flat payload:
+ *   suite_version    string  EASY_SUITE_VERSION
+ *   server_time      string  site-local time now (MySQL format)
+ *   server_time_utc  string  UTC time now (MySQL format)
+ *   health           list of { label, state, detail }, the same rows
+ *                    easy_suite_health_rows() computes for the Overview
+ *   expiry_check     { last_run, next_run } for the certificate expiry
+ *                    email check, formatted St. John's times or null
+ *   employer_digest  { last_run, next_run } for the employer digest
+ * Last/next runs are read the way the Overview page reads them:
+ * wp_next_scheduled() via easy_suite_next_run(), and the notifications
+ * module's last-run options via easy_suite_last_run(). The option names
+ * below are the values of the module's LAST_EXPIRY_RUN_OPT and
+ * LAST_DIGEST_RUN_OPT constants; they are spelled out so this route
+ * still answers when the notifications module is switched off.
+ */
+function easy_suite_rest_site_health() {
+    $health = [];
+    foreach (easy_suite_health_rows() as $row) {
+        $health[] = ['label' => $row[0], 'state' => $row[1], 'detail' => $row[2]];
+    }
+    return [
+        'suite_version'   => EASY_SUITE_VERSION,
+        'server_time'     => current_time('mysql'),
+        'server_time_utc' => gmdate('Y-m-d H:i:s'),
+        'health'          => $health,
+        'expiry_check'    => [
+            'last_run' => easy_suite_last_run('easy_cert_last_expiry_run'),
+            'next_run' => easy_suite_next_run('easy_safety_daily_expiry_check'),
+        ],
+        'employer_digest' => [
+            'last_run' => easy_suite_last_run('easy_cert_last_digest_run'),
+            'next_run' => easy_suite_next_run('easy_safety_employer_digest'),
+        ],
+    ];
+}
+
 /**
  * Health checks: [label, 'ok'|'warn'|'error'|'off', detail]. Each check
  * only reads; nothing on the overview writes unless a button is pressed.

@@ -9,6 +9,11 @@
 // the same status endpoints, so recent decisions of those kinds show an
 // Undo button. Account decisions cannot be reversed through the API, so
 // they simply never show one.
+//
+// The last good queues are saved on the device, painted instantly on
+// open, and refreshed in the background; a failed refresh keeps the
+// saved copy on screen and says so. Counts from queues that loaded
+// are also written to the home-screen widget snapshot.
 (function () {
   'use strict';
 
@@ -21,6 +26,7 @@
     classes: [],
     accounts: [],
   };
+  let paintedSavedAt = null;
 
   function setCounts() {
     const paint = (id, n) => {
@@ -90,6 +96,14 @@
       actions.appendChild(pub);
       card.appendChild(actions);
       box.appendChild(card);
+    }
+    const note = $('certsNote');
+    if (note) {
+      const more = state.certTotal > state.certs.length;
+      note.textContent = more
+        ? 'Showing the first ' + state.certs.length + ' of ' + state.certTotal + ' drafts. The rest are waiting behind these.'
+        : '';
+      note.classList.toggle('hidden', !more);
     }
     setCounts();
   }
@@ -202,6 +216,16 @@
       actions.appendChild(reject);
       card.appendChild(actions);
       box.appendChild(card);
+    }
+    const note = $('accountsNote');
+    if (note) {
+      // The site caps this list at 100 and reports no total, so
+      // a full page means there may be more behind it.
+      const capped = state.accounts.length >= 100;
+      note.textContent = capped
+        ? 'Showing 100 signups, the most the site reports at once. There may be more waiting.'
+        : '';
+      note.classList.toggle('hidden', !capped);
     }
     setCounts();
   }
@@ -321,27 +345,32 @@
 
   /* ---------------- loading ---------------- */
 
+  function applySnapshot(data) {
+    state.certs = Array.isArray(data.certs) ? data.certs : [];
+    state.certTotal = data.certTotal || state.certs.length;
+    state.classes = Array.isArray(data.classes) ? data.classes : [];
+    state.accounts = Array.isArray(data.accounts) ? data.accounts : [];
+    renderCerts();
+    renderClasses();
+    renderAccounts();
+  }
+
   async function loadAll() {
     const errors = [];
+    const ok = { certs: false, classes: false, accounts: false };
     const jobs = [
       window.EasyApi.draftCerts()
         .then((r) => {
+          ok.certs = true;
           state.certs = r.certs;
           state.certTotal = r.total;
           renderCerts();
-          const note = $('certsNote');
-          if (note) {
-            const more = state.certTotal > state.certs.length;
-            note.textContent = more
-              ? 'Showing the first ' + state.certs.length + ' of ' + state.certTotal + ' drafts. The rest are waiting behind these.'
-              : '';
-            note.classList.toggle('hidden', !more);
-          }
         })
         .catch((e) => errors.push('certificates: ' + e.message)),
       (async () => {
         const today = U.todayYmd();
         const events = await window.EasyApi.eventsInRange(today, U.addMonths(today, 12));
+        ok.classes = true;
         state.classes = events
           .filter((ev) => window.EasyApi.isWaitingClass(ev))
           .sort((a, b) => (a.startStamp < b.startStamp ? -1 : 1));
@@ -349,18 +378,9 @@
       })().catch((e) => errors.push('classes: ' + e.message)),
       window.EasyApi.pendingUsers()
         .then((list) => {
+          ok.accounts = true;
           state.accounts = list;
           renderAccounts();
-          const note = $('accountsNote');
-          if (note) {
-            // The site caps this list at 100 and reports no total, so
-            // a full page means there may be more behind it.
-            const capped = list.length >= 100;
-            note.textContent = capped
-              ? 'Showing 100 signups, the most the site reports at once. There may be more waiting.'
-              : '';
-            note.classList.toggle('hidden', !capped);
-          }
         })
         .catch((e) => errors.push('accounts: ' + e.message)),
     ];
@@ -371,7 +391,44 @@
       errBox.textContent = errors.length ? 'Some queues did not load (' + errors.join('; ') + ').' : '';
       errBox.classList.toggle('hidden', !errors.length);
     }
+    // Widget snapshot: only queues that actually loaded contribute.
+    const widgetFields = {};
+    if (ok.certs) widgetFields.certDrafts = state.certs.length;
+    if (ok.classes) widgetFields.classDrafts = state.classes.length;
+    if (ok.accounts) widgetFields.accountSignups = state.accounts.length;
+    if (Object.keys(widgetFields).length) {
+      window.EasyStore.updateWidgetCounts(widgetFields).catch(() => {});
+    }
+    const note = $('approvalsUpdated');
+    if (!errors.length) {
+      // A fully successful load becomes the new last good copy.
+      await window.EasyStore.setLastGood('approvals', {
+        certs: state.certs,
+        certTotal: state.certTotal,
+        classes: state.classes,
+        accounts: state.accounts,
+      });
+      paintedSavedAt = Date.now();
+      if (note) note.textContent = 'Last updated ' + U.fmtClock(Date.now()) + '.';
+    } else if (note && paintedSavedAt) {
+      note.textContent =
+        !ok.certs && !ok.classes && !ok.accounts
+          ? 'Could not refresh, showing the last good copy from ' + U.fmtClock(paintedSavedAt) + '.'
+          : 'Checked at ' + U.fmtClock(Date.now()) + '; the queues that failed are still showing the last good copy.';
+    }
   }
 
-  window.EasyApprovals = { show: loadAll, refresh: loadAll };
+  async function show() {
+    const saved = await window.EasyStore.getLastGood('approvals');
+    if (saved && saved.data) {
+      applySnapshot(saved.data);
+      paintedSavedAt = saved.at;
+      const note = $('approvalsUpdated');
+      if (note) note.textContent = 'Last updated ' + U.fmtClock(saved.at) + '. Refreshing...';
+      renderRecent();
+    }
+    await loadAll();
+  }
+
+  window.EasyApprovals = { show, refresh: loadAll };
 })();

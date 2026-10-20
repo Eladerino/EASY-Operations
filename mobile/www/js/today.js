@@ -152,6 +152,18 @@
         const contact = [r.email || '', r.phone || ''].filter(Boolean).join(' · ');
         if (contact) card.appendChild(U.el('div', 'card-meta', contact));
         if (r.notes) card.appendChild(U.el('div', 'card-meta', r.notes));
+        const actions = U.el('div', 'card-actions');
+        if (r.phone) {
+          const call = U.el('a', 'btn btn-small btn-secondary', 'Call');
+          call.href = 'tel:' + String(r.phone).replace(/[^\d+]/g, '');
+          actions.appendChild(call);
+        }
+        if (r.email) {
+          const mail = U.el('a', 'btn btn-small btn-secondary', 'Email');
+          mail.href = 'mailto:' + r.email;
+          actions.appendChild(mail);
+        }
+        if (actions.childNodes.length) card.appendChild(actions);
         box.appendChild(card);
       }
     } catch (e) {
