@@ -145,9 +145,6 @@
     const counts = data.counts || { open: 0, decided: 0, total: 0 };
     $('queueCounts').textContent =
       counts.open + ' open · ' + counts.decided + ' decided of ' + counts.total;
-    if (window.EasyUi && window.EasyUi.setQueueBadge) {
-      window.EasyUi.setQueueBadge(counts.open);
-    }
     const activity = data.last_activity || {};
     $('queueActivity').textContent =
       activity.by && activity.at
@@ -242,7 +239,6 @@
 
   function init() {
     $('askForm').addEventListener('submit', submitQuestion);
-    $('queueRefresh').addEventListener('click', show);
   }
 
   window.EasyQueue = { show, init };

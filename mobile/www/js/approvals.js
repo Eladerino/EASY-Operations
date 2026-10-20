@@ -99,6 +99,12 @@
       pub.type = 'button';
       pub.addEventListener('click', () => publishCert(c, pub));
       actions.appendChild(pub);
+      if (c.certificateNumber) {
+        const pdf = U.el('button', 'btn btn-secondary', 'View PDF');
+        pdf.type = 'button';
+        pdf.addEventListener('click', () => viewCertPdf(c.certificateNumber, pdf));
+        actions.appendChild(pdf);
+      }
       card.appendChild(actions);
       box.appendChild(card);
     }
@@ -329,6 +335,14 @@
           .filter(Boolean)
           .join(' · ');
         if (meta) card.appendChild(U.el('div', 'card-meta', meta));
+        if (row.number) {
+          const actions = U.el('div', 'card-actions');
+          const pdf = U.el('button', 'btn btn-secondary', 'View PDF');
+          pdf.type = 'button';
+          pdf.addEventListener('click', () => viewCertPdf(row.number, pdf));
+          actions.appendChild(pdf);
+          card.appendChild(actions);
+        }
         box.appendChild(card);
       }
     } catch (e) {
@@ -346,6 +360,46 @@
       }
     } finally {
       btn.disabled = false;
+    }
+  }
+
+  /* ---------------- certificate PDF viewing ---------------- */
+
+  // Download one certificate's PDF from the Suite (2.2.29) into the
+  // app cache and hand it to the phone's PDF viewer. A certificate
+  // with no PDF on file is a normal state, not a failure: the Suite
+  // says 404 and the toast says so in those words. The file never
+  // lands anywhere public; the cache is app-private and the native
+  // opener checks the path stays inside it.
+  async function viewCertPdf(number, btn) {
+    const cap = window.Capacitor;
+    const Plugins = (cap && cap.Plugins) || {};
+    if (btn) btn.disabled = true;
+    try {
+      window.EasyUi.toast('Fetching the certificate PDF...');
+      const base64 = await window.EasyApi.certPdf(number);
+      if (!Plugins.Filesystem || !Plugins.ApkInstaller || !Plugins.ApkInstaller.openFile) {
+        throw new Error('PDF viewing works in the installed app, not in this preview.');
+      }
+      const fileName = 'cert-' + String(number).replace(/[^\w-]+/g, '_') + '.pdf';
+      const written = await Plugins.Filesystem.writeFile({
+        path: fileName,
+        data: base64,
+        directory: 'CACHE',
+      });
+      const path = ((written && written.uri) || '').replace(/^file:\/\//, '');
+      if (!path) throw new Error('The PDF downloaded, but its file path was not reported.');
+      await Plugins.ApkInstaller.openFile({ path, mimeType: 'application/pdf' });
+    } catch (e) {
+      if (e && e.message === 'NO_VIEWER') {
+        window.EasyUi.toast('No PDF viewer was found on this phone.', 'error', 8000);
+      } else if (e && (e.status || e.code)) {
+        window.EasyUi.toast(window.EasyApi.certPdfErrorText(e), 'error', 8000);
+      } else {
+        window.EasyUi.toast('Could not open the PDF: ' + (e && e.message ? e.message : e), 'error', 8000);
+      }
+    } finally {
+      if (btn) btn.disabled = false;
     }
   }
 

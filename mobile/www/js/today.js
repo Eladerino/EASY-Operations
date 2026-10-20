@@ -196,9 +196,6 @@
       .then((q) => {
         const open = (q.counts && q.counts.open) || 0;
         set('countQueue', String(open));
-        if (window.EasyUi && window.EasyUi.setQueueBadge) {
-          window.EasyUi.setQueueBadge(open);
-        }
       })
       .catch(() => set('countQueue', 'n/a'));
     // Course reviews: a real count only when Brandon is a reviewer and

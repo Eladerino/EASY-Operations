@@ -63,8 +63,11 @@ WordPress credentials at runtime.
   when a refresh failed and a saved copy is showing. A certificate
   search at the top of the screen looks up any certificate, published
   or draft, by student name or certificate number (read only).
-- **Queue**: the management queue feed. The tab carries a badge with
-  the open question count, like the Approvals badge. Open questions are answered
+  Certificate cards and search results carry a View PDF button when
+  the certificate has a number: it downloads the stored PDF from the
+  Suite into the app cache and opens it in the phone's PDF viewer.
+  A certificate with no PDF on file yet says exactly that.
+- **Queue**: the management queue feed. Open questions are answered
   right in the app: tap a choice (or type a free-text answer), confirm,
   and the answer saves through the Suite with the same validation and
   notification email as the website queue form. Decided questions show
@@ -91,10 +94,11 @@ WordPress credentials at runtime.
 The app follows the phone's light or dark setting by default; a Theme
 setting (System, Light, Dark) at the foot of the Today screen can
 force either look, and the choice is applied before first paint.
-Every tab reloads its data when it is opened, and Today, Approvals,
-and the Queue carry their own Refresh buttons. The Android Back
-button closes dialogs and subviews first, then
-returns to Today, then exits.
+Every tab reloads its data when it is opened, and pulling down from
+the top of any tab refreshes that tab (pull-to-refresh, on the main
+view of each tab only, not inside subviews like the roster or the
+class editor). The Android Back button closes dialogs and subviews
+first, then returns to Today, then exits.
 
 A home-screen widget shows the waiting counts the app itself last saw
 (certificate drafts, class drafts, account signups, open queue
@@ -250,6 +254,7 @@ Every route mirrors the desktop app and the EASY Suite plugin:
 | Class delete | `DELETE /wp-json/tribe/events/v1/events/<id>` (moves to trash) | desktop schedule |
 | Venues, instructors, categories | `GET` and `POST /wp-json/tribe/events/v1/venues`, `/organizers`, `/categories` | desktop schedule |
 | Cert search | `GET /wp-json/easy/v1/cert-search?q=<text>` | plugin `module-approvals.php` (Suite 2.2.28) |
+| Cert PDF | `GET /wp-json/easy/v1/cert-pdf/<certificate_number>` (streams the stored PDF) | plugin `module-approvals.php` (Suite 2.2.29) |
 | Instructor calendar links | `GET /wp-json/easy/v1/instructor-feeds` | plugin `includes/admin.php` (Suite 2.2.28) |
 | Seats filled | `GET /wp-json/easy/v1/sale-state/<event_id>` | plugin `module-seat-sales.php` |
 | Class roster | `GET /wp-json/easy/v1/roster/<event_id>` | plugin `module-roster.php` |
