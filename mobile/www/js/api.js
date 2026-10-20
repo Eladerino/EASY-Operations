@@ -28,7 +28,7 @@
 //                   GET  /wp-json/tribe/events/v1/venues|organizers|categories
 //                   POST /wp-json/tribe/events/v1/venues|organizers (create)
 //   Cert search     GET  /wp-json/easy/v1/cert-search?q=<text> (Suite 2.2.28)
-//   Cert PDF        GET  /wp-json/easy/v1/cert-pdf/<number> (Suite 2.2.29)
+//   Cert PDF        GET  /wp-json/easy/v1/cert-pdf/<number> (Suite 2.2.31)
 //   Calendar links  GET  /wp-json/easy/v1/instructor-feeds (Suite 2.2.28)
 //
 // Auth is a WordPress Application Password sent as HTTP Basic over HTTPS.
@@ -795,7 +795,7 @@
     return rows.map(shapeCertRow);
   }
 
-  /* ---------------- certificate PDF (Suite 2.2.29) ---------------- */
+  /* ---------------- certificate PDF (Suite 2.2.31) ---------------- */
 
   // Request path for one certificate's PDF, kept separate so it can
   // be tested without the network. The number is a lookup key on the
@@ -805,13 +805,13 @@
   }
 
   // Plain-language text for a failed certPdf() call. A site still on
-  // Suite 2.2.28 answers rest_no_route (the route does not exist
-  // there); a 404 from the route itself means the certificate has no
-  // PDF on file, which is normal for certificates that have not been
-  // through the desktop app's PDF step.
+  // Suite 2.2.28 or older answers rest_no_route (the route does not
+  // exist there); a 404 from the route itself means the certificate
+  // has no PDF on file, which is normal for certificates that have
+  // not been through the desktop app's PDF step.
   function certPdfErrorText(err) {
     if (err && err.code === 'rest_no_route') {
-      return 'Certificate PDFs need EASY Suite 2.2.29 or newer on the site. Once the site is updated, this will work.';
+      return 'Certificate PDFs need EASY Suite 2.2.31 or newer on the site. Once the site is updated, this will work.';
     }
     if (err && err.status === 404) {
       return 'No PDF on file for this certificate yet.';
@@ -819,30 +819,19 @@
     return (err && err.message) || 'Could not fetch the certificate PDF.';
   }
 
-  function bufferToBase64(buf) {
-    const bytes = new Uint8Array(buf);
-    let raw = '';
-    const CHUNK = 0x8000;
-    for (let i = 0; i < bytes.length; i += CHUNK) {
-      raw += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
-    }
-    return btoa(raw);
-  }
-
   // Fetch one certificate's PDF with the saved sign-in and resolve
-  // with the file as base64, ready for Capacitor Filesystem. Throws
+  // with the file as base64, ready for Capacitor Filesystem. Since
+  // Suite 2.2.31 the site sends the PDF as base64 inside the normal
+  // JSON response, the same envelope as every other route. Throws
   // an Error carrying .status and .code on any non-200; use
   // certPdfErrorText() to word it for the screen.
   async function certPdf(number) {
-    const auth = authHeader();
-    const res = await fetchWithTimeout(WP + certPdfPath(number), {
-      headers: { ...(auth ? { Authorization: auth } : {}) },
-    });
-    if (res.status !== 200) {
-      const json = await res.json().catch(() => null);
-      throw apiError({ status: res.status, json });
+    const r = await request(certPdfPath(number));
+    const b64 = r.json && r.json.pdf_base64;
+    if (typeof b64 !== 'string' || b64 === '') {
+      throw new Error('The site sent an empty certificate PDF.');
     }
-    return bufferToBase64(await res.arrayBuffer());
+    return b64;
   }
 
   /* ---------------- site and course builder info ---------------- */

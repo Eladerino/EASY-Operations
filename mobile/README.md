@@ -254,7 +254,7 @@ Every route mirrors the desktop app and the EASY Suite plugin:
 | Class delete | `DELETE /wp-json/tribe/events/v1/events/<id>` (moves to trash) | desktop schedule |
 | Venues, instructors, categories | `GET` and `POST /wp-json/tribe/events/v1/venues`, `/organizers`, `/categories` | desktop schedule |
 | Cert search | `GET /wp-json/easy/v1/cert-search?q=<text>` | plugin `module-approvals.php` (Suite 2.2.28) |
-| Cert PDF | `GET /wp-json/easy/v1/cert-pdf/<certificate_number>` (streams the stored PDF) | plugin `module-approvals.php` (Suite 2.2.29) |
+| Cert PDF | `GET /wp-json/easy/v1/cert-pdf/<certificate_number>` (returns the stored PDF as base64 in a JSON body: `number`, `filename`, `pdf_base64`) | plugin `module-approvals.php` (Suite 2.2.31) |
 | Instructor calendar links | `GET /wp-json/easy/v1/instructor-feeds` | plugin `includes/admin.php` (Suite 2.2.28) |
 | Seats filled | `GET /wp-json/easy/v1/sale-state/<event_id>` | plugin `module-seat-sales.php` |
 | Class roster | `GET /wp-json/easy/v1/roster/<event_id>` | plugin `module-roster.php` |

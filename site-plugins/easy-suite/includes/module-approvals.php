@@ -74,7 +74,7 @@ add_action('rest_api_init', function () {
     ]);
     register_rest_route('easy/v1', '/cert-pdf/(?P<number>[^/]+)', [
         'methods'             => 'GET',
-        'callback'            => 'easy_cert_pdf_stream',
+        'callback'            => 'easy_cert_pdf',
         'permission_callback' => 'easy_cert_rest_can_access',
     ]);
 });
@@ -231,13 +231,15 @@ function easy_cert_search($request) {
 }
 
 /**
- * Stream one certificate's stored PDF to the phone app (read only).
- * The REST twin of the /cert-pdf/ gatekeeper in module-cert-pdf.php:
- * same resolver (easy_core_find_cert_by_number), same file chain
- * (easy_core_cert_pdf_path, which never builds a path from request
- * input), same streamer (easy_core_stream_pdf, which sends the PDF
- * headers itself and exits, so the REST server never JSON-encodes a
- * response). The certificate number is only a lookup key here.
+ * Send one certificate's stored PDF to the phone app (read only).
+ * The REST counterpart of the /cert-pdf/ gatekeeper in
+ * module-cert-pdf.php: same resolver (easy_core_find_cert_by_number),
+ * same file chain (easy_core_cert_pdf_path, which never builds a
+ * path from request input). Unlike the gatekeeper it does not stream
+ * the file out of the REST request; it returns the PDF as base64
+ * inside the normal JSON response, so serve-time CORS and error
+ * handling apply exactly as they do for every other route. The
+ * certificate number is only a lookup key here.
  *
  * Access mirrors the gatekeeper plus the scoping the other cert
  * routes use: office accounts reach every certificate, other cert
@@ -246,7 +248,7 @@ function easy_cert_search($request) {
  * passed the route permission (cert editors generally) is refused
  * for certificates outside that scope.
  */
-function easy_cert_pdf_stream($request) {
+function easy_cert_pdf($request) {
     $number = sanitize_text_field(rawurldecode((string) $request['number']));
     if ($number === '') {
         return new WP_Error(
@@ -283,9 +285,19 @@ function easy_cert_pdf_stream($request) {
             ['status' => 404]
         );
     }
-    easy_core_stream_pdf($path, $number . '.pdf');
-    // Unreachable: easy_core_stream_pdf() exits after streaming.
-    exit;
+    $contents = file_get_contents($path);
+    if ($contents === false) {
+        return new WP_Error(
+            'easy_cert_pdf_unreadable',
+            'The PDF for this certificate could not be read.',
+            ['status' => 500]
+        );
+    }
+    return rest_ensure_response([
+        'number'     => $number,
+        'filename'   => $number . '.pdf',
+        'pdf_base64' => base64_encode($contents),
+    ]);
 }
 
 function easy_approvals_pending_users() {
