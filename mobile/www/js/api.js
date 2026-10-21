@@ -19,6 +19,9 @@
 //   Mgmt queue      GET  /wp-json/easy/v1/management-queue
 //                   POST /wp-json/easy/v1/management-queue/questions
 //                   POST /wp-json/easy/v1/management-queue/answers
+//                   POST /wp-json/easy/v1/management-queue/undecide (2.2.32)
+//                   POST /wp-json/easy/v1/management-queue/resolve (2.2.32)
+//                   POST /wp-json/easy/v1/management-queue/unresolve (2.2.32)
 //   Site health     GET  /wp-json/easy/v1/site-health
 //   App config      GET  /wp-json/easy/v1/app-config (Suite version)
 //   Course builder  GET  /wp-json/easy/v1/course-builder/me (review count)
@@ -702,7 +705,7 @@
   async function mgmtQueue() {
     return cached('mgmtQueue', 90000, async () => {
       const r = await request('/easy/v1/management-queue');
-      return r.json || { open: [], decided: [], counts: { open: 0, decided: 0, total: 0 } };
+      return r.json || { open: [], decided: [], resolved: [], counts: { open: 0, decided: 0, resolved: 0, total: 0 } };
     });
   }
 
@@ -726,6 +729,53 @@
     const r = await request('/easy/v1/management-queue/answers', {
       method: 'POST',
       body,
+    });
+    invalidateCache();
+    return r.json;
+  }
+
+  /* ---------------- queue lifecycle (Suite 2.2.32) ---------------- */
+
+  // Plain-language text for a failed queue lifecycle call. A site
+  // still on Suite 2.2.31 or older answers rest_no_route for these
+  // routes (they do not exist there); anything else is the site's own
+  // message.
+  function queueLifecycleErrorText(err) {
+    if (err && err.code === 'rest_no_route') {
+      return 'This needs EASY Suite 2.2.32 or newer on the site. Once the site is updated, this will work.';
+    }
+    return (err && err.message) || 'The site did not answer.';
+  }
+
+  // Clear one question's answer so it returns to the open list.
+  // Returns { question } in the feed's open shape.
+  async function undecideQuestion(questionId) {
+    const r = await request('/easy/v1/management-queue/undecide', {
+      method: 'POST',
+      body: { question_id: questionId },
+    });
+    invalidateCache();
+    return r.json;
+  }
+
+  // Mark one decided question resolved: it leaves Decided for the
+  // archive, answer on record. Returns { question } in the feed's
+  // resolved shape.
+  async function resolveQuestion(questionId) {
+    const r = await request('/easy/v1/management-queue/resolve', {
+      method: 'POST',
+      body: { question_id: questionId },
+    });
+    invalidateCache();
+    return r.json;
+  }
+
+  // Move one resolved question back to Decided. Returns { question }
+  // in the feed's decided shape.
+  async function unresolveQuestion(questionId) {
+    const r = await request('/easy/v1/management-queue/unresolve', {
+      method: 'POST',
+      body: { question_id: questionId },
     });
     invalidateCache();
     return r.json;
@@ -892,6 +942,10 @@
     mgmtQueue,
     addQuestion,
     answerQuestion,
+    undecideQuestion,
+    resolveQuestion,
+    unresolveQuestion,
+    queueLifecycleErrorText,
     siteHealth,
     appConfig,
     courseBuilderMe,
