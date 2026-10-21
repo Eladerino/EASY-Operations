@@ -169,7 +169,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          TAG=$(gh release list --limit 1 --json tagName --jq '.[0].tagName')
+          # The target is the newest FULL release. Do not use
+          # "gh release list" here: it includes the suite prereleases
+          # published by Publish Suite, and the APK must never land on
+          # one of those. The /releases/latest endpoint only ever
+          # returns a full, published release.
+          TAG=$(gh api "repos/${{ github.repository }}/releases/latest" --jq '.tag_name')
           if [ -z "$TAG" ] || [ "$TAG" = "null" ]; then
             echo "No published release exists yet; skipping the attach."
             exit 0
