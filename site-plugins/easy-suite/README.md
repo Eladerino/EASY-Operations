@@ -71,6 +71,7 @@ always stay on.
 | Seat sales | Sells class seats as WooCommerce products: per-seat attendee details at checkout, roster sync, stock handling, sold-seat delete protection |
 | Portal cards | Student/instructor portal card hub (`/student-portal/`, `/instructor-portal/`) |
 | Management queue | Private decision page for the office (`[easy_management_queue]` shortcode). Questions move open, then decided, then resolved: a decided question can have its answer undone (it reopens) or be marked resolved from the EASY Manager app, which files it in an archive with its answer and both sets of attribution on record. The page's own information text (introduction, What's New, Payments and the other explainer sections, closing note) is edited on the same admin screen and stored in the database |
+| Activity log | Site-wide record of who did what across the website, desktop app, and phone app: class creates, publishes, unpublishes and price/seat edits, certificate publishes, account signup decisions, and management queue answers folded in from the queue's own records. Read under EASY Suite -> Activity or `GET /easy/v1/activity` (administrators only); rows kept 12 months |
 | GitHub self-updater | Checks the EASY-Operations GitHub releases for a newer `easy-suite-<version>.zip` and offers it on the Plugins screen as a normal update (see "Updates from GitHub" above) |
 | Shop | Instructor-only products and the `[easy_product_form]` listing form |
 | SEO noindex | Keeps utility pages out of search results |

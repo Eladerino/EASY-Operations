@@ -16,6 +16,9 @@ add_action('admin_menu', function () {
     if (function_exists('easy_mgmt_queue_admin_page')) {
         add_submenu_page('easy-suite', 'EASY Suite management queue', 'Management queue', 'manage_options', 'easy-suite-queue', 'easy_mgmt_queue_admin_page');
     }
+    if (function_exists('easy_activity_admin_page')) {
+        add_submenu_page('easy-suite', 'EASY Suite activity', 'Activity', 'manage_options', 'easy-suite-activity', 'easy_activity_admin_page');
+    }
     add_submenu_page('easy-suite', 'EASY Suite settings', 'Settings', 'manage_options', 'easy-suite-settings', 'easy_suite_settings_page');
 });
 
@@ -785,6 +788,7 @@ function easy_suite_admin_tabs($current) {
         'easy-suite'            => 'Overview',
         'easy-suite-settings'   => 'Settings',
         'easy-suite-queue'      => 'Management queue',
+        'easy-suite-activity'   => 'Activity',
         'easy-suite-feeds'      => 'Calendar feeds',
         'easy-online-courses'   => 'Online courses',
         'easy-cert-check'       => 'Cert Expiry Check',
