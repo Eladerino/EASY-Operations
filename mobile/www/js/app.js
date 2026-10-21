@@ -97,7 +97,10 @@
 
   function applyTheme(choice) {
     document.documentElement.setAttribute('data-theme', choice);
-    for (const btn of document.querySelectorAll('.seg-btn')) {
+    // Scoped to theme buttons: other segmented controls (the
+    // Activity screen's This phone / Site switch) share the seg-btn
+    // styling but are not theme choices.
+    for (const btn of document.querySelectorAll('.seg-btn[data-theme-choice]')) {
       btn.classList.toggle('active', btn.dataset.themeChoice === choice);
     }
   }
@@ -111,7 +114,7 @@
       // A store hiccup must never block boot; system stays the default.
     }
     applyTheme(choice);
-    for (const btn of document.querySelectorAll('.seg-btn')) {
+    for (const btn of document.querySelectorAll('.seg-btn[data-theme-choice]')) {
       btn.addEventListener('click', async () => {
         const next = btn.dataset.themeChoice;
         applyTheme(next);

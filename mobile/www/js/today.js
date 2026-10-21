@@ -1,7 +1,9 @@
 // today.js: the Today screen: classes on today (tap a class for its
 // roster), counts that need action, and the latest activity from this
 // app (the local history). "View all" opens the Activity screen: the
-// whole trail, grouped by day, with kind filters.
+// whole trail, grouped by day, with kind filters. The Activity screen
+// has two sources: This phone (the local trail) and Site (the
+// site-wide feed from EASY Suite, what the whole team did).
 //
 // The last good class list is saved on the device. Opening Today paints
 // it straight away with a "Last updated" line, then refreshes in the
@@ -258,6 +260,23 @@
     { key: 'queue', label: 'Queue' },
   ];
   let activityFilter = 'all';
+  let activitySource = 'phone'; // 'phone' (local trail) or 'site' (feed)
+
+  // Site feed state: shaped entries, newest first, all belonging to
+  // the current activityFilter. status: idle (nothing fetched yet),
+  // loading, ready, error (a plain failure; Try again is offered),
+  // suite (the site cannot serve the feed to this app yet; a calm
+  // note shows instead of an error). The local trail is never kept
+  // here, so a failed site fetch cannot disturb This phone.
+  const siteFeed = {
+    entries: [],
+    page: 0,
+    total: 0,
+    status: 'idle',
+    errorText: '',
+    loadingMore: false,
+    moreError: '',
+  };
 
   function dayLabelFor(ts, nowTs) {
     const d = new Date(ts);
@@ -296,7 +315,73 @@
     return 'No activity yet from this app.';
   }
 
-  async function renderActivity() {
+  function siteEmptyText(filter) {
+    if (filter === 'class') return 'No class activity on the site yet.';
+    if (filter === 'cert') return 'No certificate activity on the site yet.';
+    if (filter === 'account') return 'No account activity on the site yet.';
+    if (filter === 'queue') return 'No queue activity on the site yet.';
+    return 'No site activity yet.';
+  }
+
+  /* ---------------- site feed shaping (pure) ---------------- */
+
+  // Identity for one site row, used to de-duplicate appended pages.
+  // Table rows and synthesized queue rows live in separate id
+  // spaces (queue ids are negative), and the source keeps them
+  // apart for good.
+  function siteEntryKey(item) {
+    const raw = item || {};
+    return String(raw.source || 'log') + ':' + String(raw.id);
+  }
+
+  // Pure shaping for one site feed row into the entry shape the
+  // Activity renderer uses. The feed's action is a bare verb
+  // ("published", "edited"); the app's rows read as a sentence, so
+  // the summary (when the site sent one) and the actor fold into
+  // the action line: "Edited, Price $150 to $175, Seats 10 to 12
+  // by Pam Evans". Local entries never carry an actor: everything
+  // on This phone is Brandon by definition.
+  function shapeSiteEntry(item) {
+    const raw = item || {};
+    const verb = String(raw.action || '');
+    let action = verb ? verb.charAt(0).toUpperCase() + verb.slice(1) : '';
+    const summary = String(raw.summary || '').trim();
+    if (summary) action = action ? action + ', ' + summary : summary;
+    const actor = String(raw.actor || '').trim();
+    if (actor) action = action ? action + ' by ' + actor : 'by ' + actor;
+    return {
+      kind: String(raw.kind || ''),
+      title: String(raw.title || ''),
+      action,
+      at: typeof raw.at === 'number' ? raw.at : 0,
+      siteKey: siteEntryKey(raw),
+    };
+  }
+
+  // Append one fetched page of shaped site entries, skipping any
+  // already shown. Pages can overlap when something new lands at
+  // the top between fetches; the key check keeps a row from ever
+  // appearing twice. Returns a new array; inputs are untouched.
+  // Kept separate so it can be tested without the DOM.
+  function appendSiteEntries(existing, incoming) {
+    const seen = new Set();
+    const out = [];
+    for (const e of Array.isArray(existing) ? existing : []) {
+      if (e && e.siteKey) seen.add(e.siteKey);
+      out.push(e);
+    }
+    for (const e of Array.isArray(incoming) ? incoming : []) {
+      if (!e) continue;
+      if (e.siteKey) {
+        if (seen.has(e.siteKey)) continue;
+        seen.add(e.siteKey);
+      }
+      out.push(e);
+    }
+    return out;
+  }
+
+  function renderActivityChips() {
     const chipsBox = $('activityChips');
     chipsBox.innerHTML = '';
     for (const f of ACTIVITY_FILTERS) {
@@ -308,9 +393,39 @@
       chip.type = 'button';
       chip.addEventListener('click', () => {
         activityFilter = f.key;
-        renderActivity();
+        // In Site mode a chip is a new server query, not a local
+        // re-filter: refetch page 1 with the chip as the kind.
+        if (activitySource === 'site') loadSiteActivity(true);
+        else renderActivity();
       });
       chipsBox.appendChild(chip);
+    }
+  }
+
+  // One Activity row, shared by both sources so the two lists can
+  // never drift apart in shape.
+  function activityRow(entry) {
+    const row = U.el('div', 'recent-row');
+    const label =
+      (entry.title || '(untitled)') + ': ' + (entry.action || '') + (entry.undone ? ' (undone)' : '');
+    row.appendChild(U.el('span', 'recent-label', label));
+    row.appendChild(U.el('span', 'recent-when', U.fmtClock(entry.at)));
+    return row;
+  }
+
+  function renderActivityGroups(box, groups) {
+    for (const group of groups) {
+      box.appendChild(U.el('h3', 'section-title activity-day', group.label));
+      for (const entry of group.entries) box.appendChild(activityRow(entry));
+    }
+  }
+
+  async function renderActivity() {
+    syncActivitySegment();
+    renderActivityChips();
+    if (activitySource === 'site') {
+      renderActivitySite();
+      return;
     }
     const box = $('activityList');
     box.innerHTML = '';
@@ -320,16 +435,118 @@
       box.appendChild(U.el('p', 'hint', activityEmptyText(activityFilter)));
       return;
     }
-    for (const group of groups) {
-      box.appendChild(U.el('h3', 'section-title activity-day', group.label));
-      for (const entry of group.entries) {
-        const row = U.el('div', 'recent-row');
-        const label =
-          (entry.title || '(untitled)') + ': ' + (entry.action || '') + (entry.undone ? ' (undone)' : '');
-        row.appendChild(U.el('span', 'recent-label', label));
-        row.appendChild(U.el('span', 'recent-when', U.fmtClock(entry.at)));
-        box.appendChild(row);
+    renderActivityGroups(box, groups);
+  }
+
+  function renderActivitySite() {
+    const box = $('activityList');
+    box.innerHTML = '';
+    if (activityFilter === 'queue') {
+      // Queue rows mirror the decisions on record right now;
+      // undoing an answer removes its row rather than amending it.
+      box.appendChild(U.el('p', 'hint', 'Queue activity reflects current decisions.'));
+    }
+    if (siteFeed.status === 'loading' || siteFeed.status === 'idle') {
+      box.appendChild(U.el('p', 'hint', 'Loading site activity...'));
+      return;
+    }
+    if (siteFeed.status === 'suite') {
+      // The site cannot serve the feed yet: a calm note, not an
+      // error. Retrying cannot help until the site is updated.
+      box.appendChild(U.el('p', 'hint', siteFeed.errorText));
+      return;
+    }
+    if (siteFeed.status === 'error' && !siteFeed.entries.length) {
+      box.appendChild(U.el('p', 'error-text', siteFeed.errorText || 'Could not load site activity.'));
+      const actions = U.el('div', 'card-actions');
+      const retry = U.el('button', 'btn btn-secondary', 'Try again');
+      retry.type = 'button';
+      retry.addEventListener('click', () => loadSiteActivity(true));
+      actions.appendChild(retry);
+      box.appendChild(actions);
+      return;
+    }
+    const groups = groupActivity(siteFeed.entries, activityFilter, Date.now());
+    if (!groups.length) {
+      box.appendChild(U.el('p', 'hint', siteEmptyText(activityFilter)));
+      return;
+    }
+    renderActivityGroups(box, groups);
+    if (siteFeed.moreError) {
+      box.appendChild(U.el('p', 'error-text', siteFeed.moreError));
+    }
+    if (siteFeed.entries.length < siteFeed.total) {
+      const actions = U.el('div', 'card-actions');
+      const more = U.el('button', 'btn btn-secondary', siteFeed.loadingMore ? 'Loading...' : 'Show more');
+      more.type = 'button';
+      if (siteFeed.loadingMore) more.disabled = true;
+      more.addEventListener('click', () => loadSiteActivity(false));
+      actions.appendChild(more);
+      box.appendChild(actions);
+      box.appendChild(
+        U.el('p', 'hint', 'Showing ' + siteFeed.entries.length + ' of ' + siteFeed.total + '.')
+      );
+    }
+  }
+
+  let siteLoadSeq = 0;
+
+  // Fetch one page of the site feed. firstPage restarts the list
+  // (entering Site, tapping a chip, retrying); otherwise the next
+  // page appends. A slow earlier fetch never overwrites a newer
+  // one: results land only while this is still the latest load.
+  async function loadSiteActivity(firstPage) {
+    if (!firstPage && (siteFeed.loadingMore || siteFeed.status !== 'ready')) return;
+    const seq = ++siteLoadSeq;
+    const filter = activityFilter;
+    if (firstPage) {
+      siteFeed.entries = [];
+      siteFeed.page = 0;
+      siteFeed.total = 0;
+      siteFeed.moreError = '';
+      siteFeed.status = 'loading';
+    } else {
+      siteFeed.loadingMore = true;
+      siteFeed.moreError = '';
+    }
+    renderActivity();
+    try {
+      const res = await window.EasyApi.activityFeed(firstPage ? 1 : siteFeed.page + 1, filter);
+      if (seq !== siteLoadSeq) return;
+      const shaped = (res.items || []).map(shapeSiteEntry);
+      siteFeed.entries = firstPage ? shaped : appendSiteEntries(siteFeed.entries, shaped);
+      siteFeed.page = res.page || (firstPage ? 1 : siteFeed.page + 1);
+      siteFeed.total = typeof res.total === 'number' ? res.total : siteFeed.entries.length;
+      siteFeed.status = 'ready';
+    } catch (e) {
+      if (seq !== siteLoadSeq) return;
+      if (firstPage) {
+        siteFeed.errorText = window.EasyApi.activityErrorText(e);
+        siteFeed.status = window.EasyApi.activityNeedsNewerSuite(e) ? 'suite' : 'error';
+      } else {
+        siteFeed.moreError = window.EasyApi.activityErrorText(e);
       }
+    }
+    siteFeed.loadingMore = false;
+    renderActivity();
+  }
+
+  function syncActivitySegment() {
+    const phone = $('activitySegPhone');
+    const site = $('activitySegSite');
+    if (phone) phone.classList.toggle('active', activitySource === 'phone');
+    if (site) site.classList.toggle('active', activitySource === 'site');
+  }
+
+  function setActivitySource(source) {
+    activitySource = source === 'site' ? 'site' : 'phone';
+    if (activitySource === 'site') {
+      // Pull to refresh stays off inside subviews, so entering
+      // Site is the refresh: every tap fetches a fresh first page,
+      // even when Site is already the showing source.
+      loadSiteActivity(true);
+    } else {
+      renderActivity();
     }
   }
 
@@ -342,7 +559,9 @@
     $('todayMain').classList.add('hidden');
     $('activityView').classList.remove('hidden');
     if (window.EasyUi) window.EasyUi.openSubview(closeActivity);
-    renderActivity();
+    // Re-entering on Site is a refresh, like tapping the segment.
+    if (activitySource === 'site') loadSiteActivity(true);
+    else renderActivity();
   }
 
   async function show() {
@@ -360,6 +579,8 @@
       if (window.EasyUi) window.EasyUi.closeSubview();
       else closeActivity();
     });
+    $('activitySegPhone').addEventListener('click', () => setActivitySource('phone'));
+    $('activitySegSite').addEventListener('click', () => setActivitySource('site'));
     $('todayActivityBtn').addEventListener('click', openActivity);
     // Needs Attention boxes tap through to the screen that holds the
     // work. Course reviews has no screen in this app, so its box is
@@ -383,6 +604,10 @@
     closeRoster,
     closeActivity,
     groupActivity,
+    ACTIVITY_FILTERS,
+    shapeSiteEntry,
+    appendSiteEntries,
+    siteEntryKey,
     wasLoaded: () => loaded,
   };
 })();
