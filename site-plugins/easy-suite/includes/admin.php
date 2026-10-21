@@ -762,16 +762,12 @@ add_filter('plugins_api', function ($res, $action, $args) {
     return $info;
 }, 10, 3);
 
-add_filter('plugin_row_meta', function ($links, $file) {
-    if ($file !== plugin_basename(EASY_SUITE_FILE)) {
-        return $links;
-    }
-    $url = network_admin_url('plugin-install.php?tab=plugin-information&plugin=easy-suite'
-        . '&TB_iframe=true&width=600&height=550');
-    $links[] = '<a href="' . esc_url($url) . '" class="thickbox open-plugin-details-modal" '
-        . 'aria-label="More information about EASY Suite">View details</a>';
-    return $links;
-}, 10, 2);
+// No hand-added "View details" row link here. That link used to be added
+// manually because the plugin had no update source, so its row data carried
+// no slug and core printed no details link of its own. Since the GitHub
+// self-updater (module-updater.php) puts the plugin in the update transient
+// with a slug, core now prints the details link itself; keeping the manual
+// one as well made the Plugins screen show "View details" twice.
 
 // Settings shortcut next to Deactivate on the plugins page.
 add_filter('plugin_action_links_' . plugin_basename(EASY_SUITE_FILE), function ($links) {

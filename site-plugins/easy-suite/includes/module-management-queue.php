@@ -559,6 +559,102 @@ function easy_mgmt_queue_open_questions() {
     return $out;
 }
 
+/* --- Page text: the information sections around the questions ------------ */
+
+/**
+ * Default wording for the queue page's information sections. The stored
+ * option (edited on the Management queue admin screen) wins wherever it
+ * has text; any key missing or saved empty falls back to the wording
+ * here, so the page can never render blank and clearing a field in
+ * wp-admin restores the original block. Bodies are the exact HTML the
+ * shortcode used to print inline, so before any admin edit the page
+ * renders the same as it always did. This is page-level text only; a
+ * question's own reference HTML lives in its question record
+ * (info_html) and is not part of this option.
+ */
+function easy_mgmt_queue_page_text_defaults() {
+    return array(
+        
+        
+        
+        
+        'payments_html'     => '
+                    
+                    
+                    
+                ',
+        
+        'photos_html'       => '
+                    
+                    <ul class="emq-list">
+                        
+                        
+                        
+                        
+                    </ul>
+                    
+                ',
+        
+        'access_html'       => '
+                    
+                    <ol class="emq-list">
+                        
+                        
+                        
+                        
+                        
+                        
+                        
+                    </ol>
+                    
+                ',
+        
+        'email_html'        => '
+                    
+                    
+                    <ol class="emq-list">
+                        
+                        
+                        
+                        
+                    </ol>
+                    ',
+        'finish_html'       => '
+                
+            ',
+    );
+}
+
+/** Stored page text merged over the code defaults, key by key. */
+function easy_mgmt_queue_page_text() {
+    $text = easy_mgmt_queue_page_text_defaults();
+    $stored = get_option('easy_mgmt_queue_page_text', array());
+    if (is_array($stored)) {
+        foreach ($text as $key => $default) {
+            if (isset($stored[$key]) && is_string($stored[$key]) && $stored[$key] !== '') {
+                $text[$key] = $stored[$key];
+            }
+        }
+    }
+    return $text;
+}
+
+/**
+ * Seed the page-text option once, the first time an admin screen loads
+ * after the update, so the wp-admin form opens pre-filled with the real
+ * wording. A convenience only: the getter falls back to the defaults
+ * anyway, so the public page never pays for this check.
+ */
+function easy_mgmt_queue_seed_page_text() {
+    if (!current_user_can('manage_options')) {
+        return;
+    }
+    if (get_option('easy_mgmt_queue_page_text') === false) {
+        update_option('easy_mgmt_queue_page_text', easy_mgmt_queue_page_text_defaults(), false);
+    }
+}
+add_action('admin_init', 'easy_mgmt_queue_seed_page_text');
+
 /** Full revised projects summary for the What's New section. Plain language for the team. */
 function easy_mgmt_queue_whats_new_html() {
     ob_start();
@@ -643,18 +739,19 @@ function easy_mgmt_queue_shortcode() {
     $resolved = easy_mgmt_queue_get_resolved($saved_all);
     $resolved_count = count(array_intersect(array_keys($resolved), $live_decided));
     $done_count = count($live_decided) - $resolved_count;
+    $text = easy_mgmt_queue_page_text();
 
     ob_start();
     ?>
     <div class="emq-wrap">
         <h2>Management queue</h2>
-        
+        <p class="emq-lede"><?php echo esc_html($text['lede']); ?></p>
         <p class="emq-progress"><strong><?php echo (int) $done_count; ?> of <?php echo (int) $total; ?></strong> decided.<?php if ($resolved_count > 0): ?> <strong><?php echo (int) $resolved_count; ?></strong> resolved and archived.<?php endif; ?></p>
         <section class="emq-section">
-            
+            <div class="emq-section-head"><h3><?php echo esc_html($text['whats_new_title']); ?></h3><span class="emq-goes-where">Information only &mdash; no answer required</span></div>
             <?php
-            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped — built with escaping in easy_mgmt_queue_whats_new_html
-            echo easy_mgmt_queue_whats_new_html();
+            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped, admin-saved page text (wp_kses_post on save)
+            echo $text['whats_new_html'];
             ?>
         </section>
         <?php if ($just_saved): ?>
@@ -689,55 +786,33 @@ function easy_mgmt_queue_shortcode() {
             }
             ?>
             <section class="emq-section">
-                
-                <div class="emq-q">
-                    
-                    
-                    
-                </div>
+                <div class="emq-section-head"><h3><?php echo esc_html($text['payments_title']); ?></h3><span class="emq-goes-where">Information only — no answer required</span></div>
+                <div class="emq-q"><?php
+                    // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped, admin-saved page text (wp_kses_post on save)
+                    echo $text['payments_html'];
+                    ?></div>
             </section>
             <section class="emq-section">
-                
-                <div class="emq-q">
-                    
-                    <ul class="emq-list">
-                        
-                        
-                        
-                        
-                    </ul>
-                    
-                </div>
+                <div class="emq-section-head"><h3><?php echo esc_html($text['photos_title']); ?></h3></div>
+                <div class="emq-q"><?php
+                    // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped, admin-saved page text (wp_kses_post on save)
+                    echo $text['photos_html'];
+                    ?></div>
             </section>
             <section class="emq-section">
-                
-                <div class="emq-q">
-                    
-                    <ol class="emq-list">
-                        
-                        
-                        
-                        
-                        
-                        
-                        
-                    </ol>
-                    
-                </div>
+                <div class="emq-section-head"><h3><?php echo esc_html($text['access_title']); ?></h3><span class="emq-goes-where">Information only — no answer required</span></div>
+                <div class="emq-q"><?php
+                    // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped, admin-saved page text (wp_kses_post on save)
+                    echo $text['access_html'];
+                    ?></div>
             </section>
             <section class="emq-section">
-                
+                <div class="emq-section-head"><h3><?php echo esc_html($text['email_title']); ?></h3></div>
                 <?php if (easy_mgmt_queue_resend_link() !== '') : ?>
-                <div class="emq-q">
-                    
-                    
-                    <ol class="emq-list">
-                        
-                        
-                        
-                        
-                    </ol>
-                    
+                <div class="emq-q"><?php
+                    // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped, admin-saved page text (wp_kses_post on save)
+                    echo $text['email_html'];
+                    ?>
                     <a class="emq-action-btn" href="<?php echo esc_url(easy_mgmt_queue_resend_link()); ?>" target="_blank" rel="noopener">Complete email setup in GoDaddy</a>
                 </div>
                 <?php else : ?>
@@ -746,9 +821,10 @@ function easy_mgmt_queue_shortcode() {
                 </div>
                 <?php endif; ?>
             </section>
-            <div class="emq-finish">
-                
-            </div>
+            <div class="emq-finish"><?php
+                // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped, admin-saved page text (wp_kses_post on save)
+                echo $text['finish_html'];
+                ?></div>
         <?php endif; ?>
     </div>
     <style>
@@ -930,6 +1006,24 @@ function easy_mgmt_queue_admin_handle() {
             add_settings_error('emq_admin', 'emq_reopened', 'Question reopened — it is back in the queue.', 'success');
         }
     }
+    // Save the queue page's own information text (stored in the database,
+    // not in code). An emptied field falls back to the original wording
+    // from easy_mgmt_queue_page_text_defaults() when the page renders.
+    if (isset($_POST['emq_page_text_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['emq_page_text_nonce'])), 'emq_page_text')) {
+        $clean = array();
+        foreach (easy_mgmt_queue_page_text_defaults() as $pt_key => $pt_default) {
+            $raw = isset($_POST['emq_pt_' . $pt_key]) ? (string) wp_unslash($_POST['emq_pt_' . $pt_key]) : '';
+            if ($pt_key === 'lede') {
+                $clean[$pt_key] = sanitize_textarea_field($raw);
+            } elseif (substr($pt_key, -5) === '_html') {
+                $clean[$pt_key] = wp_kses_post($raw);
+            } else {
+                $clean[$pt_key] = sanitize_text_field($raw);
+            }
+        }
+        update_option('easy_mgmt_queue_page_text', $clean, false);
+        add_settings_error('emq_admin', 'emq_page_text_saved', 'Page text saved.', 'success');
+    }
 }
 
 
@@ -1075,6 +1169,30 @@ function easy_mgmt_queue_admin_page() {
     echo '<tr><th scope="row"><label for="emq_new_info">Reference HTML</label></th><td><textarea id="emq_new_info" name="emq_new_info" rows="4" class="large-text code" placeholder="Optional HTML shown above the question"></textarea><p class="description">Optional. Shown above the question on the queue page.</p></td></tr>';
     echo '</tbody></table>';
     submit_button('Add question');
+    echo '</form>';
+
+    // --- Page text (the information sections on the queue page itself) ---
+    echo '<h2>Page text</h2>';
+    echo '<p>This is the information text shown on the queue page itself, around the questions: the introduction, the What&rsquo;s New summary, and the Payments, Photos, Facebook and LinkedIn access, and Email setup sections, plus the closing note. Per-question reference HTML is separate and stays on each question above. In the body fields, basic HTML works (paragraphs, bold, lists, links). Emptying a field and saving restores the original wording for that block.</p>';
+    $page_text = easy_mgmt_queue_page_text();
+    echo '<form method="post" action="">';
+    wp_nonce_field('emq_page_text', 'emq_page_text_nonce');
+    echo '<table class="form-table"><tbody>';
+    echo '<tr><th scope="row"><label for="emq_pt_lede">Introduction</label></th><td><textarea id="emq_pt_lede" name="emq_pt_lede" rows="3" class="large-text">' . esc_textarea($page_text['lede']) . '</textarea><p class="description">The paragraph under the &ldquo;Management queue&rdquo; heading.</p></td></tr>';
+    $pt_sections = array(
+        array('whats_new', 'What&rsquo;s New', 20),
+        array('payments', 'Payments', 8),
+        array('photos', 'Photos', 8),
+        array('access', 'Facebook and LinkedIn access', 10),
+        array('email', 'Email setup', 10),
+    );
+    foreach ($pt_sections as $pt) {
+        echo '<tr><th scope="row"><label for="emq_pt_' . $pt[0] . '_title">' . $pt[1] . ' heading</label></th><td><input type="text" id="emq_pt_' . $pt[0] . '_title" name="emq_pt_' . $pt[0] . '_title" class="large-text" value="' . esc_attr($page_text[$pt[0] . '_title']) . '"></td></tr>';
+        echo '<tr><th scope="row"><label for="emq_pt_' . $pt[0] . '_html">' . $pt[1] . ' body HTML</label></th><td><textarea id="emq_pt_' . $pt[0] . '_html" name="emq_pt_' . $pt[0] . '_html" rows="' . (int) $pt[2] . '" class="large-text code">' . esc_textarea($page_text[$pt[0] . '_html']) . '</textarea></td></tr>';
+    }
+    echo '<tr><th scope="row"><label for="emq_pt_finish_html">Closing note HTML</label></th><td><textarea id="emq_pt_finish_html" name="emq_pt_finish_html" rows="3" class="large-text code">' . esc_textarea($page_text['finish_html']) . '</textarea></td></tr>';
+    echo '</tbody></table>';
+    submit_button('Save page text');
     echo '</form></div>';
 }
 
