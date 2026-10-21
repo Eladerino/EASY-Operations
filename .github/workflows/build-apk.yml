@@ -148,7 +148,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
           TAG: ${{ github.event.release.tag_name }}
-        run: gh release upload "$TAG" "easy-manager-$VERSION.apk" --clobber
+        run: |
+          # Keep exactly one manager APK per release: delete any older
+          # easy-manager APK assets before uploading the new one. The
+          # pattern only matches the manager APK, never desktop assets.
+          for asset in $(gh release view "$TAG" --json assets --jq '.assets[].name | select(startswith("easy-manager-") and endswith(".apk"))'); do
+            echo "Removing older APK asset $asset from $TAG"
+            gh release delete-asset "$TAG" "$asset" --yes
+          done
+          gh release upload "$TAG" "easy-manager-$VERSION.apk" --clobber
 
       # Manual runs also attach the APK, to the newest published release.
       # Releases created by other workflows never fire the release event
@@ -167,4 +175,11 @@ jobs:
             exit 0
           fi
           echo "Attaching easy-manager-$VERSION.apk to release $TAG"
+          # Keep exactly one manager APK per release: delete any older
+          # easy-manager APK assets before uploading the new one. The
+          # pattern only matches the manager APK, never desktop assets.
+          for asset in $(gh release view "$TAG" --json assets --jq '.assets[].name | select(startswith("easy-manager-") and endswith(".apk"))'); do
+            echo "Removing older APK asset $asset from $TAG"
+            gh release delete-asset "$TAG" "$asset" --yes
+          done
           gh release upload "$TAG" "easy-manager-$VERSION.apk" --clobber
