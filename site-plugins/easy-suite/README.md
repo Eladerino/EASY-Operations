@@ -103,7 +103,11 @@ All routes are under `/wp-json/easy/v1/`.
 | `management-queue` | Admins |
 | `management-queue/questions` (POST) | Admins |
 | `management-queue/answers` (POST) | Admins |
+| `management-queue/undecide`, `management-queue/resolve`, `management-queue/unresolve` (POST) | Admins |
+| `activity` | Admins |
 | `site-health` | Admins |
+| `instructor-feeds` | Admins |
+| `cert-search`, `cert-pdf/<number>` | Certificate access rules (office accounts see all; instructors and students only their own) |
 | `app-config`, `course-builder/me`, `learn/…` | Any signed-in user |
 | `course-builder/…` | Course authors and reviewers |
 | `licenses…`, `enrollments…` | Admins, certificate publishers and Course Builder reviewers |

@@ -19,13 +19,19 @@ against easysafety.ca and needs the site's **EASY Suite** plugin
     Publish. Publishing emails the student and the employer contact.
   - **Classes**: draft classes, with Edit and Publish.
   - **Accounts**: new site accounts, with Approve and Reject.
-- **Schedule**: post classes to the site's event calendar.
+- **Schedule**: post classes to the site's event calendar. Each class
+  has a student roster: phone and walk-in students are enrolled here,
+  and the list stays in step with online seat sales.
 - **Online Learning**: preview only, with sample data.
 - **Course Builder**: authors build online courses, and reviewers approve
   them or send them back with a note. Courses are saved to the site, so every
   computer sees the same copy. If the site doesn't have EASY Suite's Course
   Builder sync, courses stay on one computer and reviews are passed as files.
   Backups go to `%APPDATA%\EASYOperations\course-builder-backups\`.
+
+The tabs show badge counts for work waiting (approvals, expiring
+certificates), filled in by a scan shortly after the app opens. A
+What's New button in the header shows what changed in recent updates.
 
 Instructors only see their own certificate drafts and can't publish. The
 Publish button and the Classes and Accounts queues show for accounts listed
@@ -117,4 +123,7 @@ publishing.
 | `forge.config.js` | Packaging and installer settings |
 | `test/` | Unit tests |
 | `site-plugins/easy-suite/` | The WordPress plugin (not part of the app) |
+| `mobile/` | The EASY Manager Android app (see `mobile/README.md`) |
 | `.github/workflows/release.yml` | Release build |
+| `.github/workflows/build-apk.yml` | EASY Manager APK build |
+| `.github/workflows/publish-suite.yml` | Packages the Suite zip onto a prerelease for the plugin self-updater |

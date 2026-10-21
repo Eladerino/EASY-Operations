@@ -26,7 +26,10 @@ WordPress credentials at runtime.
   all button opening the Activity screen: the whole trail (newest 200
   entries, kept on the device), grouped by day, with filters for
   classes, certificates, accounts, and queue answers. The trail is
-  read only. Below it, a footer line showing the EASY Suite version
+  read only. The Activity screen also has a This phone / Site switch:
+  Site shows the site-wide activity log from EASY Suite (what the
+  whole team did, on any surface), read from the site and never
+  stored on the device. Below it, a footer line showing the EASY Suite version
   on the site, which doubles as a "did the site answer" check. The last
   good class list is kept on the device, so the screen paints straight
   away and says when it is showing a saved copy instead of fresh data.
@@ -146,8 +149,11 @@ The `.github/workflows/build-apk.yml` workflow does the whole build on
 GitHub's runners; no Android SDK is needed on a local machine.
 
 - **Run workflow** (Actions, Build APK, Run workflow): builds a signed
-  release APK and uploads it as a workflow artifact named
-  `easy-manager-<version>`.
+  release APK, uploads it as a workflow artifact named
+  `easy-manager-<version>`, and attaches it to the newest full
+  (non-prerelease) release as `easy-manager-<version>.apk`. Any older
+  `easy-manager-*.apk` assets on that release are deleted first, so a
+  release only ever carries the newest APK.
 - **Release published**: when a GitHub release is published (the desktop
   app's Release workflow creates those), the APK is built and attached to
   that same release as `easy-manager-<version>.apk`.
@@ -163,8 +169,9 @@ matches; if the two disagree the build fails on purpose. Version codes
 are derived as major × 10000 + minor × 100 + patch, so they always rise.
 
 To release a new app version: bump `version` in `mobile/package.json`
-and `APP_VERSION` in `mobile/www/js/config.js`, commit, then publish a
-release (or run the workflow and sideload the artifact).
+and `APP_VERSION` in `mobile/www/js/config.js`, commit, then run the
+workflow: it attaches the APK to the newest full release and the
+phone offers it as an update (or sideload the workflow artifact).
 
 ## Self-update
 
