@@ -501,6 +501,7 @@ h3.section-title {
   font-weight: 600;
 }
 
+.activity-source { display: flex; justify-content: center; margin-top: var(--sp-3); }
 .activity-day { margin-top: var(--sp-4); }
 
 .recent-row {

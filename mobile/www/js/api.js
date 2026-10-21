@@ -33,6 +33,7 @@
 //   Cert search     GET  /wp-json/easy/v1/cert-search?q=<text> (Suite 2.2.28)
 //   Cert PDF        GET  /wp-json/easy/v1/cert-pdf/<number> (Suite 2.2.31)
 //   Calendar links  GET  /wp-json/easy/v1/instructor-feeds (Suite 2.2.28)
+//   Site activity   GET  /wp-json/easy/v1/activity (Suite 2.2.36)
 //
 // Auth is a WordPress Application Password sent as HTTP Basic over HTTPS.
 //
@@ -884,6 +885,58 @@
     return b64;
   }
 
+  /* ---------------- site activity (Suite 2.2.36) ---------------- */
+
+  // Request path for one page of the site activity feed, kept
+  // separate so it can be tested without the network. kind is one of
+  // the Activity screen's filter keys; anything unrecognised asks
+  // for every kind, the same way the site treats it.
+  function activityFeedPath(page, kind) {
+    const p = Math.max(1, parseInt(page, 10) || 1);
+    const kinds = ['class', 'cert', 'account', 'queue'];
+    const k = kinds.indexOf(kind) >= 0 ? kind : 'all';
+    return '/easy/v1/activity?page=' + p + '&per_page=50&kind=' + k;
+  }
+
+  // True when the failure means this site cannot serve the activity
+  // feed to this app at all: the route does not exist there yet (a
+  // Suite older than 2.2.36 answers rest_no_route, seen as a 404),
+  // or the signed-in account may not read it (403, the feed is
+  // admins only). The Activity screen shows a calm needs-newer note
+  // for this instead of a raw error.
+  function activityNeedsNewerSuite(err) {
+    if (!err) return false;
+    if (err.code === 'rest_no_route') return true;
+    return err.status === 404 || err.status === 403;
+  }
+
+  // Plain-language text for a failed activityFeed() call.
+  function activityErrorText(err) {
+    if (activityNeedsNewerSuite(err)) {
+      return 'Site activity needs EASY Suite 2.2.36 or newer on the site.';
+    }
+    return (err && err.message) || 'Could not load site activity.';
+  }
+
+  // One page of the site-wide activity feed (Suite 2.2.36): what the
+  // team did across the website, the desktop app, and this app,
+  // newest first. Resolves { items, page, perPage, total }; each item
+  // carries kind, title, action, summary, actor, and a millisecond
+  // `at`. Deliberately not cached: the Activity screen fetches fresh
+  // on entry, and paging must never replay a stale first page.
+  // Throws an Error carrying .status and .code on any non-200; use
+  // activityErrorText() to word it for the screen.
+  async function activityFeed(page, kind) {
+    const r = await request(activityFeedPath(page, kind));
+    const body = r.json || {};
+    return {
+      items: Array.isArray(body.items) ? body.items : [],
+      page: typeof body.page === 'number' ? body.page : Math.max(1, parseInt(page, 10) || 1),
+      perPage: typeof body.per_page === 'number' ? body.per_page : 50,
+      total: typeof body.total === 'number' ? body.total : 0,
+    };
+  }
+
   /* ---------------- site and course builder info ---------------- */
 
   // Suite version plus a reachability canary for the Today footer.
@@ -936,6 +989,10 @@
     certPdf,
     certPdfPath,
     certPdfErrorText,
+    activityFeed,
+    activityFeedPath,
+    activityErrorText,
+    activityNeedsNewerSuite,
     saleState,
     roster,
     expiringCerts,
