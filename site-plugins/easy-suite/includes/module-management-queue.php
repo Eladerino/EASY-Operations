@@ -562,70 +562,35 @@ function easy_mgmt_queue_open_questions() {
 /* --- Page text: the information sections around the questions ------------ */
 
 /**
- * Default wording for the queue page's information sections. The stored
- * option (edited on the Management queue admin screen) wins wherever it
- * has text; any key missing or saved empty falls back to the wording
- * here, so the page can never render blank and clearing a field in
- * wp-admin restores the original block. Bodies are the exact HTML the
- * shortcode used to print inline, so before any admin edit the page
- * renders the same as it always did. This is page-level text only; a
- * question's own reference HTML lives in its question record
+ * The key list for the queue page's information sections, with empty
+ * defaults. The wording itself lives only in the stored option (edited
+ * on the Management queue admin screen); since 2.2.37 the plugin code
+ * carries no copy of it, so the text stays out of the public repo.
+ * Sites that ran 2.2.35 or 2.2.36 already hold the full wording in the
+ * option those versions seeded, and are unaffected. A key missing or
+ * saved empty renders as empty, and the shortcode skips any section
+ * whose heading and body are both empty. This is page-level text only;
+ * a question's own reference HTML lives in its question record
  * (info_html) and is not part of this option.
  */
 function easy_mgmt_queue_page_text_defaults() {
     return array(
-        
-        
-        
-        
-        'payments_html'     => '
-                    
-                    
-                    
-                ',
-        
-        'photos_html'       => '
-                    
-                    <ul class="emq-list">
-                        
-                        
-                        
-                        
-                    </ul>
-                    
-                ',
-        
-        'access_html'       => '
-                    
-                    <ol class="emq-list">
-                        
-                        
-                        
-                        
-                        
-                        
-                        
-                    </ol>
-                    
-                ',
-        
-        'email_html'        => '
-                    
-                    
-                    <ol class="emq-list">
-                        
-                        
-                        
-                        
-                    </ol>
-                    ',
-        'finish_html'       => '
-                
-            ',
+        'lede'              => '',
+        'whats_new_title'   => '',
+        'whats_new_html'    => easy_mgmt_queue_whats_new_html(),
+        'payments_title'    => '',
+        'payments_html'     => '',
+        'photos_title'      => '',
+        'photos_html'       => '',
+        'access_title'      => '',
+        'access_html'       => '',
+        'email_title'       => '',
+        'email_html'        => '',
+        'finish_html'       => '',
     );
 }
 
-/** Stored page text merged over the code defaults, key by key. */
+/** Stored page text merged over the (empty) key defaults, key by key. */
 function easy_mgmt_queue_page_text() {
     $text = easy_mgmt_queue_page_text_defaults();
     $stored = get_option('easy_mgmt_queue_page_text', array());
@@ -640,10 +605,13 @@ function easy_mgmt_queue_page_text() {
 }
 
 /**
- * Seed the page-text option once, the first time an admin screen loads
- * after the update, so the wp-admin form opens pre-filled with the real
- * wording. A convenience only: the getter falls back to the defaults
- * anyway, so the public page never pays for this check.
+ * Seed the page-text option once, the first time an admin screen loads,
+ * so the option exists with the full key structure. Since 2.2.37 the
+ * seed writes empty strings only: sites upgrading from 2.2.35 or later
+ * already carry their wording in this option (seeded with the full
+ * text by those versions), so the seed is a no-op there and never
+ * overwrites anything. A fresh install starts blank by design; an
+ * admin types the wording into the Page text form.
  */
 function easy_mgmt_queue_seed_page_text() {
     if (!current_user_can('manage_options')) {
@@ -655,59 +623,18 @@ function easy_mgmt_queue_seed_page_text() {
 }
 add_action('admin_init', 'easy_mgmt_queue_seed_page_text');
 
-/** Full revised projects summary for the What's New section. Plain language for the team. */
+/**
+ * The What's New body HTML. The wording lives only in the stored
+ * easy_mgmt_queue_page_text option (edited on the Management queue
+ * admin screen); this provider simply returns the stored value, or an
+ * empty string when nothing is stored.
+ */
 function easy_mgmt_queue_whats_new_html() {
-    ob_start();
-    ?>
-    <div class="emq-q">
-        
-
-        
-
-        
-
-        
-
-        
-
-        
-
-        
-
-        
-
-        
-
-        
-
-        
-
-        
-
-        
-
-        
-
-        
-
-        
-
-        
-
-        
-
-        
-
-        
-
-        
-
-        
-
-        
-    </div>
-    <?php
-    return ob_get_clean();
+    $stored = get_option('easy_mgmt_queue_page_text', array());
+    if (is_array($stored) && isset($stored['whats_new_html']) && is_string($stored['whats_new_html'])) {
+        return $stored['whats_new_html'];
+    }
+    return '';
 }
 
 /** Shortcode output. */
@@ -745,15 +672,15 @@ function easy_mgmt_queue_shortcode() {
     ?>
     <div class="emq-wrap">
         <h2>Management queue</h2>
-        <p class="emq-lede"><?php echo esc_html($text['lede']); ?></p>
+        <?php if ($text['lede'] !== ''): ?><p class="emq-lede"><?php echo esc_html($text['lede']); ?></p><?php endif; ?>
         <p class="emq-progress"><strong><?php echo (int) $done_count; ?> of <?php echo (int) $total; ?></strong> decided.<?php if ($resolved_count > 0): ?> <strong><?php echo (int) $resolved_count; ?></strong> resolved and archived.<?php endif; ?></p>
-        <section class="emq-section">
+        <?php if ($text['whats_new_title'] !== '' || $text['whats_new_html'] !== ''): ?><section class="emq-section">
             <div class="emq-section-head"><h3><?php echo esc_html($text['whats_new_title']); ?></h3><span class="emq-goes-where">Information only &mdash; no answer required</span></div>
             <?php
             // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped, admin-saved page text (wp_kses_post on save)
             echo $text['whats_new_html'];
             ?>
-        </section>
+        </section><?php endif; ?>
         <?php if ($just_saved): ?>
             <div class="emq-notice"><?php echo esc_html($just_saved); ?></div>
         <?php endif; ?>
@@ -785,28 +712,28 @@ function easy_mgmt_queue_shortcode() {
                 echo '</section>';
             }
             ?>
-            <section class="emq-section">
+            <?php if ($text['payments_title'] !== '' || $text['payments_html'] !== ''): ?><section class="emq-section">
                 <div class="emq-section-head"><h3><?php echo esc_html($text['payments_title']); ?></h3><span class="emq-goes-where">Information only — no answer required</span></div>
                 <div class="emq-q"><?php
                     // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped, admin-saved page text (wp_kses_post on save)
                     echo $text['payments_html'];
                     ?></div>
-            </section>
-            <section class="emq-section">
+            </section><?php endif; ?>
+            <?php if ($text['photos_title'] !== '' || $text['photos_html'] !== ''): ?><section class="emq-section">
                 <div class="emq-section-head"><h3><?php echo esc_html($text['photos_title']); ?></h3></div>
                 <div class="emq-q"><?php
                     // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped, admin-saved page text (wp_kses_post on save)
                     echo $text['photos_html'];
                     ?></div>
-            </section>
-            <section class="emq-section">
+            </section><?php endif; ?>
+            <?php if ($text['access_title'] !== '' || $text['access_html'] !== ''): ?><section class="emq-section">
                 <div class="emq-section-head"><h3><?php echo esc_html($text['access_title']); ?></h3><span class="emq-goes-where">Information only — no answer required</span></div>
                 <div class="emq-q"><?php
                     // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped, admin-saved page text (wp_kses_post on save)
                     echo $text['access_html'];
                     ?></div>
-            </section>
-            <section class="emq-section">
+            </section><?php endif; ?>
+            <?php if ($text['email_title'] !== '' || $text['email_html'] !== ''): ?><section class="emq-section">
                 <div class="emq-section-head"><h3><?php echo esc_html($text['email_title']); ?></h3></div>
                 <?php if (easy_mgmt_queue_resend_link() !== '') : ?>
                 <div class="emq-q"><?php
@@ -820,11 +747,11 @@ function easy_mgmt_queue_shortcode() {
                     <p class="emq-why">Email setup is complete.</p>
                 </div>
                 <?php endif; ?>
-            </section>
-            <div class="emq-finish"><?php
+            </section><?php endif; ?>
+            <?php if ($text['finish_html'] !== ''): ?><div class="emq-finish"><?php
                 // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped, admin-saved page text (wp_kses_post on save)
                 echo $text['finish_html'];
-                ?></div>
+                ?></div><?php endif; ?>
         <?php endif; ?>
     </div>
     <style>
@@ -1007,8 +934,8 @@ function easy_mgmt_queue_admin_handle() {
         }
     }
     // Save the queue page's own information text (stored in the database,
-    // not in code). An emptied field falls back to the original wording
-    // from easy_mgmt_queue_page_text_defaults() when the page renders.
+    // not in code). What is saved is what renders: a section whose
+    // heading and body are both empty is skipped on the page.
     if (isset($_POST['emq_page_text_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['emq_page_text_nonce'])), 'emq_page_text')) {
         $clean = array();
         foreach (easy_mgmt_queue_page_text_defaults() as $pt_key => $pt_default) {
@@ -1173,7 +1100,7 @@ function easy_mgmt_queue_admin_page() {
 
     // --- Page text (the information sections on the queue page itself) ---
     echo '<h2>Page text</h2>';
-    echo '<p>This is the information text shown on the queue page itself, around the questions: the introduction, the What&rsquo;s New summary, and the Payments, Photos, Facebook and LinkedIn access, and Email setup sections, plus the closing note. Per-question reference HTML is separate and stays on each question above. In the body fields, basic HTML works (paragraphs, bold, lists, links). Emptying a field and saving restores the original wording for that block.</p>';
+    echo '<p>This is the information text shown on the queue page itself, around the questions: the introduction, the What&rsquo;s New summary, and the Payments, Photos, Facebook and LinkedIn access, and Email setup sections, plus the closing note. Per-question reference HTML is separate and stays on each question above. In the body fields, basic HTML works (paragraphs, bold, lists, links). A section whose heading and body are both left empty does not appear on the page; it comes back as soon as text is typed in again.</p>';
     $page_text = easy_mgmt_queue_page_text();
     echo '<form method="post" action="">';
     wp_nonce_field('emq_page_text', 'emq_page_text_nonce');
