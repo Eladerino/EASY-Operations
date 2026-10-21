@@ -7,7 +7,14 @@
 // to POST /easy/v1/management-queue/answers, which saves with the same
 // validation and notification email as the website queue form. On
 // success the question moves to Decided in place and the counts update
-// without a reload.
+// without a reload. Answering is also written to the activity trail.
+//
+// Decided is not the end of the line (Suite 2.2.32): a decided card
+// can Undo its answer (the question reopens) or be Marked resolved
+// once the decision has been acted on, which files it in the Archive
+// section below. Archived questions can be un-resolved back to
+// Decided. Every lifecycle step asks first and only changes the
+// screen after the site confirms.
 //
 // The last good feed is saved on the device, painted instantly on
 // open, and refreshed in the background; a failed refresh keeps the
@@ -37,10 +44,157 @@
         .filter(Boolean)
         .join(' · ');
       if (by) card.appendChild(U.el('div', 'card-meta', by));
+      const actions = U.el('div', 'card-actions');
+      const undoBtn = U.el('button', 'btn btn-small btn-secondary', 'Undo answer');
+      undoBtn.type = 'button';
+      undoBtn.addEventListener('click', () => undecideAnswer(q, undoBtn, resolveBtn));
+      const resolveBtn = U.el('button', 'btn btn-small btn-secondary', 'Mark resolved');
+      resolveBtn.type = 'button';
+      resolveBtn.addEventListener('click', () => resolveDecided(q, undoBtn, resolveBtn));
+      actions.appendChild(undoBtn);
+      actions.appendChild(resolveBtn);
+      card.appendChild(actions);
       return card;
     }
     card.appendChild(answerControls(q));
     return card;
+  }
+
+  function archiveCard(item) {
+    const card = U.el('div', 'card');
+    if (item.section) card.appendChild(U.el('div', 'card-section', item.section));
+    card.appendChild(U.el('div', 'card-title', item.label));
+    if (Array.isArray(item.options) && item.options.length) {
+      const chips = U.el('div', 'chips');
+      for (const opt of item.options) chips.appendChild(U.el('span', 'chip', opt));
+      card.appendChild(chips);
+    }
+    if (item.answer) card.appendChild(U.el('div', 'card-answer', item.answer));
+    const decidedBy = [
+      item.decided_by ? 'Decided by ' + item.decided_by : '',
+      item.decided_at ? U.fmtDateTime(item.decided_at) : '',
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    if (decidedBy) card.appendChild(U.el('div', 'card-meta', decidedBy));
+    const resolvedBy = [
+      item.resolved_by ? 'Resolved by ' + item.resolved_by : '',
+      item.resolved_at ? U.fmtDateTime(item.resolved_at) : '',
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    if (resolvedBy) card.appendChild(U.el('div', 'card-meta', resolvedBy));
+    const actions = U.el('div', 'card-actions');
+    const btn = U.el('button', 'btn btn-small btn-secondary', 'Un-resolve');
+    btn.type = 'button';
+    btn.addEventListener('click', () => unresolve(item, btn));
+    actions.appendChild(btn);
+    card.appendChild(actions);
+    return card;
+  }
+
+  /* ---------------- lifecycle (Suite 2.2.32) ---------------- */
+
+  // Counts always follow the lists after a lifecycle change, and the
+  // total is the three states together, matching the site feed.
+  function syncCounts() {
+    if (!feed) return;
+    const counts = feed.counts || { open: 0, decided: 0, resolved: 0, total: 0 };
+    counts.open = feed.open.length;
+    counts.decided = feed.decided.length;
+    counts.resolved = (feed.resolved || []).length;
+    counts.total = counts.open + counts.decided + counts.resolved;
+    feed.counts = counts;
+  }
+
+  async function afterLifecycleChange() {
+    syncCounts();
+    render(feed);
+    await window.EasyStore.setLastGood('queue', feed);
+    $('queueUpdated').textContent = 'Last updated ' + U.endPeriod(U.fmtClock(Date.now()));
+  }
+
+  function lifecycleFailure(what, err, btns) {
+    window.EasyUi.toast(
+      'Could not ' + what + ': ' + window.EasyApi.queueLifecycleErrorText(err),
+      'error',
+      8000
+    );
+    for (const b of btns) b.disabled = false;
+  }
+
+  async function undecideAnswer(q, undoBtn, resolveBtn) {
+    const yes = await window.EasyUi.confirm(
+      'Undo this answer?',
+      '"' + q.label + '" will go back to the open questions, and its saved answer will be cleared.',
+      'Undo answer'
+    );
+    if (!yes) return;
+    undoBtn.disabled = true;
+    resolveBtn.disabled = true;
+    try {
+      const res = await window.EasyApi.undecideQuestion(q.key);
+      const item = (res && res.question) || { ...q, decided: false };
+      delete item.answer;
+      delete item.decided_by;
+      delete item.decided_at;
+      if (feed) {
+        feed.decided = feed.decided.filter((d) => d.key !== q.key);
+        feed.open = [...feed.open.filter((o) => o.key !== q.key), item];
+        await afterLifecycleChange();
+      }
+      window.EasyUi.toast('Answer undone. The question is open again.', 'success');
+    } catch (e) {
+      lifecycleFailure('undo the answer', e, [undoBtn, resolveBtn]);
+    }
+  }
+
+  async function resolveDecided(q, undoBtn, resolveBtn) {
+    const yes = await window.EasyUi.confirm(
+      'Mark this question resolved?',
+      '"' + q.label + '" was decided and has been acted on. It will leave the decided list and stay on record in the archive.',
+      'Mark resolved'
+    );
+    if (!yes) return;
+    undoBtn.disabled = true;
+    resolveBtn.disabled = true;
+    try {
+      const res = await window.EasyApi.resolveQuestion(q.key);
+      const item = (res && res.question) || { ...q };
+      if (feed) {
+        feed.decided = feed.decided.filter((d) => d.key !== q.key);
+        if (!Array.isArray(feed.resolved)) feed.resolved = [];
+        feed.resolved = [item, ...feed.resolved.filter((r) => r.key !== q.key)];
+        await afterLifecycleChange();
+      }
+      window.EasyUi.toast('Question marked resolved.', 'success');
+    } catch (e) {
+      lifecycleFailure('mark the question resolved', e, [undoBtn, resolveBtn]);
+    }
+  }
+
+  async function unresolve(item, btn) {
+    const yes = await window.EasyUi.confirm(
+      'Move this question back to decided?',
+      '"' + item.label + '" will leave the archive and show in the decided list again.',
+      'Un-resolve'
+    );
+    if (!yes) return;
+    btn.disabled = true;
+    try {
+      const res = await window.EasyApi.unresolveQuestion(item.key);
+      const back = (res && res.question) || { ...item };
+      delete back.resolved_by;
+      delete back.resolved_at;
+      if (feed) {
+        feed.resolved = (feed.resolved || []).filter((r) => r.key !== item.key);
+        feed.decided = [back, ...feed.decided.filter((d) => d.key !== item.key)];
+        await afterLifecycleChange();
+      }
+      window.EasyUi.toast('Question is back in the decided list.', 'success');
+    } catch (e) {
+      lifecycleFailure('un-resolve the question', e, [btn]);
+    }
   }
 
   /* ---------------- answering ---------------- */
@@ -65,6 +219,17 @@
     try {
       const res = await window.EasyApi.answerQuestion(q.key, value, other);
       const item = (res && res.question) || { ...q, decided: true };
+      // The answer joins the activity trail, titled by the question.
+      const fullLabel = String(q.label || '').trim();
+      const shortLabel =
+        fullLabel.length > 60 ? fullLabel.slice(0, 57).trimEnd() + '...' : fullLabel;
+      window.EasyStore.addDecision({
+        kind: 'queue',
+        id: q.key,
+        title: shortLabel || 'Queue question',
+        action: 'Question answered',
+        at: Date.now(),
+      }).catch(() => {});
       if (feed) {
         feed.open = feed.open.filter((o) => o.key !== q.key);
         feed.decided = [item, ...feed.decided.filter((d) => d.key !== q.key)];
@@ -142,9 +307,11 @@
   function render(data) {
     if (!Array.isArray(data.open)) data.open = [];
     if (!Array.isArray(data.decided)) data.decided = [];
-    const counts = data.counts || { open: 0, decided: 0, total: 0 };
+    if (!Array.isArray(data.resolved)) data.resolved = [];
+    const counts = data.counts || { open: 0, decided: 0, resolved: 0, total: 0 };
     $('queueCounts').textContent =
-      counts.open + ' open · ' + counts.decided + ' decided of ' + counts.total;
+      counts.open + ' open · ' + counts.decided + ' decided of ' + counts.total +
+      (counts.resolved ? ' · ' + counts.resolved + ' resolved' : '');
     const activity = data.last_activity || {};
     $('queueActivity').textContent =
       activity.by && activity.at
@@ -165,6 +332,14 @@
       decidedBox.appendChild(U.el('p', 'hint', 'No decisions yet.'));
     } else {
       for (const item of data.decided) decidedBox.appendChild(questionCard(item, true));
+    }
+
+    const archiveBox = $('queueArchive');
+    archiveBox.innerHTML = '';
+    if (!data.resolved.length) {
+      archiveBox.appendChild(U.el('p', 'hint', 'Nothing resolved yet.'));
+    } else {
+      for (const item of data.resolved) archiveBox.appendChild(archiveCard(item));
     }
   }
 
@@ -239,6 +414,14 @@
 
   function init() {
     $('askForm').addEventListener('submit', submitQuestion);
+    const archiveToggle = $('queueArchiveToggle');
+    if (archiveToggle) {
+      archiveToggle.addEventListener('click', () => {
+        const body = $('queueArchiveBody');
+        const nowHidden = body.classList.toggle('hidden');
+        archiveToggle.setAttribute('aria-expanded', nowHidden ? 'false' : 'true');
+      });
+    }
   }
 
   window.EasyQueue = { show, init };

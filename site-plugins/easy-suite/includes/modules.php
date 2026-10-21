@@ -133,6 +133,12 @@ function easy_suite_module_registry() {
             'default'     => true,
             'locked'      => false,
         ],
+        'updater' => [
+            'label'       => 'GitHub self-updater',
+            'description' => 'Checks the EASY-Operations GitHub releases for a newer easy-suite-<version>.zip and offers it on the Plugins screen like a normal update. The check runs inside the WordPress update flow at most once per 12 hours and stays silent when GitHub cannot be reached; installing the zip by hand keeps working as a fallback.',
+            'default'     => true,
+            'locked'      => false,
+        ],
     ];
 }
 

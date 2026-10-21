@@ -21,8 +21,12 @@ WordPress credentials at runtime.
   contact details on file. Below the classes: counts of everything waiting
   for action (including course reviews waiting). The count boxes tap
   through to the screen holding the work, except course reviews, which
-  has no screen in this app and is display only. Then the last few decisions
-  made from this app, and a footer line showing the EASY Suite version
+  has no screen in this app and is display only. Then the last few
+  entries of the app's activity trail (Recent activity), with a View
+  all button opening the Activity screen: the whole trail (newest 200
+  entries, kept on the device), grouped by day, with filters for
+  classes, certificates, accounts, and queue answers. The trail is
+  read only. Below it, a footer line showing the EASY Suite version
   on the site, which doubles as a "did the site answer" check. The last
   good class list is kept on the device, so the screen paints straight
   away and says when it is showing a saved copy instead of fresh data.
@@ -41,6 +45,10 @@ WordPress credentials at runtime.
   re-reading the class from the server, never just by the save
   answering OK, in both directions (a class can no more be falsely
   reported as a draft than falsely reported as published).
+  Each save that changes the title, date or time, location, price,
+  seats, or status writes one activity trail entry saying what
+  changed (for example "Price $150 → $175 · Seats 10 → 12"); a save
+  that changes none of those writes no entry.
   Publishing, moving a published class back to draft, and deleting
   each ask first with a confirmation that says
   exactly what will happen; deleting moves the class to the trash on
@@ -55,10 +63,9 @@ WordPress credentials at runtime.
   account signups, one card per item, decided one at a time. There is
   deliberately no "approve all". Certificate cards show the expiry date
   and a "No PDF attached" warning when there is no PDF. Publishing a
-  certificate asks first, because publishing emails the student. Recent
-  certificate and class publishes can be undone (they flip back to
-  draft, and the undo asks first); account decisions cannot be reversed
-  through the API, so they show no Undo button. The last good queues
+  certificate asks first, because publishing emails the student. There
+  is no undo for anything here: the Recent activity list at the foot of
+  the screen is a read-only record of what the app did. The last good queues
   are kept on the device, so the screen paints straight away and says
   when a refresh failed and a saved copy is showing. A certificate
   search at the top of the screen looks up any certificate, published
@@ -71,7 +78,12 @@ WordPress credentials at runtime.
   right in the app: tap a choice (or type a free-text answer), confirm,
   and the answer saves through the Suite with the same validation and
   notification email as the website queue form. Decided questions show
-  who decided and when, and an "Ask the queue" form adds a new question
+  who decided and when. A decided question has two ways forward: Undo
+  answer clears the answer and returns the question to the open list,
+  and Mark resolved files it in the collapsed Archive section once the
+  decision has been acted on; archived questions keep their answer,
+  who decided it, and who resolved it, and can be un-resolved back to
+  Decided. An "Ask the queue" form adds a new question
   for Colleen and Scott. Multiple choice questions need at least two
   choices before the form will post. The last good feed is kept on the
   device, like Today.
@@ -259,9 +271,12 @@ Every route mirrors the desktop app and the EASY Suite plugin:
 | Seats filled | `GET /wp-json/easy/v1/sale-state/<event_id>` | plugin `module-seat-sales.php` |
 | Class roster | `GET /wp-json/easy/v1/roster/<event_id>` | plugin `module-roster.php` |
 | Expiring certs | `GET /wp-json/easy/v1/expiring-certs?days=30` | plugin `module-approvals.php` |
-| Queue feed | `GET /wp-json/easy/v1/management-queue` | plugin `module-management-queue.php` (Suite 2.2.24) |
+| Queue feed | `GET /wp-json/easy/v1/management-queue` (open, decided, and resolved lists, with counts for each) | plugin `module-management-queue.php` (Suite 2.2.32) |
 | Ask the queue | `POST /wp-json/easy/v1/management-queue/questions` | plugin `module-management-queue.php` (Suite 2.2.24) |
 | Answer a question | `POST /wp-json/easy/v1/management-queue/answers` | plugin `module-management-queue.php` (Suite 2.2.27) |
+| Undo a queue answer | `POST /wp-json/easy/v1/management-queue/undecide` with `{question_id}` | plugin `module-management-queue.php` (Suite 2.2.32) |
+| Resolve a queue question | `POST /wp-json/easy/v1/management-queue/resolve` with `{question_id}` | plugin `module-management-queue.php` (Suite 2.2.32) |
+| Un-resolve a queue question | `POST /wp-json/easy/v1/management-queue/unresolve` with `{question_id}` | plugin `module-management-queue.php` (Suite 2.2.32) |
 | Site health | `GET /wp-json/easy/v1/site-health` | plugin `includes/admin.php` (Suite 2.2.27) |
 | Suite version | `GET /wp-json/easy/v1/app-config` | plugin `module-cert-rest.php` |
 | Course reviews count | `GET /wp-json/easy/v1/course-builder/me` | plugin `module-courses.php` |
@@ -272,12 +287,16 @@ Every route mirrors the desktop app and the EASY Suite plugin:
   or the plugin reads WooCommerce orders, so there is no existing route
   to mirror. The blocks were left out rather than inventing a contract.
   Follow-up if wanted: a small Suite route for recent order totals.
-- **Undo cannot unsend email.** Undoing a certificate publish flips it
-  back to draft, but the student notification email fired at publish
-  time has already gone out. The site sends that email only the first
-  time a certificate is published, so publishing again later will not
-  email the student a second time either. The undo confirmation in the
-  app states both halves of this.
+- **There is no undo for publishes or account decisions.** The app
+  used to offer one for certificate and class publishes, but it could
+  only flip the item back to draft; it could never unsend the student
+  email a certificate publish already triggered (the site sends that
+  email only the first time a certificate is published, so publishing
+  again later will not email the student a second time either).
+  Rather than pretend otherwise, 0.4.4 removed the undo buttons; the
+  activity trail is a record, not a control. The one real undo left
+  is for queue answers, where undo just clears a saved form value
+  and reopens the question, with no side effects to chase.
 - **Certificate and class queues have no reject action.** That mirrors
   the desktop app: publish is the only forward action there, and sending
   something back is done by editing the draft in wp-admin or the desktop

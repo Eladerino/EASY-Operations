@@ -58,15 +58,16 @@
   const setCreds = (creds) => set('creds', creds);
   const clearCreds = () => remove('creds');
 
-  /* ---------------- decision history (local only) ---------------- */
-  // Every approval decision is recorded here so the Today screen can show
-  // what was recently decided. Entries: { uid, kind, id, title, action, at }.
-  // kind is 'cert' | 'class' | 'account'. Undo is offered only for kinds
-  // the API can actually reverse (cert and class status flips).
-  // Each entry carries a unique uid so undo marks the right row even
-  // when two decisions land in the same millisecond.
+  /* ---------------- activity history (local only) ---------------- */
+  // Every action the app completes is recorded here: the Today screen
+  // shows the latest few as Recent activity and the Activity screen
+  // shows the whole trail. Entries: { uid, kind, id, title, action, at }.
+  // kind is 'cert' | 'class' | 'account' | 'queue'. The trail is read
+  // only: entries are never edited or undone (an entry saved by an
+  // older version may still carry an 'undone' flag; the lists just
+  // show it). The newest 200 entries are kept.
   // History writes are serialized through one promise chain, so two
-  // decisions finishing at nearly the same moment cannot read the same
+  // actions finishing at nearly the same moment cannot read the same
   // old list and overwrite each other.
 
   const getHistory = () => get('history', []);
@@ -90,25 +91,9 @@
       const list = await getHistory();
       const full = { ...entry, uid: entry.uid || newUid() };
       list.unshift(full);
-      const trimmed = list.slice(0, 50);
+      const trimmed = list.slice(0, 200);
       await set('history', trimmed);
       return trimmed;
-    });
-  }
-
-  // Accepts the entry uid; a bare number is treated as a legacy
-  // timestamp key from entries saved before uids existed.
-  async function markUndone(key) {
-    return withHistory(async () => {
-      const list = await getHistory();
-      const item =
-        list.find((e) => e.uid === key) ||
-        (typeof key === 'number' ? list.find((e) => e.at === key) : null);
-      if (item) {
-        item.undone = true;
-        await set('history', list);
-      }
-      return list;
     });
   }
 
@@ -182,7 +167,6 @@
     clearCreds,
     getHistory,
     addDecision,
-    markUndone,
     getAlertsSnapshot,
     setAlertsSnapshot,
     getUpdateCache,

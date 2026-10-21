@@ -15,6 +15,24 @@ online course keys, and a few small site tweaks.
 If the old EASY plugins or snippets are still active, EASY Suite pauses.
 Use the button in its notice to switch them off.
 
+### Updates from GitHub
+
+From 2.2.33 on, EASY Suite can update itself the normal WordPress way. A
+"Publish Suite" workflow run packages the plugin as
+`easy-suite-<version>.zip` and attaches it to a prerelease in the
+Eladerino/EASY-Operations GitHub repo. The plugin checks those releases
+for the newest suite zip and, when one is newer than the installed
+version, the Plugins screen offers it with an **Update now** button,
+exactly like a wordpress.org plugin update.
+
+- The check runs only inside WordPress's own update flow (the Plugins
+  screen and the twice-daily update cron), and the parsed result is
+  cached for 12 hours, so GitHub is contacted at most twice a day.
+- If GitHub cannot be reached or the answer cannot be parsed, the check
+  stays silent: no notices, no errors, and no update is offered.
+- Installing the zip by hand (the steps above) keeps working and remains
+  the fallback if an update ever misbehaves.
+
 ## Admin pages
 
 - **Overview**: health checks, module switches and the certificate PDF
@@ -52,7 +70,8 @@ always stay on.
 | Class rosters | Per-class student lists (manual enrollment in the app; online buyers added automatically) |
 | Seat sales | Sells class seats as WooCommerce products: per-seat attendee details at checkout, roster sync, stock handling, sold-seat delete protection |
 | Portal cards | Student/instructor portal card hub (`/student-portal/`, `/instructor-portal/`) |
-| Management queue | Private decision page for the office (`[easy_management_queue]` shortcode) |
+| Management queue | Private decision page for the office (`[easy_management_queue]` shortcode). Questions move open, then decided, then resolved: a decided question can have its answer undone (it reopens) or be marked resolved from the EASY Manager app, which files it in an archive with its answer and both sets of attribution on record |
+| GitHub self-updater | Checks the EASY-Operations GitHub releases for a newer `easy-suite-<version>.zip` and offers it on the Plugins screen as a normal update (see "Updates from GitHub" above) |
 | Shop | Instructor-only products and the `[easy_product_form]` listing form |
 | SEO noindex | Keeps utility pages out of search results |
 | Past events: noindex | Keeps single event pages out of search results once the class date has passed |

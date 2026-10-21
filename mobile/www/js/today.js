@@ -1,6 +1,7 @@
 // today.js: the Today screen: classes on today (tap a class for its
-// roster), counts that need action, and what was recently decided
-// (from the local decision history).
+// roster), counts that need action, and the latest activity from this
+// app (the local history). "View all" opens the Activity screen: the
+// whole trail, grouped by day, with kind filters.
 //
 // The last good class list is saved on the device. Opening Today paints
 // it straight away with a "Last updated" line, then refreshes in the
@@ -232,17 +233,116 @@
     box.innerHTML = '';
     const history = await window.EasyStore.getHistory();
     if (!history.length) {
-      box.appendChild(U.el('p', 'hint', 'Nothing decided yet from this app.'));
+      box.appendChild(U.el('p', 'hint', 'No activity yet from this app.'));
       return;
     }
     for (const entry of history.slice(0, 5)) {
       const row = U.el('div', 'recent-row');
       const label =
-        entry.title + ': ' + entry.action + (entry.undone ? ' (undone)' : '');
+        (entry.title || '(untitled)') + ': ' + (entry.action || '') + (entry.undone ? ' (undone)' : '');
       row.appendChild(U.el('span', 'recent-label', label));
       row.appendChild(U.el('span', 'recent-when', U.timeAgo(entry.at)));
       box.appendChild(row);
     }
+  }
+
+  /* ---------------- activity screen ---------------- */
+  // The full local trail behind Today's Recent activity. Read only:
+  // entries are a record of what the app did, never edited here.
+
+  const ACTIVITY_FILTERS = [
+    { key: 'all', label: 'All' },
+    { key: 'class', label: 'Classes' },
+    { key: 'cert', label: 'Certificates' },
+    { key: 'account', label: 'Accounts' },
+    { key: 'queue', label: 'Queue' },
+  ];
+  let activityFilter = 'all';
+
+  function dayLabelFor(ts, nowTs) {
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return 'Earlier';
+    const ymd = U.fmtYmd(d);
+    const now = new Date(nowTs);
+    if (ymd === U.fmtYmd(now)) return 'Today';
+    const yest = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+    if (ymd === U.fmtYmd(yest)) return 'Yesterday';
+    return U.fmtDateLoose(ymd);
+  }
+
+  // Pure grouping for the Activity screen: filter by kind, then group
+  // consecutive entries under their day label. History is stored
+  // newest first and stays that way. Kept separate so it can be
+  // tested without the DOM.
+  function groupActivity(entries, filter, nowTs) {
+    const list = (Array.isArray(entries) ? entries : []).filter(
+      (e) => e && (filter === 'all' || (e.kind || '') === filter)
+    );
+    const groups = [];
+    for (const entry of list) {
+      const label = dayLabelFor(entry.at, nowTs);
+      const last = groups[groups.length - 1];
+      if (last && last.label === label) last.entries.push(entry);
+      else groups.push({ label, entries: [entry] });
+    }
+    return groups;
+  }
+
+  function activityEmptyText(filter) {
+    if (filter === 'class') return 'No class activity yet.';
+    if (filter === 'cert') return 'No certificate activity yet.';
+    if (filter === 'account') return 'No account activity yet.';
+    if (filter === 'queue') return 'No queue activity yet.';
+    return 'No activity yet from this app.';
+  }
+
+  async function renderActivity() {
+    const chipsBox = $('activityChips');
+    chipsBox.innerHTML = '';
+    for (const f of ACTIVITY_FILTERS) {
+      const chip = U.el(
+        'button',
+        'filter-chip' + (activityFilter === f.key ? ' active' : ''),
+        f.label
+      );
+      chip.type = 'button';
+      chip.addEventListener('click', () => {
+        activityFilter = f.key;
+        renderActivity();
+      });
+      chipsBox.appendChild(chip);
+    }
+    const box = $('activityList');
+    box.innerHTML = '';
+    const history = await window.EasyStore.getHistory();
+    const groups = groupActivity(history, activityFilter, Date.now());
+    if (!groups.length) {
+      box.appendChild(U.el('p', 'hint', activityEmptyText(activityFilter)));
+      return;
+    }
+    for (const group of groups) {
+      box.appendChild(U.el('h3', 'section-title activity-day', group.label));
+      for (const entry of group.entries) {
+        const row = U.el('div', 'recent-row');
+        const label =
+          (entry.title || '(untitled)') + ': ' + (entry.action || '') + (entry.undone ? ' (undone)' : '');
+        row.appendChild(U.el('span', 'recent-label', label));
+        row.appendChild(U.el('span', 'recent-when', U.fmtClock(entry.at)));
+        box.appendChild(row);
+      }
+    }
+  }
+
+  function closeActivity() {
+    $('activityView').classList.add('hidden');
+    $('todayMain').classList.remove('hidden');
+  }
+
+  function openActivity() {
+    $('todayMain').classList.add('hidden');
+    $('activityView').classList.remove('hidden');
+    if (window.EasyUi) window.EasyUi.openSubview(closeActivity);
+    renderActivity();
   }
 
   async function show() {
@@ -256,6 +356,11 @@
       if (window.EasyUi) window.EasyUi.closeSubview();
       else closeRoster();
     });
+    $('activityBack').addEventListener('click', () => {
+      if (window.EasyUi) window.EasyUi.closeSubview();
+      else closeActivity();
+    });
+    $('todayActivityBtn').addEventListener('click', openActivity);
     // Needs Attention boxes tap through to the screen that holds the
     // work. Course reviews has no screen in this app, so its box is
     // display only and gets no listener on purpose.
@@ -271,5 +376,13 @@
     }
   }
 
-  window.EasyToday = { show, refresh: show, init, closeRoster, wasLoaded: () => loaded };
+  window.EasyToday = {
+    show,
+    refresh: show,
+    init,
+    closeRoster,
+    closeActivity,
+    groupActivity,
+    wasLoaded: () => loaded,
+  };
 })();

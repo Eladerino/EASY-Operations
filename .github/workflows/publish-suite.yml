@@ -1,0 +1,70 @@
+# Publishes the EASY Suite WordPress plugin (site-plugins/easy-suite) as a
+# GitHub prerelease carrying easy-suite-<version>.zip, which is what the
+# plugin's GitHub self-updater (module-updater.php) watches for. "Run
+# workflow" is the whole release process: it reads the version from the
+# plugin header, so bump the version in the plugin first.
+#
+# Two properties this flow must keep:
+#
+# - The release is created with the workflow GITHUB_TOKEN. GitHub does not
+#   fire other workflows for token-created releases, so Build APK (which
+#   listens for release "published" events) never runs for a suite
+#   publish. That is deliberate: a plugin release must not rebuild or
+#   re-attach the Android app.
+# - The release is marked a prerelease. The desktop app's Squirrel updater
+#   and the EASY Manager phone updater both key off full (non-prerelease)
+#   releases and their own asset names, so suite prereleases stay
+#   invisible to both. Only the Suite updater reads them, matching the
+#   easy-suite-<version>.zip asset name.
+#
+# Re-running is safe: if the suite-v<version> release already exists, its
+# zip asset is replaced instead of the run failing.
+
+name: Publish Suite
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish-suite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Read the plugin version
+        id: version
+        run: |
+          VERSION="$(grep -m1 -E '^[[:space:]]*\*[[:space:]]*Version:' site-plugins/easy-suite/easy-suite.php | sed -E 's/^.*Version:[[:space:]]*//; s/[[:space:]]*$//')"
+          if ! printf '%s' "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Could not read a version from site-plugins/easy-suite/easy-suite.php (got '$VERSION')."
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "EASY Suite version: $VERSION"
+
+      - name: Zip the plugin
+        run: |
+          cd site-plugins
+          zip -r "$GITHUB_WORKSPACE/easy-suite-${{ steps.version.outputs.version }}.zip" easy-suite
+
+      - name: Create or refresh the prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="suite-v${VERSION}"
+          ASSET="easy-suite-${VERSION}.zip"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; replacing its zip asset."
+            gh release delete-asset "$TAG" "$ASSET" --yes || true
+            gh release upload "$TAG" "$ASSET"
+            gh release edit "$TAG" --title "EASY Suite ${VERSION}" --prerelease
+          else
+            gh release create "$TAG" "$ASSET" \
+              --title "EASY Suite ${VERSION}" \
+              --prerelease \
+              --notes "EASY Suite ${VERSION} plugin package. The installed plugin offers this update on the WordPress Plugins screen; the attached zip also installs by hand (Plugins, Add New, Upload, Replace current)."
+          fi

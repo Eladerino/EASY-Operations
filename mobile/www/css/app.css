@@ -473,7 +473,35 @@ h3.section-title {
 .count-box.count-link { cursor: pointer; }
 .count-box.count-link:active { background: var(--bg); }
 
-/* ---------- recent decisions ---------- */
+/* ---------- recent activity ---------- */
+
+.section-head-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+.section-head-row .section-title { flex: 1; }
+
+.filter-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: var(--sp-3) 0 var(--sp-1); }
+.filter-chip {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: var(--sp-1) var(--sp-3);
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.filter-chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.activity-day { margin-top: var(--sp-4); }
 
 .recent-row {
   display: flex;

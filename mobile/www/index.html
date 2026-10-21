@@ -83,7 +83,10 @@
             <div class="count-box count-link" id="boxQueue"><span id="countQueue" class="count-num">...</span><span class="count-label">Open queue questions</span></div>
             <div class="count-box"><span id="countReviews" class="count-num">...</span><span class="count-label">Course reviews waiting</span></div>
           </div>
-          <h3 class="section-title">Recently decided</h3>
+          <div class="section-head-row">
+            <h3 class="section-title">Recent activity</h3>
+            <button id="todayActivityBtn" type="button" class="btn btn-small btn-ghost">View all</button>
+          </div>
           <div id="todayRecent"></div>
           <p id="suiteLine" class="hint"></p>
           <p class="footer-note">
@@ -105,6 +108,14 @@
           </div>
           <h3 id="rosterTitle" class="section-title"></h3>
           <div id="rosterList"></div>
+        </div>
+        <div id="activityView" class="hidden">
+          <div class="page-head">
+            <h2>Activity</h2>
+            <button id="activityBack" type="button" class="btn btn-small btn-secondary">Back</button>
+          </div>
+          <div id="activityChips" class="filter-chips"></div>
+          <div id="activityList"></div>
         </div>
       </section>
 
@@ -250,7 +261,7 @@
         <p id="accountsNote" class="hint hidden"></p>
         <div id="queueAccounts"></div>
 
-        <h3 class="section-title">Recent decisions</h3>
+        <h3 class="section-title">Recent activity</h3>
         <div id="approvalsRecent"></div>
       </section>
 
@@ -269,6 +280,15 @@
 
         <h3 class="section-title">Decided</h3>
         <div id="queueDecided"></div>
+
+        <button type="button" id="queueArchiveToggle" class="collapse-head" aria-expanded="false">
+          <span class="collapse-title">Archive</span>
+          <span class="collapse-chevron" aria-hidden="true">&#8250;</span>
+        </button>
+        <div id="queueArchiveBody" class="hidden">
+          <p class="hint">Questions that were decided and then marked resolved. The answer stays on record here; Un-resolve moves a question back to Decided.</p>
+          <div id="queueArchive"></div>
+        </div>
 
         <h3 class="section-title">Ask the queue</h3>
         <form id="askForm" class="ask-form">

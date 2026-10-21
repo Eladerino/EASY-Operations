@@ -579,6 +579,83 @@
     state.editing = null;
   }
 
+  /* ---------------- activity trail summary ---------------- */
+
+  // Pure summary of what one editor save changed, for the activity
+  // trail. Returns the action text, or '' when nothing the trail
+  // tracks changed (a description-only edit, for example). `before`
+  // is the loaded event, or null for a new class; `after` carries the
+  // submitted form values. Kept separate so it can be tested without
+  // the DOM.
+  function diffSaveSummary(before, after) {
+    const str = (v) => (v === null || v === undefined ? '' : String(v).trim());
+    const blank = (v) => str(v) === '';
+    const parts = [];
+
+    if (!before) {
+      parts.push(after.status === 'publish' ? 'Created and published' : 'Created as draft');
+      if (!blank(after.seats)) parts.push('Seats ' + str(after.seats));
+      if (!blank(after.cost)) parts.push('Price $' + str(after.cost));
+      return parts.join(' · ');
+    }
+
+    const oldStatus = before.status || 'publish';
+    if (oldStatus !== after.status) {
+      parts.push(after.status === 'publish' ? 'Published' : 'Unpublished');
+    }
+    if (str(before.title) !== str(after.title)) {
+      parts.push('Title changed to "' + str(after.title) + '"');
+    }
+    if (before.startDate !== after.startDate || before.endDate !== after.endDate) {
+      const range = (s, e) =>
+        s === e ? U.fmtDateLoose(s) : U.fmtDateLoose(s) + ' to ' + U.fmtDateLoose(e);
+      parts.push(
+        'Date ' + range(before.startDate, before.endDate) + ' → ' + range(after.startDate, after.endDate)
+      );
+    }
+    if (Boolean(before.allDay) !== Boolean(after.allDay)) {
+      parts.push(after.allDay ? 'Now all day' : 'No longer all day');
+    } else if (
+      !after.allDay &&
+      (str(before.startTime) !== str(after.startTime) || str(before.endTime) !== str(after.endTime))
+    ) {
+      parts.push(
+        'Time ' + str(before.startTime) + ' to ' + str(before.endTime) +
+          ' → ' + str(after.startTime) + ' to ' + str(after.endTime)
+      );
+    }
+    const oldVenueId = before.venueId ? Number(before.venueId) : 0;
+    const newVenueId = after.venueId ? Number(after.venueId) : 0;
+    if (oldVenueId !== newVenueId) {
+      const oldName = str(before.venueName);
+      const newName = str(after.venueName);
+      if (newName && oldName) parts.push('Venue ' + oldName + ' → ' + newName);
+      else if (newName) parts.push('Venue set to ' + newName);
+      else parts.push('Venue removed');
+    }
+    const oldCost = str(before.cost);
+    const newCost = str(after.cost);
+    const costSame =
+      oldCost === newCost ||
+      (oldCost !== '' && newCost !== '' && parseFloat(oldCost) === parseFloat(newCost));
+    if (!costSame) {
+      if (oldCost === '') parts.push('Price set to $' + newCost);
+      else if (newCost === '') parts.push('Price removed');
+      else parts.push('Price $' + oldCost + ' → $' + newCost);
+    }
+    const oldSeats = str(before.seats);
+    const newSeats = str(after.seats);
+    const seatsSame =
+      oldSeats === newSeats ||
+      (oldSeats !== '' && newSeats !== '' && parseInt(oldSeats, 10) === parseInt(newSeats, 10));
+    if (!seatsSame) {
+      if (oldSeats === '') parts.push('Seats set to ' + newSeats);
+      else if (newSeats === '') parts.push('Seats cleared');
+      else parts.push('Seats ' + oldSeats + ' → ' + newSeats);
+    }
+    return parts.join(' · ');
+  }
+
   async function onSave(submitEv) {
     submitEv.preventDefault();
     formError(null);
@@ -692,12 +769,36 @@
         }
       );
       const saved = await window.EasyApi.saveEvent(editingId, payload);
-      if (status === 'publish') {
+      // One activity entry per save, and only when something the
+      // trail tracks actually changed: the diff against the loaded
+      // class says what, in the trail's own words. A save that
+      // changed nothing tracked writes no entry.
+      const venueAfter = venueId
+        ? state.venues.find((v) => Number(v.id) === Number(venueId))
+        : null;
+      const action = diffSaveSummary(state.editing, {
+        title,
+        startDate,
+        endDate,
+        startTime,
+        endTime,
+        allDay,
+        venueId,
+        venueName: venueAfter
+          ? venueAfter.name || ''
+          : venueVal === '__new__'
+            ? $('evVenueName').value.trim()
+            : '',
+        cost: $('evCost').value,
+        seats: $('evSeats').value,
+        status,
+      });
+      if (action) {
         await window.EasyStore.addDecision({
           kind: 'class',
           id: saved.id || editingId,
           title,
-          action: 'published',
+          action,
           at: Date.now(),
         }).catch(() => {});
       }
@@ -896,5 +997,5 @@
     }
   }
 
-  window.EasySchedule = { show, init, closeEditor };
+  window.EasySchedule = { show, init, closeEditor, diffSaveSummary };
 })();

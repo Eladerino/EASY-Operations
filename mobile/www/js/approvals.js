@@ -5,10 +5,11 @@
 // rule as the desktop app. Publishing a certificate emails the student, so
 // that action asks for confirmation first.
 //
-// Undo: certificate and class publishes can be flipped back to draft with
-// the same status endpoints, so recent decisions of those kinds show an
-// Undo button. Account decisions cannot be reversed through the API, so
-// they simply never show one.
+// Recent activity below the queues is a read-only trail of what this
+// app did (kept on the device). There is deliberately no undo there:
+// undoing a publish cannot unsend the email it already triggered, so
+// the app does not pretend otherwise. Sending something back is done
+// by editing it in Schedule or on the website.
 //
 // The last good queues are saved on the device, painted instantly on
 // open, and refreshed in the background; a failed refresh keeps the
@@ -403,7 +404,7 @@
     }
   }
 
-  /* ---------------- recent decisions + undo ---------------- */
+  /* ---------------- recent activity (read only) ---------------- */
 
   async function renderRecent() {
     const box = $('approvalsRecent');
@@ -412,62 +413,16 @@
     const history = await window.EasyStore.getHistory();
     const recent = history.slice(0, 8);
     if (!recent.length) {
-      box.appendChild(U.el('p', 'hint', 'Nothing decided yet from this app.'));
+      box.appendChild(U.el('p', 'hint', 'No activity yet from this app.'));
       return;
     }
     for (const entry of recent) {
       const row = U.el('div', 'recent-row');
       const label =
-        entry.title + ': ' + entry.action + (entry.undone ? ' (undone)' : '');
+        (entry.title || '(untitled)') + ': ' + (entry.action || '') + (entry.undone ? ' (undone)' : '');
       row.appendChild(U.el('span', 'recent-label', label));
       row.appendChild(U.el('span', 'recent-when', U.timeAgo(entry.at)));
-      // Undo exists only where the API can truly reverse the decision:
-      // a publish flips back to draft. Account decisions have no reverse
-      // route, so no button is rendered for them at all.
-      if (!entry.undone && (entry.kind === 'cert' || entry.kind === 'class')) {
-        const undo = U.el('button', 'btn btn-small btn-secondary', 'Undo');
-        undo.type = 'button';
-        undo.addEventListener('click', () => undoDecision(entry, undo));
-        row.appendChild(undo);
-      }
       box.appendChild(row);
-    }
-  }
-
-  async function undoDecision(entry, btn) {
-    let yes;
-    if (entry.kind === 'cert') {
-      yes = await window.EasyUi.confirm(
-        'Move this certificate back to draft?',
-        'The student was already emailed that this certificate was ready. ' +
-          'Moving it back to draft does not recall that email, and publishing it again later will not email them a second time.',
-        'Move to draft'
-      );
-    } else {
-      yes = await window.EasyUi.confirm(
-        'Move this class back to draft?',
-        '"' + entry.title + '" will stop showing on the site.',
-        'Move to draft'
-      );
-    }
-    if (!yes) return;
-    btn.disabled = true;
-    try {
-      if (entry.kind === 'cert') await window.EasyApi.unpublishCert(entry.id);
-      else await window.EasyApi.unpublishEvent(entry.id);
-      await window.EasyStore.markUndone(entry.uid || entry.at);
-      window.EasyUi.toast(
-        entry.kind === 'cert'
-          ? 'Moved back to drafts. The student email that already went out cannot be recalled.'
-          : 'Moved back to drafts.',
-        'success',
-        7000
-      );
-      await loadAll();
-    } catch (e) {
-      window.EasyUi.toast('Could not undo: ' + e.message, 'error', 8000);
-    } finally {
-      btn.disabled = false;
     }
   }
 

@@ -62,6 +62,30 @@ function easy_mgmt_queue_get_responses() {
 }
 
 /**
+ * Resolved records, keyed by question key: { by, at } (site time).
+ * A resolved question was decided and then acted on; it stays in the
+ * decided list (the decision stands) but leaves the live queue lists
+ * and shows in the archive instead. Stored in the same responses
+ * option as the answers, alongside them.
+ */
+function easy_mgmt_queue_get_resolved($all = null) {
+    if ($all === null) {
+        $all = easy_mgmt_queue_get_responses();
+    }
+    $resolved = isset($all['resolved']) && is_array($all['resolved']) ? $all['resolved'] : [];
+    $out = [];
+    foreach ($resolved as $key => $rec) {
+        if (is_array($rec)) {
+            $out[$key] = [
+                'by' => isset($rec['by']) ? $rec['by'] : null,
+                'at' => isset($rec['at']) ? $rec['at'] : null,
+            ];
+        }
+    }
+    return $out;
+}
+
+/**
  * Question definitions. Stored in the database (wp_options), NOT in code:
  * question text is internal business content. Each: key, section, label,
  * why (context), type (radio|radio_other|textarea), num (display number),
@@ -230,10 +254,18 @@ function easy_mgmt_queue_delete_question($key) {
     }));
     update_option('easy_mgmt_queue_questions', $questions, false);
     $resp = easy_mgmt_queue_get_responses();
+    $dirty = false;
     if (isset($resp['answers'][$key])) {
         unset($resp['answers'][$key]);
         $decided = isset($resp['decided']) ? (array) $resp['decided'] : array();
         $resp['decided'] = array_values(array_diff($decided, array($key)));
+        $dirty = true;
+    }
+    if (isset($resp['resolved'][$key])) {
+        unset($resp['resolved'][$key]);
+        $dirty = true;
+    }
+    if ($dirty) {
         update_option('easy_mgmt_queue_responses', $resp, false);
     }
     // Also drop it from the legacy custom-questions option if present there.
@@ -408,6 +440,13 @@ function easy_mgmt_queue_handle_submit() {
 
     $all['answers'] = $merged;
     $all['decided'] = array_values(array_unique($prev_decided));
+    // A fresh answer for a question brings it back to plain decided:
+    // any resolved record for a re-answered question no longer applies.
+    if (!empty($all['resolved']) && is_array($all['resolved'])) {
+        foreach ($clean as $ckey => $cans) {
+            unset($all['resolved'][$ckey]);
+        }
+    }
     $all['submitted_by'] = $user->user_login;
     $all['submitted_at'] = current_time('mysql');
     update_option('easy_mgmt_queue_responses', $all, false);
@@ -455,10 +494,16 @@ add_action('template_redirect', 'easy_mgmt_queue_handle_submit');
 function easy_mgmt_queue_open_questions() {
     $all = easy_mgmt_queue_get_responses();
     $decided = isset($all['decided']) ? (array) $all['decided'] : [];
+    $resolved = easy_mgmt_queue_get_resolved($all);
     $answers = isset($all['answers']) ? $all['answers'] : [];
     $out = [];
     foreach (easy_mgmt_queue_questions() as $q) {
         if (in_array($q['key'], $decided, true)) {
+            continue;
+        }
+        // Resolved questions are decided by definition; this guard keeps
+        // one out of the open list even if its data is ever inconsistent.
+        if (isset($resolved[$q['key']])) {
             continue;
         }
         // Dependent questions appear only when the parent is decided with the matching value.
@@ -558,14 +603,16 @@ function easy_mgmt_queue_shortcode() {
     }
     $open = easy_mgmt_queue_open_questions();
     $total = count(easy_mgmt_queue_questions());
-    $done_count = count($decided);
+    $resolved = easy_mgmt_queue_get_resolved($saved_all);
+    $resolved_count = count(array_intersect(array_keys($resolved), $decided));
+    $done_count = count($decided) - $resolved_count;
 
     ob_start();
     ?>
     <div class="emq-wrap">
         <h2>Management queue</h2>
         
-        <p class="emq-progress"><strong><?php echo (int) $done_count; ?> of <?php echo (int) $total; ?></strong> decided.</p>
+        <p class="emq-progress"><strong><?php echo (int) $done_count; ?> of <?php echo (int) $total; ?></strong> decided.<?php if ($resolved_count > 0): ?> <strong><?php echo (int) $resolved_count; ?></strong> resolved and archived.<?php endif; ?></p>
         <section class="emq-section">
             
             <?php
@@ -839,6 +886,9 @@ function easy_mgmt_queue_admin_handle() {
             $resp = easy_mgmt_queue_get_responses();
             $decided = isset($resp['decided']) ? (array) $resp['decided'] : [];
             $resp['decided'] = array_values(array_diff($decided, [$reopen_key]));
+            if (isset($resp['resolved'][$reopen_key])) {
+                unset($resp['resolved'][$reopen_key]);
+            }
             update_option('easy_mgmt_queue_responses', $resp, false);
             add_settings_error('emq_admin', 'emq_reopened', 'Question reopened — it is back in the queue.', 'success');
         }
@@ -881,6 +931,7 @@ function easy_mgmt_queue_admin_page() {
     // --- Submitted responses ---
     echo '<h2>Submitted responses</h2>';
     $decided = isset($responses['decided']) ? (array) $responses['decided'] : [];
+    $resolved_map = easy_mgmt_queue_get_resolved($responses);
     if (empty($answers)) {
         echo '<p><em>No responses submitted yet.</em></p>';
     } else {
@@ -891,6 +942,7 @@ function easy_mgmt_queue_admin_page() {
             $label = (!empty($q['num']) ? $q['num'] . '. ' : '') . $q['label'];
             $ans = isset($answers[$q['key']]) ? easy_mgmt_queue_format_answer($q, $answers[$q['key']]) : '(skipped)';
             $is_decided = in_array($q['key'], $decided, true);
+            $is_resolved = $is_decided && isset($resolved_map[$q['key']]);
             $by = '?';
             if ($is_decided) {
                 $a = isset($answers[$q['key']]) && is_array($answers[$q['key']]) ? $answers[$q['key']] : array();
@@ -899,7 +951,7 @@ function easy_mgmt_queue_admin_page() {
                 $by = esc_html($who) . ($when !== '' ? '<br><span style="color:#666">' . esc_html($when) . '</span>' : '');
             }
             echo '<tr><td>' . esc_html($label) . '</td><td>' . esc_html($ans) . '</td><td>' . ($is_decided ? $by : '<span style="color:#8a6d1a">—</span>') . '</td>';
-            echo '<td>' . ($is_decided ? '<span style="color:#1e6b3c;font-weight:600">Decided</span>' : '<span style="color:#8a6d1a">Open</span>') . '</td>';
+            echo '<td>' . ($is_resolved ? '<span style="color:#1e6b3c;font-weight:600">Resolved</span>' : ($is_decided ? '<span style="color:#1e6b3c;font-weight:600">Decided</span>' : '<span style="color:#8a6d1a">Open</span>')) . '</td>';
             echo '<td>';
             if ($is_decided) {
                 echo '<form method="post" action="" style="margin:0">';
@@ -998,55 +1050,88 @@ function easy_mgmt_queue_rest_can_read() {
     return is_user_logged_in() && current_user_can('manage_options');
 }
 
-function easy_mgmt_queue_rest_get() {
-    $all = easy_mgmt_queue_get_responses();
+/**
+ * One question in the REST feed's shape. Open questions carry no
+ * answer; decided ones add the answer and its attribution; resolved
+ * ones add the resolved record on top of the decided fields.
+ */
+function easy_mgmt_queue_rest_item($q, $all) {
     $answers = isset($all['answers']) && is_array($all['answers']) ? $all['answers'] : array();
     $decided = isset($all['decided']) ? (array) $all['decided'] : array();
+    $resolved = easy_mgmt_queue_get_resolved($all);
 
-    $summarize = function ($q) use ($answers, $decided, $all) {
-        $item = array(
-            'key'     => $q['key'],
-            'section' => isset($q['section']) ? $q['section'] : '',
-            'label'   => $q['label'],
-            'type'    => $q['type'],
-        );
-        if (!empty($q['options'])) {
-            $item['options'] = array_map(function ($opt) {
-                return is_array($opt) ? $opt[0] : $opt;
-            }, $q['options']);
+    $item = array(
+        'key'     => $q['key'],
+        'section' => isset($q['section']) ? $q['section'] : '',
+        'label'   => $q['label'],
+        'type'    => $q['type'],
+    );
+    if (!empty($q['options'])) {
+        $item['options'] = array_map(function ($opt) {
+            return is_array($opt) ? $opt[0] : $opt;
+        }, $q['options']);
+    }
+    if (in_array($q['key'], $decided, true)) {
+        $item['decided'] = true;
+        $ans = isset($answers[$q['key']]) && is_array($answers[$q['key']]) ? $answers[$q['key']] : array();
+        $item['answer'] = easy_mgmt_queue_format_answer($q, $ans);
+        // Per-question attribution; falls back to the last submitter for
+        // answers decided before attribution was tracked.
+        $item['decided_by'] = isset($ans['decided_by']) ? $ans['decided_by'] : (isset($all['submitted_by']) ? $all['submitted_by'] : null);
+        $item['decided_at'] = isset($ans['decided_at']) ? $ans['decided_at'] : (isset($all['submitted_at']) ? $all['submitted_at'] : null);
+        if (isset($resolved[$q['key']])) {
+            $item['resolved_by'] = $resolved[$q['key']]['by'];
+            $item['resolved_at'] = $resolved[$q['key']]['at'];
         }
-        if (in_array($q['key'], $decided, true)) {
-            $item['decided'] = true;
-            $ans = isset($answers[$q['key']]) && is_array($answers[$q['key']]) ? $answers[$q['key']] : array();
-            $item['answer'] = easy_mgmt_queue_format_answer($q, $ans);
-            // Per-question attribution; falls back to the last submitter for
-            // answers decided before attribution was tracked.
-            $item['decided_by'] = isset($ans['decided_by']) ? $ans['decided_by'] : (isset($all['submitted_by']) ? $all['submitted_by'] : null);
-            $item['decided_at'] = isset($ans['decided_at']) ? $ans['decided_at'] : (isset($all['submitted_at']) ? $all['submitted_at'] : null);
-        } else {
-            $item['decided'] = false;
-        }
-        return $item;
-    };
+    } else {
+        $item['decided'] = false;
+    }
+    return $item;
+}
+
+function easy_mgmt_queue_rest_get() {
+    $all = easy_mgmt_queue_get_responses();
+    $decided = isset($all['decided']) ? (array) $all['decided'] : array();
+    $resolved = easy_mgmt_queue_get_resolved($all);
 
     // Open list mirrors the page: undecided, visible questions only
     // (dependent questions stay hidden until their parent is decided).
-    $open = array_map($summarize, easy_mgmt_queue_open_questions());
-
-    $decided_out = array();
-    foreach (easy_mgmt_queue_questions() as $q) {
-        if (in_array($q['key'], $decided, true)) {
-            $decided_out[] = $summarize($q);
-        }
+    $open = array();
+    foreach (easy_mgmt_queue_open_questions() as $q) {
+        $open[] = easy_mgmt_queue_rest_item($q, $all);
     }
 
+    // Decided and resolved are separate lists in the feed: a resolved
+    // question leaves Decided for the archive.
+    $decided_out = array();
+    $resolved_out = array();
+    foreach (easy_mgmt_queue_questions() as $q) {
+        if (!in_array($q['key'], $decided, true)) {
+            continue;
+        }
+        if (isset($resolved[$q['key']])) {
+            $resolved_out[] = easy_mgmt_queue_rest_item($q, $all);
+        } else {
+            $decided_out[] = easy_mgmt_queue_rest_item($q, $all);
+        }
+    }
+    // The archive shows the most recently resolved first. Resolved
+    // stamps are site-time 'Y-m-d H:i:s' strings, which sort as text.
+    usort($resolved_out, function ($a, $b) {
+        $at = isset($a['resolved_at']) ? (string) $a['resolved_at'] : '';
+        $bt = isset($b['resolved_at']) ? (string) $b['resolved_at'] : '';
+        return strcmp($bt, $at);
+    });
+
     return array(
-        'open'    => array_values($open),
-        'decided' => $decided_out,
-        'counts'  => array(
-            'open'    => count($open),
-            'decided' => count($decided_out),
-            'total'   => count($open) + count($decided_out),
+        'open'     => $open,
+        'decided'  => $decided_out,
+        'resolved' => $resolved_out,
+        'counts'   => array(
+            'open'     => count($open),
+            'decided'  => count($decided_out),
+            'resolved' => count($resolved_out),
+            'total'    => count($open) + count($decided_out) + count($resolved_out),
         ),
         'last_activity' => array(
             'by' => isset($all['submitted_by']) ? $all['submitted_by'] : null,
@@ -1153,6 +1238,10 @@ function easy_mgmt_queue_save_answer($key, $entry, $user) {
 
     $all['answers'] = $merged;
     $all['decided'] = array_values(array_unique($prev_decided));
+    // A fresh answer brings the question back to plain decided.
+    if (isset($all['resolved'][$key])) {
+        unset($all['resolved'][$key]);
+    }
     $all['submitted_by'] = $user->user_login;
     $all['submitted_at'] = $now;
     update_option('easy_mgmt_queue_responses', $all, false);
@@ -1253,6 +1342,123 @@ function easy_mgmt_queue_rest_save_answer($request) {
     return array('question' => $item);
 }
 
+/** Find one question definition by key, or null when there is none. */
+function easy_mgmt_queue_find_question($key) {
+    foreach (easy_mgmt_queue_questions() as $q) {
+        if ($q['key'] === $key) {
+            return $q;
+        }
+    }
+    return null;
+}
+
+/** The question_id out of a lifecycle request, or a 404 WP_Error. */
+function easy_mgmt_queue_rest_lifecycle_question($request) {
+    $params = $request->get_json_params();
+    if (!is_array($params)) {
+        $params = array();
+    }
+    $key = isset($params['question_id']) ? trim((string) $params['question_id']) : '';
+    $question = $key !== '' ? easy_mgmt_queue_find_question($key) : null;
+    if ($question === null) {
+        return new WP_Error('easy_mgmt_queue_no_question', 'That question is not in the queue.', array('status' => 404));
+    }
+    return $question;
+}
+
+/**
+ * POST /easy/v1/management-queue/undecide: clear one question's
+ * answer so it returns to the open list (admin). JSON body:
+ * { question_id }. The answer and its decided stamps are removed,
+ * along with any resolved record. Response: { question } in the
+ * feed's open shape.
+ */
+function easy_mgmt_queue_rest_undecide($request) {
+    $question = easy_mgmt_queue_rest_lifecycle_question($request);
+    if (is_wp_error($question)) {
+        return $question;
+    }
+    $key = $question['key'];
+    $user = wp_get_current_user();
+
+    $all = easy_mgmt_queue_get_responses();
+    if (isset($all['answers'][$key])) {
+        unset($all['answers'][$key]);
+    }
+    $decided = isset($all['decided']) ? (array) $all['decided'] : [];
+    $all['decided'] = array_values(array_diff($decided, [$key]));
+    if (isset($all['resolved'][$key])) {
+        unset($all['resolved'][$key]);
+    }
+    $all['submitted_by'] = $user->user_login;
+    $all['submitted_at'] = current_time('mysql');
+    update_option('easy_mgmt_queue_responses', $all, false);
+
+    return array('question' => easy_mgmt_queue_rest_item($question, $all));
+}
+
+/**
+ * POST /easy/v1/management-queue/resolve: mark one decided question
+ * resolved (admin). The decision was acted on; the question leaves
+ * the decided list for the archive, with its answer and attribution
+ * kept on record. JSON body: { question_id }. Response: { question }
+ * in the feed's resolved shape.
+ */
+function easy_mgmt_queue_rest_resolve($request) {
+    $question = easy_mgmt_queue_rest_lifecycle_question($request);
+    if (is_wp_error($question)) {
+        return $question;
+    }
+    $key = $question['key'];
+    $user = wp_get_current_user();
+
+    $all = easy_mgmt_queue_get_responses();
+    $decided = isset($all['decided']) ? (array) $all['decided'] : [];
+    if (!in_array($key, $decided, true)) {
+        return new WP_Error('easy_mgmt_queue_not_decided', 'Only a decided question can be marked resolved. Answer it first.', array('status' => 400));
+    }
+    $resolved = easy_mgmt_queue_get_resolved($all);
+    if (!isset($resolved[$key])) {
+        $resolved[$key] = array(
+            'by' => $user->user_login,
+            'at' => current_time('mysql'),
+        );
+        $all['resolved'] = $resolved;
+        $all['submitted_by'] = $user->user_login;
+        $all['submitted_at'] = $resolved[$key]['at'];
+        update_option('easy_mgmt_queue_responses', $all, false);
+    }
+
+    return array('question' => easy_mgmt_queue_rest_item($question, $all));
+}
+
+/**
+ * POST /easy/v1/management-queue/unresolve: move one resolved
+ * question back to the decided list (admin). JSON body:
+ * { question_id }. Response: { question } in the feed's decided
+ * shape.
+ */
+function easy_mgmt_queue_rest_unresolve($request) {
+    $question = easy_mgmt_queue_rest_lifecycle_question($request);
+    if (is_wp_error($question)) {
+        return $question;
+    }
+    $key = $question['key'];
+    $user = wp_get_current_user();
+
+    $all = easy_mgmt_queue_get_responses();
+    $resolved = easy_mgmt_queue_get_resolved($all);
+    if (!isset($resolved[$key])) {
+        return new WP_Error('easy_mgmt_queue_not_resolved', 'That question is not resolved.', array('status' => 400));
+    }
+    unset($all['resolved'][$key]);
+    $all['submitted_by'] = $user->user_login;
+    $all['submitted_at'] = current_time('mysql');
+    update_option('easy_mgmt_queue_responses', $all, false);
+
+    return array('question' => easy_mgmt_queue_rest_item($question, $all));
+}
+
 add_action('rest_api_init', function () {
     register_rest_route('easy/v1', '/management-queue', array(
         'methods'             => 'GET',
@@ -1267,6 +1473,21 @@ add_action('rest_api_init', function () {
     register_rest_route('easy/v1', '/management-queue/questions', array(
         'methods'             => 'POST',
         'callback'            => 'easy_mgmt_queue_rest_add_question',
+        'permission_callback' => 'easy_mgmt_queue_rest_can_read',
+    ));
+    register_rest_route('easy/v1', '/management-queue/undecide', array(
+        'methods'             => 'POST',
+        'callback'            => 'easy_mgmt_queue_rest_undecide',
+        'permission_callback' => 'easy_mgmt_queue_rest_can_read',
+    ));
+    register_rest_route('easy/v1', '/management-queue/resolve', array(
+        'methods'             => 'POST',
+        'callback'            => 'easy_mgmt_queue_rest_resolve',
+        'permission_callback' => 'easy_mgmt_queue_rest_can_read',
+    ));
+    register_rest_route('easy/v1', '/management-queue/unresolve', array(
+        'methods'             => 'POST',
+        'callback'            => 'easy_mgmt_queue_rest_unresolve',
         'permission_callback' => 'easy_mgmt_queue_rest_can_read',
     ));
 });
