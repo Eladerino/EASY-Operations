@@ -133,6 +133,12 @@ function easy_suite_module_registry() {
             'default'     => true,
             'locked'      => false,
         ],
+        'activity' => [
+            'label'       => 'Activity log',
+            'description' => 'Site-wide record of who did what: classes created, published, unpublished and edited (price and seat changes with before and after values), certificates published, account signups approved or rejected, and management queue decisions folded in from the queue itself. Written at the server funnels every surface passes through, read under EASY Suite -> Activity and at GET /easy/v1/activity (administrators only). Rows are kept for 12 months and pruned daily.',
+            'default'     => true,
+            'locked'      => false,
+        ],
         'updater' => [
             'label'       => 'GitHub self-updater',
             'description' => 'Checks the EASY-Operations GitHub releases for a newer easy-suite-<version>.zip and offers it on the Plugins screen like a normal update. The check runs inside the WordPress update flow at most once per 12 hours and stays silent when GitHub cannot be reached; installing the zip by hand keeps working as a fallback.',
