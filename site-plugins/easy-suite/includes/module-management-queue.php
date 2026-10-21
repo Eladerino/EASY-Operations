@@ -86,6 +86,29 @@ function easy_mgmt_queue_get_resolved($all = null) {
 }
 
 /**
+ * Decided keys that still match a live question. The stored decided
+ * list can outlive a question (a question removed or the queue
+ * re-entered under new keys leaves its key behind), and such ghost
+ * keys must never inflate a count. Anything that turns the decided
+ * list into a number goes through here. Accepts a responses array to
+ * avoid a second read; reads the saved responses when omitted.
+ */
+function easy_mgmt_queue_live_decided_keys($all = null) {
+    if ($all === null) {
+        $all = easy_mgmt_queue_get_responses();
+    }
+    $decided = isset($all['decided']) ? (array) $all['decided'] : array();
+    if (empty($decided)) {
+        return array();
+    }
+    $live = array();
+    foreach (easy_mgmt_queue_questions() as $q) {
+        $live[] = $q['key'];
+    }
+    return array_values(array_intersect($decided, $live));
+}
+
+/**
  * Question definitions. Stored in the database (wp_options), NOT in code:
  * question text is internal business content. Each: key, section, label,
  * why (context), type (radio|radio_other|textarea), num (display number),
@@ -440,6 +463,19 @@ function easy_mgmt_queue_handle_submit() {
 
     $all['answers'] = $merged;
     $all['decided'] = array_values(array_unique($prev_decided));
+    // Self-healing prune: decided keys whose questions no longer exist
+    // are dropped from storage, along with any resolved record they
+    // carry (the same treatment question deletion gives them), so the
+    // list written here only ever names live questions.
+    $live_decided = easy_mgmt_queue_live_decided_keys($all);
+    if (!empty($all['resolved']) && is_array($all['resolved'])) {
+        foreach ((array) $all['decided'] as $dkey) {
+            if (!in_array($dkey, $live_decided, true)) {
+                unset($all['resolved'][$dkey]);
+            }
+        }
+    }
+    $all['decided'] = $live_decided;
     // A fresh answer for a question brings it back to plain decided:
     // any resolved record for a re-answered question no longer applies.
     if (!empty($all['resolved']) && is_array($all['resolved'])) {
@@ -470,7 +506,7 @@ function easy_mgmt_queue_handle_submit() {
                 $lines[] = $label . ': ' . $a['choice'];
             }
         }
-        $remaining = count(easy_mgmt_queue_questions()) - count($all['decided']);
+        $remaining = count(easy_mgmt_queue_questions()) - count(easy_mgmt_queue_live_decided_keys($all));
         $lines[] = '';
         $lines[] = $remaining . ' question(s) still outstanding.';
         $notify_email = easy_mgmt_queue_notify_email();
@@ -603,9 +639,10 @@ function easy_mgmt_queue_shortcode() {
     }
     $open = easy_mgmt_queue_open_questions();
     $total = count(easy_mgmt_queue_questions());
+    $live_decided = easy_mgmt_queue_live_decided_keys($saved_all);
     $resolved = easy_mgmt_queue_get_resolved($saved_all);
-    $resolved_count = count(array_intersect(array_keys($resolved), $decided));
-    $done_count = count($decided) - $resolved_count;
+    $resolved_count = count(array_intersect(array_keys($resolved), $live_decided));
+    $done_count = count($live_decided) - $resolved_count;
 
     ob_start();
     ?>
@@ -936,7 +973,7 @@ function easy_mgmt_queue_admin_page() {
         echo '<p><em>No responses submitted yet.</em></p>';
     } else {
         echo '<p>Submitted by <strong>' . esc_html($responses['submitted_by'] ?? '?') . '</strong> at ' . esc_html($responses['submitted_at'] ?? '?') . ' (site time). '
-            . count($decided) . ' of ' . count($questions) . ' decided.</p>';
+            . count(easy_mgmt_queue_live_decided_keys($responses)) . ' of ' . count($questions) . ' decided.</p>';
         echo '<table class="widefat striped"><thead><tr><th style="width:30%">Question</th><th>Answer</th><th style="width:14%">Decided by</th><th style="width:10%">Status</th><th style="width:10%"></th></tr></thead><tbody>';
         foreach ($questions as $q) {
             $label = (!empty($q['num']) ? $q['num'] . '. ' : '') . $q['label'];
@@ -1238,6 +1275,17 @@ function easy_mgmt_queue_save_answer($key, $entry, $user) {
 
     $all['answers'] = $merged;
     $all['decided'] = array_values(array_unique($prev_decided));
+    // Self-healing prune, same as the form handler: ghost decided keys
+    // (and any resolved record they carry) leave storage on this save.
+    $live_decided = easy_mgmt_queue_live_decided_keys($all);
+    if (!empty($all['resolved']) && is_array($all['resolved'])) {
+        foreach ((array) $all['decided'] as $dkey) {
+            if (!in_array($dkey, $live_decided, true)) {
+                unset($all['resolved'][$dkey]);
+            }
+        }
+    }
+    $all['decided'] = $live_decided;
     // A fresh answer brings the question back to plain decided.
     if (isset($all['resolved'][$key])) {
         unset($all['resolved'][$key]);
@@ -1266,7 +1314,7 @@ function easy_mgmt_queue_save_answer($key, $entry, $user) {
                 $lines[] = $label . ': ' . $a['choice'];
             }
         }
-        $remaining = count(easy_mgmt_queue_questions()) - count($all['decided']);
+        $remaining = count(easy_mgmt_queue_questions()) - count(easy_mgmt_queue_live_decided_keys($all));
         $lines[] = '';
         $lines[] = $remaining . ' question(s) still outstanding.';
         $notify_email = easy_mgmt_queue_notify_email();
