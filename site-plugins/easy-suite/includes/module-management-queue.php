@@ -8,6 +8,14 @@
  * (for Dad/Scott). On submit, answers are saved to the easy_mgmt_queue_responses
  * option and emailed to Brandon so he knows a decision was made.
  *
+ * New questions work the other way (2.2.38): a question can name who it is
+ * for (its audience, stored with the question in the database), and adding
+ * one queues a batched preview email to those people. The pending list
+ * flushes as one digest per person, either from the admin screen / app
+ * "send now" action or automatically about 30 minutes after the first
+ * question was queued. Recipient addresses are read from the WordPress
+ * user records at send time; nothing personal is stored in code.
+ *
  * The page itself must be created in wp-admin (Pages → Add New), set to
  * Private, with the shortcode as its content, and kept out of all menus.
  */
@@ -161,7 +169,7 @@ function easy_mgmt_queue_next_num($questions) {
  * Validate and store a new question. Returns the question array on success,
  * or an error message string on failure. Shared by the admin screen and REST.
  */
-function easy_mgmt_queue_add_question($section, $label, $why, $type, $options, $info_html = '') {
+function easy_mgmt_queue_add_question($section, $label, $why, $type, $options, $info_html = '', $audience = null, $notify = true) {
     $label = trim((string) $label);
     if ($label === '') {
         return 'Question text is required.';
@@ -198,9 +206,221 @@ function easy_mgmt_queue_add_question($section, $label, $why, $type, $options, $
     if ($info_html !== '') {
         $q['info_html'] = $info_html;
     }
+    $audience = easy_mgmt_queue_clean_audience($audience);
+    if (!empty($audience)) {
+        $q['audience'] = $audience;
+    }
     $questions[] = $q;
     update_option('easy_mgmt_queue_questions', $questions, false);
+    if ($notify) {
+        easy_mgmt_queue_queue_notification($q);
+    }
     return $q;
+}
+
+/**
+ * Clean an audience value (logins a question is for) down to usernames
+ * that are actually on the queue's allowed list. Returns an empty array
+ * for "everyone on the allowed list" (null, 'all', empty, or nothing
+ * usable left after cleaning), which is also what older questions with
+ * no audience field mean.
+ */
+function easy_mgmt_queue_clean_audience($audience) {
+    if (!is_array($audience)) {
+        return array();
+    }
+    $allowed = easy_mgmt_queue_allowed_users();
+    $out = array();
+    foreach ($audience as $login) {
+        $login = strtolower(sanitize_user((string) $login, true));
+        if ($login !== '' && in_array($login, $allowed, true) && !in_array($login, $out, true)) {
+            $out[] = $login;
+        }
+    }
+    // Naming everyone is the same as naming no one.
+    if (count($out) === count($allowed)) {
+        return array();
+    }
+    return $out;
+}
+
+/** Logins a question is addressed to: its audience, or everyone allowed. */
+function easy_mgmt_queue_question_recipient_logins($q) {
+    $audience = isset($q['audience']) && is_array($q['audience']) ? $q['audience'] : array();
+    return !empty($audience) ? array_values($audience) : easy_mgmt_queue_allowed_users();
+}
+
+/**
+ * Recipients for a question as user records: login, display name, and
+ * the email from the WordPress user record (read directly, so it is not
+ * affected by anything that trims the core REST user response).
+ * Recipients with no usable email on their account are skipped.
+ */
+function easy_mgmt_queue_question_recipients($q) {
+    $out = array();
+    foreach (easy_mgmt_queue_question_recipient_logins($q) as $login) {
+        $user = get_user_by('login', $login);
+        if ($user && is_email($user->user_email)) {
+            $out[] = array(
+                'login' => $user->user_login,
+                'name'  => $user->display_name !== '' ? $user->display_name : $user->user_login,
+                'email' => $user->user_email,
+            );
+        }
+    }
+    return $out;
+}
+
+/* --- New-question notifications (batched preview emails) ------------------ */
+
+/**
+ * Pending new-question notifications, as a map of question key to the
+ * recipient logins still waiting for that question's email. Stored in
+ * its own option so it survives across requests and clients (the admin
+ * screen and the app share the one list).
+ */
+function easy_mgmt_queue_pending_notifications() {
+    $pending = get_option('easy_mgmt_queue_pending_notifications', array());
+    if (!is_array($pending)) {
+        return array();
+    }
+    $out = array();
+    foreach ($pending as $key => $logins) {
+        if (is_array($logins) && !empty($logins)) {
+            $out[(string) $key] = array_values(array_map('strval', $logins));
+        }
+    }
+    return $out;
+}
+
+/**
+ * Queue a notification for a newly added question: record which of its
+ * recipients still need the email, and schedule the automatic flush
+ * (about 30 minutes out, so a run of questions added together goes as
+ * one digest per person; the site's server cron fires wp-cron).
+ */
+function easy_mgmt_queue_queue_notification($q) {
+    $logins = array();
+    foreach (easy_mgmt_queue_question_recipients($q) as $r) {
+        $logins[] = $r['login'];
+    }
+    if (empty($logins)) {
+        return false;
+    }
+    $pending = easy_mgmt_queue_pending_notifications();
+    $pending[$q['key']] = $logins;
+    update_option('easy_mgmt_queue_pending_notifications', $pending, false);
+    if (!wp_next_scheduled('easy_mgmt_queue_flush_notifications')) {
+        wp_schedule_single_event(time() + 30 * MINUTE_IN_SECONDS, 'easy_mgmt_queue_flush_notifications');
+    }
+    return true;
+}
+
+add_action('easy_mgmt_queue_flush_notifications', 'easy_mgmt_queue_send_pending_notifications');
+
+/**
+ * Send the pending notifications as one digest email per recipient.
+ * Each email previews that person's new questions (section, question,
+ * context, choices), says how many questions they have open in total,
+ * and links to the queue page at the first new question. A recipient
+ * whose send fails stays on the pending list for the next flush; a
+ * question that was decided or deleted in the meantime drops off.
+ * Returns a summary: emails sent, and questions fully cleared.
+ */
+function easy_mgmt_queue_send_pending_notifications() {
+    $pending = easy_mgmt_queue_pending_notifications();
+    $summary = array('sent' => 0, 'questions_cleared' => 0, 'recipients' => array());
+    if (empty($pending)) {
+        return $summary;
+    }
+    $questions = array();
+    foreach (easy_mgmt_queue_questions() as $q) {
+        $questions[$q['key']] = $q;
+    }
+    $decided = easy_mgmt_queue_live_decided_keys();
+
+    // Group pending questions by recipient login.
+    $by_login = array();
+    foreach ($pending as $key => $logins) {
+        if (!isset($questions[$key]) || in_array($key, $decided, true)) {
+            unset($pending[$key]);
+            $summary['questions_cleared']++;
+            continue;
+        }
+        foreach ($logins as $login) {
+            $by_login[$login][] = $questions[$key];
+        }
+    }
+
+    $notify_email = easy_mgmt_queue_notify_email();
+    $headers = array();
+    if ($notify_email !== '' && is_email($notify_email)) {
+        $headers[] = 'Reply-To: ' . $notify_email;
+    }
+    $open = easy_mgmt_queue_open_questions();
+
+    foreach ($by_login as $login => $mine) {
+        $user = get_user_by('login', $login);
+        if (!$user || !is_email($user->user_email)) {
+            foreach ($mine as $q) {
+                $pending[$q['key']] = array_values(array_diff($pending[$q['key']], array($login)));
+            }
+            continue;
+        }
+        $name = $user->display_name !== '' ? $user->display_name : $user->user_login;
+        $open_for_me = 0;
+        foreach ($open as $q) {
+            if (in_array($login, easy_mgmt_queue_question_recipient_logins($q), true)) {
+                $open_for_me++;
+            }
+        }
+        $lines = array();
+        $lines[] = 'Hi ' . $name . ',';
+        $lines[] = '';
+        $lines[] = count($mine) === 1
+            ? 'A new question is waiting for you in the management queue:'
+            : count($mine) . ' new questions are waiting for you in the management queue:';
+        $n = 0;
+        foreach ($mine as $q) {
+            $n++;
+            $lines[] = '';
+            $lines[] = $n . '. ' . (!empty($q['section']) ? '[' . $q['section'] . '] ' : '') . $q['label'];
+            if (!empty($q['why'])) {
+                $lines[] = $q['why'];
+            }
+            if (!empty($q['options']) && ($q['type'] ?? '') !== 'textarea') {
+                $opts = array();
+                foreach ($q['options'] as $opt) {
+                    $opts[] = is_array($opt) ? $opt[0] : $opt;
+                }
+                if (!empty($opts)) {
+                    $lines[] = 'Choices: ' . implode(' / ', $opts);
+                }
+            }
+        }
+        $lines[] = '';
+        $lines[] = 'You have ' . $open_for_me . ' open question' . ($open_for_me === 1 ? '' : 's') . ' in total.';
+        $lines[] = 'Answer here (you will be asked to sign in): ' . home_url('/management-queue/') . '#emq-' . $mine[0]['key'];
+        $lines[] = '';
+        $lines[] = 'Please answer on that page rather than by replying, so the answer is saved with the question.';
+        $subject = 'Management queue: ' . count($mine) . ' new question' . (count($mine) === 1 ? '' : 's') . ' for you';
+        if (wp_mail($user->user_email, $subject, implode("\n", $lines), $headers)) {
+            $summary['sent']++;
+            $summary['recipients'][] = $login;
+            foreach ($mine as $q) {
+                $pending[$q['key']] = array_values(array_diff($pending[$q['key']], array($login)));
+            }
+        }
+    }
+
+    foreach ($pending as $key => $logins) {
+        if (empty($logins)) {
+            unset($pending[$key]);
+            $summary['questions_cleared']++;
+        }
+    }
+    update_option('easy_mgmt_queue_pending_notifications', $pending, false);
+    return $summary;
 }
 
 /**
@@ -250,6 +470,14 @@ function easy_mgmt_queue_update_question($key, $fields) {
             }
             $q['options'] = $clean;
         }
+        if (isset($fields['audience']) && is_array($fields['audience'])) {
+            $aud = easy_mgmt_queue_clean_audience($fields['audience']);
+            if (!empty($aud)) {
+                $q['audience'] = $aud;
+            } else {
+                unset($q['audience']);
+            }
+        }
         if (array_key_exists('info_html', $fields)) {
             $info = trim((string) $fields['info_html']);
             if ($info === '') {
@@ -276,6 +504,11 @@ function easy_mgmt_queue_delete_question($key) {
         return !is_array($q) || ($q['key'] ?? '') !== $key;
     }));
     update_option('easy_mgmt_queue_questions', $questions, false);
+    $pending = easy_mgmt_queue_pending_notifications();
+    if (isset($pending[$key])) {
+        unset($pending[$key]);
+        update_option('easy_mgmt_queue_pending_notifications', $pending, false);
+    }
     $resp = easy_mgmt_queue_get_responses();
     $dirty = false;
     if (isset($resp['answers'][$key])) {
@@ -331,7 +564,7 @@ function easy_mgmt_queue_render_question($q, $answers) {
         // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped — admin-entered reference HTML
         echo '<div class="emq-info">' . $q['info_html'] . '</div>';
     }
-    echo '<div class="emq-q"' . $dep_attr . ' data-qkey="' . esc_attr($key) . '">';
+    echo '<div class="emq-q" id="emq-' . esc_attr($key) . '"' . $dep_attr . ' data-qkey="' . esc_attr($key) . '">';
     echo '<h3>';
     if (!empty($q['num'])) {
         echo '<span class="emq-num">' . (int) $q['num'] . '.</span> ';
@@ -871,18 +1104,35 @@ function easy_mgmt_queue_admin_handle() {
                 }
             }
         }
+        $audience = array();
+        if (isset($_POST['emq_new_audience']) && is_array($_POST['emq_new_audience'])) {
+            foreach (wp_unslash($_POST['emq_new_audience']) as $login) {
+                $audience[] = sanitize_user((string) $login, true);
+            }
+        }
         $result = easy_mgmt_queue_add_question(
             isset($_POST['emq_new_section']) ? sanitize_text_field(wp_unslash($_POST['emq_new_section'])) : '',
             isset($_POST['emq_new_label']) ? sanitize_text_field(wp_unslash($_POST['emq_new_label'])) : '',
             isset($_POST['emq_new_why']) ? sanitize_textarea_field(wp_unslash($_POST['emq_new_why'])) : '',
             isset($_POST['emq_new_type']) ? sanitize_key(wp_unslash($_POST['emq_new_type'])) : 'radio',
             $options,
-            isset($_POST['emq_new_info']) ? wp_kses_post(wp_unslash($_POST['emq_new_info'])) : ''
+            isset($_POST['emq_new_info']) ? wp_kses_post(wp_unslash($_POST['emq_new_info'])) : '',
+            $audience,
+            isset($_POST['emq_new_notify'])
         );
         if (is_string($result)) {
             add_settings_error('emq_admin', 'emq_add_failed', $result, 'error');
         } else {
-            add_settings_error('emq_admin', 'emq_added', 'Question added.', 'success');
+            add_settings_error('emq_admin', 'emq_added', isset($_POST['emq_new_notify']) ? 'Question added. Its notification is queued and will go out with the next batch (or send it now below).' : 'Question added (no notification queued).', 'success');
+        }
+    }
+    // Send queued new-question notifications now.
+    if (isset($_POST['emq_notify_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['emq_notify_nonce'])), 'emq_send_notifications')) {
+        $summary = easy_mgmt_queue_send_pending_notifications();
+        if ($summary['sent'] > 0) {
+            add_settings_error('emq_admin', 'emq_notified', 'Sent ' . $summary['sent'] . ' notification email(s).', 'success');
+        } else {
+            add_settings_error('emq_admin', 'emq_notified', 'No notification emails were sent. Either nothing is queued, or the queued questions were already decided.', 'error');
         }
     }
     // Edit a question.
@@ -897,6 +1147,12 @@ function easy_mgmt_queue_admin_handle() {
                 }
             }
         }
+        $edit_audience = array();
+        if (isset($_POST['emq_edit_audience']) && is_array($_POST['emq_edit_audience'])) {
+            foreach (wp_unslash($_POST['emq_edit_audience']) as $login) {
+                $edit_audience[] = sanitize_user((string) $login, true);
+            }
+        }
         $result = easy_mgmt_queue_update_question($edit_key, array(
             'section'   => isset($_POST['emq_edit_section']) ? sanitize_text_field(wp_unslash($_POST['emq_edit_section'])) : '',
             'label'     => isset($_POST['emq_edit_label']) ? sanitize_text_field(wp_unslash($_POST['emq_edit_label'])) : '',
@@ -904,6 +1160,7 @@ function easy_mgmt_queue_admin_handle() {
             'type'      => isset($_POST['emq_edit_type']) ? sanitize_key(wp_unslash($_POST['emq_edit_type'])) : 'radio',
             'options'   => $options,
             'info_html' => isset($_POST['emq_edit_info']) ? wp_kses_post(wp_unslash($_POST['emq_edit_info'])) : '',
+            'audience'  => $edit_audience,
         ));
         if ($result === true) {
             add_settings_error('emq_admin', 'emq_edited', 'Question updated.', 'success');
@@ -971,6 +1228,23 @@ function easy_mgmt_queue_format_answer($q, $a) {
     return $choice;
 }
 
+/**
+ * Audience checkboxes for the admin add / edit forms: one per allowed
+ * user, labelled with the display name from their account. Ticking none
+ * means everyone, which is also what a stored empty audience means.
+ */
+function easy_mgmt_queue_audience_checkboxes($field_name, $selected) {
+    $selected = is_array($selected) ? $selected : array();
+    $everyone = empty($selected);
+    foreach (easy_mgmt_queue_allowed_users() as $login) {
+        $user = get_user_by('login', $login);
+        $name = $user && $user->display_name !== '' ? $user->display_name : $login;
+        $checked = !$everyone && in_array($login, $selected, true) ? ' checked' : '';
+        echo '<label style="display:block;margin:2px 0;"><input type="checkbox" name="' . esc_attr($field_name) . '[]" value="' . esc_attr($login) . '"' . $checked . '> ' . esc_html($name) . ' (' . esc_html($login) . ')</label>';
+    }
+    echo '<p class="description">Tick who this question is for, or leave all unticked for everyone. This decides who gets the notification email; everyone on the list can still see the question on the page.</p>';
+}
+
 function easy_mgmt_queue_admin_page() {
     if (!current_user_can('manage_options')) {
         wp_die(esc_html__('You do not have permission to view this page.', 'easy-suite'));
@@ -985,6 +1259,32 @@ function easy_mgmt_queue_admin_page() {
     echo '<div class="wrap" style="max-width:900px;"><h1>Management queue</h1>';
     easy_suite_admin_tabs('easy-suite-queue');
     echo '<p>Private decision page: <a href="' . esc_url(home_url('/management-queue/')) . '" target="_blank" rel="noopener">' . esc_html(home_url('/management-queue/')) . '</a> (Private page, shortcode <code>[easy_management_queue]</code>). Visible only to the usernames in EASY Suite → Settings → Management queue, plus administrators.</p>';
+
+    // --- New-question notifications waiting to go out ---
+    echo '<h2>New-question notifications</h2>';
+    $pending = easy_mgmt_queue_pending_notifications();
+    if (empty($pending)) {
+        echo '<p><em>Nothing queued. When a question is added with its notification ticked, it waits here and goes out as one batched email per person, about 30 minutes later or when sent now.</em></p>';
+    } else {
+        $by_key = array();
+        foreach (easy_mgmt_queue_questions() as $q) {
+            $by_key[$q['key']] = $q;
+        }
+        echo '<table class="widefat striped"><thead><tr><th>Question</th><th style="width:30%">Still to notify</th></tr></thead><tbody>';
+        foreach ($pending as $pkey => $logins) {
+            $names = array();
+            foreach ($logins as $login) {
+                $u = get_user_by('login', $login);
+                $names[] = $u && $u->display_name !== '' ? $u->display_name : $login;
+            }
+            echo '<tr><td>' . esc_html(isset($by_key[$pkey]) ? $by_key[$pkey]['label'] : '(question deleted)') . '</td><td>' . esc_html(implode(', ', $names)) . '</td></tr>';
+        }
+        echo '</tbody></table>';
+        echo '<form method="post" action="" style="margin-top:10px;">';
+        wp_nonce_field('emq_send_notifications', 'emq_notify_nonce');
+        submit_button('Send notification emails now', 'primary', 'submit', false);
+        echo '</form>';
+    }
 
     // --- Submitted responses ---
     echo '<h2>Submitted responses</h2>';
@@ -1074,6 +1374,9 @@ function easy_mgmt_queue_admin_page() {
             $opt_lines[] = is_array($opt) ? $opt[0] : $opt;
         }
         echo '<tr><th scope="row"><label for="emq_edit_options">Choices</label></th><td><textarea id="emq_edit_options" name="emq_edit_options" rows="5" class="large-text code" placeholder="One choice per line">' . esc_textarea(implode("\n", $opt_lines)) . '</textarea><p class="description">One choice per line. Only used for multiple-choice types.</p></td></tr>';
+        echo '<tr><th scope="row">Who is this for?</th><td>';
+        easy_mgmt_queue_audience_checkboxes('emq_edit_audience', isset($edit_q['audience']) && is_array($edit_q['audience']) ? $edit_q['audience'] : array());
+        echo '</td></tr>';
         echo '<tr><th scope="row"><label for="emq_edit_info">Reference HTML</label></th><td><textarea id="emq_edit_info" name="emq_edit_info" rows="4" class="large-text code" placeholder="Optional HTML shown above the question">' . esc_textarea($edit_q['info_html'] ?? '') . '</textarea><p class="description">Optional. Shown above the question on the queue page.</p></td></tr>';
         echo '</tbody></table>';
         submit_button('Save changes');
@@ -1094,6 +1397,10 @@ function easy_mgmt_queue_admin_page() {
         . '</select></td></tr>';
     echo '<tr><th scope="row"><label for="emq_new_options">Choices</label></th><td><textarea id="emq_new_options" name="emq_new_options" rows="5" class="large-text code" placeholder="One choice per line"></textarea><p class="description">One choice per line. Only used for multiple-choice types.</p></td></tr>';
     echo '<tr><th scope="row"><label for="emq_new_info">Reference HTML</label></th><td><textarea id="emq_new_info" name="emq_new_info" rows="4" class="large-text code" placeholder="Optional HTML shown above the question"></textarea><p class="description">Optional. Shown above the question on the queue page.</p></td></tr>';
+    echo '<tr><th scope="row">Who is this for?</th><td>';
+    easy_mgmt_queue_audience_checkboxes('emq_new_audience', array());
+    echo '</td></tr>';
+    echo '<tr><th scope="row">Notification</th><td><label><input type="checkbox" name="emq_new_notify" value="1" checked> Email them about this question</label><p class="description">Batched: questions added close together go in one email per person, sent about 30 minutes later or right away from the Notifications section above. Untick for seeding or quiet fixes.</p></td></tr>';
     echo '</tbody></table>';
     submit_button('Add question');
     echo '</form>';
@@ -1143,10 +1450,11 @@ function easy_mgmt_queue_rest_item($q, $all) {
     $resolved = easy_mgmt_queue_get_resolved($all);
 
     $item = array(
-        'key'     => $q['key'],
-        'section' => isset($q['section']) ? $q['section'] : '',
-        'label'   => $q['label'],
-        'type'    => $q['type'],
+        'key'      => $q['key'],
+        'section'  => isset($q['section']) ? $q['section'] : '',
+        'label'    => $q['label'],
+        'type'     => $q['type'],
+        'audience' => isset($q['audience']) && is_array($q['audience']) ? array_values($q['audience']) : array(),
     );
     if (!empty($q['options'])) {
         $item['options'] = array_map(function ($opt) {
@@ -1205,10 +1513,21 @@ function easy_mgmt_queue_rest_get() {
         return strcmp($bt, $at);
     });
 
+    $audience_options = array();
+    foreach (easy_mgmt_queue_allowed_users() as $login) {
+        $u = get_user_by('login', $login);
+        $audience_options[] = array(
+            'login' => $login,
+            'name'  => $u && $u->display_name !== '' ? $u->display_name : $login,
+        );
+    }
+
     return array(
         'open'     => $open,
         'decided'  => $decided_out,
         'resolved' => $resolved_out,
+        'pending_notifications' => count(easy_mgmt_queue_pending_notifications()),
+        'audience_options'      => $audience_options,
         'counts'   => array(
             'open'     => count($open),
             'decided'  => count($decided_out),
@@ -1238,18 +1557,46 @@ function easy_mgmt_queue_rest_add_question($request) {
         // limited to the tags WordPress allows in post content.
         $info_html = wp_kses_post((string) $params['info_html']);
     }
+    $audience = array();
+    if (isset($params['audience']) && is_array($params['audience'])) {
+        foreach ($params['audience'] as $login) {
+            $audience[] = (string) $login;
+        }
+    }
+    // Notify defaults on; only an explicit false / 0 / 'false' silences it.
+    $notify = true;
+    if (isset($params['notify'])) {
+        $notify = !($params['notify'] === false || $params['notify'] === 0 || $params['notify'] === '0' || $params['notify'] === 'false');
+    }
     $result = easy_mgmt_queue_add_question(
         isset($params['section']) ? $params['section'] : '',
         isset($params['label']) ? $params['label'] : '',
         isset($params['why']) ? $params['why'] : '',
         isset($params['type']) ? $params['type'] : 'radio',
         isset($params['options']) ? $params['options'] : array(),
-        $info_html
+        $info_html,
+        $audience,
+        $notify
     );
     if (is_string($result)) {
         return new WP_Error('easy_mgmt_queue_bad_question', $result, array('status' => 400));
     }
-    return array('question' => $result);
+    $pending = easy_mgmt_queue_pending_notifications();
+    return array(
+        'question' => $result,
+        'notification_queued' => $notify && isset($pending[$result['key']]),
+        'pending_notifications' => count($pending),
+    );
+}
+
+/**
+ * POST /easy/v1/management-queue/notify — send the queued new-question
+ * notification digests now (admin). Returns the send summary.
+ */
+function easy_mgmt_queue_rest_send_notifications() {
+    $summary = easy_mgmt_queue_send_pending_notifications();
+    $summary['pending_notifications'] = count(easy_mgmt_queue_pending_notifications());
+    return $summary;
 }
 
 /**
@@ -1566,6 +1913,11 @@ add_action('rest_api_init', function () {
     register_rest_route('easy/v1', '/management-queue/questions', array(
         'methods'             => 'POST',
         'callback'            => 'easy_mgmt_queue_rest_add_question',
+        'permission_callback' => 'easy_mgmt_queue_rest_can_read',
+    ));
+    register_rest_route('easy/v1', '/management-queue/notify', array(
+        'methods'             => 'POST',
+        'callback'            => 'easy_mgmt_queue_rest_send_notifications',
         'permission_callback' => 'easy_mgmt_queue_rest_can_read',
     ));
     register_rest_route('easy/v1', '/management-queue/undecide', array(

@@ -502,4 +502,25 @@ add_action('rest_api_init', function () {
         },
         'permission_callback' => 'is_user_logged_in',
     ]);
+    // The authenticated user's own identity, read server-side. Core's
+    // /wp/v2/users/me can come back with the email field stripped by
+    // security/privacy plugins filtering the core user response, which
+    // left the desktop app unable to pull the signed-in user's email
+    // even though it is stored on the account. This reads user_email
+    // directly instead. It takes no user parameter and only ever returns
+    // the caller's own record.
+    register_rest_route('easy/v1', '/me', [
+        'methods'             => 'GET',
+        'callback'            => function () {
+            $user = wp_get_current_user();
+            return [
+                'id'           => (int) $user->ID,
+                'username'     => $user->user_login,
+                'name'         => $user->display_name,
+                'email'        => $user->user_email,
+                'capabilities' => (object) $user->allcaps,
+            ];
+        },
+        'permission_callback' => 'is_user_logged_in',
+    ]);
 });

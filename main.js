@@ -287,10 +287,39 @@ function configMode(config) {
   return config.wpUser && config.wpUser.user ? 'instructor' : 'office';
 }
 
-// The signed-in account's WordPress identity (id + capabilities), fetched
-// from users/me and cached per username. Used wherever the app needs to
-// know "who is this and what may they do" (proxy posting, queue scoping).
-let currentUserCache = null; // { user, value: { id, capabilities } }
+// The signed-in account's own identity from EASY Suite's /easy/v1/me.
+// That endpoint reads the user record server-side, so its email field
+// survives sites where a security/privacy plugin strips email out of
+// core's /wp/v2/users/me response. Returns null when the site can't
+// answer (older Suite, offline, bad credentials) so callers fall back
+// to core users/me. Only ever returns the authenticated user's own
+// record; auth is { user, appPassword } as basicAuth() expects.
+async function fetchSuiteMe(base, auth) {
+  try {
+    const res = await fetch(`${base}/wp-json/easy/v1/me`, {
+      headers: { Authorization: basicAuth(auth) },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return null;
+    const json = await res.json().catch(() => null);
+    if (!json || !json.id) return null;
+    return {
+      id: Number(json.id),
+      username: json.username || '',
+      name: json.name || '',
+      email: json.email || '',
+      capabilities: json.capabilities || {},
+    };
+  } catch (e) { /* site can't answer: caller falls back to users/me */ }
+  return null;
+}
+
+// The signed-in account's WordPress identity (id, email, capabilities),
+// cached per username. Used wherever the app needs to know "who is this
+// and what may they do" (proxy posting, queue scoping). Prefers the
+// Suite /me endpoint above; core users/me is the fallback for sites
+// running a Suite too old to have it.
+let currentUserCache = null; // { user, value: { id, username, name, email, capabilities } }
 
 async function fetchCurrentUser(config) {
   const u = config && config.ok && config.wpUser && config.wpUser.user;
@@ -298,27 +327,35 @@ async function fetchCurrentUser(config) {
   if (currentUserCache && currentUserCache.user === u) return currentUserCache.value;
   const base = config.wpBaseUrl.replace(/\/+$/, '');
   const headers = { Authorization: basicAuth(effectiveAuth(config).post) };
-  let value = null;
-  try {
-    // Edit context carries the capabilities field; some limited accounts
-    // cannot use it, so fall back to the plain call (same as setup).
-    let res = await fetch(`${base}/wp-json/wp/v2/users/me?context=edit`, {
-      headers,
-      signal: AbortSignal.timeout(8000),
-    });
-    if (res.status === 401 || res.status === 403) {
-      res = await fetch(`${base}/wp-json/wp/v2/users/me`, {
+  let value = await fetchSuiteMe(base, effectiveAuth(config).post);
+  if (!value) {
+    try {
+      // Edit context carries the capabilities field; some limited accounts
+      // cannot use it, so fall back to the plain call (same as setup).
+      let res = await fetch(`${base}/wp-json/wp/v2/users/me?context=edit`, {
         headers,
         signal: AbortSignal.timeout(8000),
       });
-    }
-    if (res.ok) {
-      const json = await res.json().catch(() => null);
-      if (json && json.id) {
-        value = { id: Number(json.id), capabilities: json.capabilities || {} };
+      if (res.status === 401 || res.status === 403) {
+        res = await fetch(`${base}/wp-json/wp/v2/users/me`, {
+          headers,
+          signal: AbortSignal.timeout(8000),
+        });
       }
-    }
-  } catch (e) { /* offline or unreachable: no identity this time */ }
+      if (res.ok) {
+        const json = await res.json().catch(() => null);
+        if (json && json.id) {
+          value = {
+            id: Number(json.id),
+            username: json.username || '',
+            name: json.name || '',
+            email: json.email || '',
+            capabilities: json.capabilities || {},
+          };
+        }
+      }
+    } catch (e) { /* offline or unreachable: no identity this time */ }
+  }
   if (value) currentUserCache = { user: u, value };
   return value;
 }
@@ -680,6 +717,14 @@ ipcMain.handle('test-connection', async (_event, args = {}) => {
       }
       return { ok: false, error: json.message || `WordPress returned HTTP ${res.status}.` };
     }
+    // Core users/me can return a blank email on sites where a plugin
+    // strips it from the core user response, even though the address is
+    // on the account. Ask EASY Suite's own /me endpoint (same
+    // credentials, just validated above) and prefer its identity fields;
+    // a site with an older Suite simply falls through to the core ones.
+    // If email is still blank afterwards, the setup wizard keeps its
+    // editable email field so the user can type it in.
+    const suiteMe = await fetchSuiteMe(base, { user, appPassword });
     // Probe the real upload permission: listing media in edit context
     // requires editing rights. (The capabilities field on users/me can be
     // filtered out of REST responses by security plugins, so it is only a
@@ -697,15 +742,21 @@ ipcMain.handle('test-connection', async (_event, args = {}) => {
       canUpload = null;
     }
     if (canUpload === null) {
-      const caps = json.capabilities || {};
+      // Prefer the Suite /me capabilities (read server-side, unfiltered)
+      // when it returned any; core users/me capabilities are the
+      // fallback for older Suites.
+      const suiteCaps = suiteMe && suiteMe.capabilities && Object.keys(suiteMe.capabilities).length
+        ? suiteMe.capabilities
+        : null;
+      const caps = suiteCaps || json.capabilities || {};
       canUpload = caps.upload_files === true;
     }
     return {
       ok: true,
-      id: json.id,
-      username: json.username,
-      name: json.name || json.username,
-      email: json.email || '',
+      id: (suiteMe && suiteMe.id) || json.id,
+      username: (suiteMe && suiteMe.username) || json.username,
+      name: (suiteMe && suiteMe.name) || json.name || json.username,
+      email: (suiteMe && suiteMe.email) || json.email || '',
       canUpload,
     };
   } catch (err) {
