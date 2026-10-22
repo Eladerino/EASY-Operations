@@ -70,7 +70,7 @@ always stay on.
 | Class rosters | Per-class student lists (manual enrollment in the app; online buyers added automatically) |
 | Seat sales | Sells class seats as WooCommerce products: per-seat attendee details at checkout, roster sync, stock handling, sold-seat delete protection |
 | Portal cards | Student/instructor portal card hub (`/student-portal/`, `/instructor-portal/`) |
-| Management queue | Private decision page for the office (`[easy_management_queue]` shortcode). Questions move open, then decided, then resolved: a decided question can have its answer undone (it reopens) or be marked resolved from the EASY Manager app, which files it in an archive with its answer and both sets of attribution on record. The page's own information text (introduction, What's New, Payments and the other explainer sections, closing note) is edited on the same admin screen and stored in the database |
+| Management queue | Private decision page for the office (`[easy_management_queue]` shortcode). Questions move open, then decided, then resolved: a decided question can have its answer undone (it reopens) or be marked resolved from the EASY Manager app, which files it in an archive with its answer and both sets of attribution on record. The page's own information text (introduction, What's New, Payments and the other explainer sections, closing note) is edited on the same admin screen and stored in the database. A new question can say who it is for, and adding one (on the admin screen or from the app) queues a batched preview email to those people: one digest each, sent from the admin screen or the app, or automatically about 30 minutes later; adding silently is an option for seeding and fixes |
 | Activity log | Site-wide record of who did what across the website, desktop app, and phone app: class creates, publishes, unpublishes and price/seat edits, certificate publishes, account signup decisions, and management queue answers folded in from the queue's own records. Read under EASY Suite -> Activity or `GET /easy/v1/activity` (administrators only); rows kept 12 months |
 | GitHub self-updater | Checks the EASY-Operations GitHub releases for a newer `easy-suite-<version>.zip` and offers it on the Plugins screen as a normal update (see "Updates from GitHub" above) |
 | Shop | Instructor-only products and the `[easy_product_form]` listing form |
@@ -103,12 +103,8 @@ All routes are under `/wp-json/easy/v1/`.
 | `management-queue` | Admins |
 | `management-queue/questions` (POST) | Admins |
 | `management-queue/answers` (POST) | Admins |
-| `management-queue/undecide`, `management-queue/resolve`, `management-queue/unresolve` (POST) | Admins |
-| `activity` | Admins |
 | `site-health` | Admins |
-| `instructor-feeds` | Admins |
-| `cert-search`, `cert-pdf/<number>` | Certificate access rules (office accounts see all; instructors and students only their own) |
-| `app-config`, `course-builder/me`, `learn/…` | Any signed-in user |
+| `app-config`, `me`, `course-builder/me`, `learn/…` | Any signed-in user |
 | `course-builder/…` | Course authors and reviewers |
 | `licenses…`, `enrollments…` | Admins, certificate publishers and Course Builder reviewers |
 

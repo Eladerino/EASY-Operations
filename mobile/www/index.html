@@ -278,6 +278,8 @@
         </div>
         <p id="queueCounts" class="hint"></p>
         <p id="queueActivity" class="hint"></p>
+        <p id="queuePending" class="hint hidden"></p>
+        <button type="button" id="queueNotifyBtn" class="btn btn-secondary btn-block hidden">Send notification emails now</button>
         <p id="queueError" class="error-text hidden"></p>
         <p id="queueUpdated" class="hint"></p>
 
@@ -312,6 +314,14 @@
           </select>
           <label for="askOptions">Choices (one per line, for multiple choice)</label>
           <textarea id="askOptions" rows="4"></textarea>
+          <label for="askAudience">Who is this for?</label>
+          <select id="askAudience">
+            <option value="">Everyone</option>
+          </select>
+          <label class="check-row" for="askNotify">
+            <input id="askNotify" type="checkbox" checked />
+            Email them about this question (batched with any other new questions)
+          </label>
           <button id="askSubmit" type="submit" class="btn btn-primary btn-block">Add question</button>
         </form>
       </section>

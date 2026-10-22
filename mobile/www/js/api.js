@@ -719,6 +719,18 @@
     return r.json;
   }
 
+  // Send the queued new-question notification digests now (Suite
+  // 2.2.38). Returns the summary: { sent, questions_cleared, recipients,
+  // pending_notifications }.
+  async function notifyQueue() {
+    const r = await request('/easy/v1/management-queue/notify', {
+      method: 'POST',
+      body: {},
+    });
+    invalidateCache();
+    return r.json;
+  }
+
   // Save one answer. The Suite route applies the same validation as
   // the website queue form: a choice must be one of the question's
   // defined options (or '__other' with the write-in text in `other`
@@ -998,6 +1010,7 @@
     expiringCerts,
     mgmtQueue,
     addQuestion,
+    notifyQueue,
     answerQuestion,
     undecideQuestion,
     resolveQuestion,

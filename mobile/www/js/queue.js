@@ -1,6 +1,10 @@
 // queue.js: the management queue: questions waiting on a decision, ones
 // already decided (with who decided and when), and a form to ask a new
-// question, which posts to the same queue the website shows.
+// question, which posts to the same queue the website shows. A new
+// question can name who it is for and (unless unticked) queues a batched
+// notification email to them (Suite 2.2.38): the digest goes out from
+// here with the send button, from the website admin, or on its own
+// about 30 minutes after the first question was queued.
 //
 // Open questions are answered right here. A tap on a choice (or the
 // send button for free text) asks for confirmation first, then posts
@@ -318,6 +322,40 @@
         ? 'Last activity by ' + activity.by + ' · ' + U.fmtDateTime(activity.at)
         : '';
 
+    const pending = Number(data.pending_notifications) || 0;
+    const pendingEl = $('queuePending');
+    const notifyBtn = $('queueNotifyBtn');
+    if (pending > 0) {
+      pendingEl.textContent =
+        pending + ' new question' + (pending === 1 ? '' : 's') +
+        ' waiting to be emailed. They go out on their own in about 30 minutes, or send them now.';
+      pendingEl.classList.remove('hidden');
+      notifyBtn.classList.remove('hidden');
+    } else {
+      pendingEl.textContent = '';
+      pendingEl.classList.add('hidden');
+      notifyBtn.classList.add('hidden');
+    }
+
+    // Audience picker options come from the feed, so the names always
+    // match the site's queue list. Keep the current pick on refresh.
+    const askAudience = $('askAudience');
+    if (askAudience && Array.isArray(data.audience_options)) {
+      const current = askAudience.value;
+      askAudience.innerHTML = '';
+      const everyone = document.createElement('option');
+      everyone.value = '';
+      everyone.textContent = 'Everyone';
+      askAudience.appendChild(everyone);
+      for (const person of data.audience_options) {
+        const opt = document.createElement('option');
+        opt.value = person.login;
+        opt.textContent = person.name || person.login;
+        askAudience.appendChild(opt);
+      }
+      askAudience.value = current;
+    }
+
     const openBox = $('queueOpen');
     openBox.innerHTML = '';
     if (!data.open.length) {
@@ -395,15 +433,24 @@
     const btn = $('askSubmit');
     btn.disabled = true;
     try {
-      await window.EasyApi.addQuestion({
+      const audienceLogin = $('askAudience') ? $('askAudience').value : '';
+      const res = await window.EasyApi.addQuestion({
         section: $('askSection').value.trim(),
         label,
         why: $('askWhy').value.trim(),
         type,
         options,
+        audience: audienceLogin ? [audienceLogin] : [],
+        notify: $('askNotify') ? $('askNotify').checked : true,
       });
       $('askForm').reset();
-      window.EasyUi.toast('Question added to the queue.', 'success');
+      if ($('askNotify')) $('askNotify').checked = true;
+      window.EasyUi.toast(
+        res && res.notification_queued
+          ? 'Question added. Its notification is queued to send as a batch.'
+          : 'Question added to the queue.',
+        'success'
+      );
       await show();
     } catch (e) {
       window.EasyUi.toast('Could not add the question: ' + e.message, 'error', 8000);
@@ -412,8 +459,38 @@
     }
   }
 
+  async function sendNotifications(btn) {
+    const yes = await window.EasyUi.confirm(
+      'Send notification emails now?',
+      'Everyone with a new question waiting gets one email previewing their questions.',
+      'Send emails'
+    );
+    if (!yes) return;
+    btn.disabled = true;
+    try {
+      const res = await window.EasyApi.notifyQueue();
+      const sent = (res && Number(res.sent)) || 0;
+      window.EasyUi.toast(
+        sent > 0
+          ? 'Sent ' + sent + ' notification email' + (sent === 1 ? '' : 's') + '.'
+          : 'No emails sent. The queued questions may already be decided.',
+        sent > 0 ? 'success' : 'error',
+        8000
+      );
+      await show();
+    } catch (e) {
+      window.EasyUi.toast('Could not send the notifications: ' + e.message, 'error', 8000);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
   function init() {
     $('askForm').addEventListener('submit', submitQuestion);
+    const notifyBtn = $('queueNotifyBtn');
+    if (notifyBtn) {
+      notifyBtn.addEventListener('click', () => sendNotifications(notifyBtn));
+    }
     const archiveToggle = $('queueArchiveToggle');
     if (archiveToggle) {
       archiveToggle.addEventListener('click', () => {
