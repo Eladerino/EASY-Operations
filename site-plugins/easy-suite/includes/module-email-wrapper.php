@@ -73,8 +73,9 @@ function easy_suite_branded_email_wrapper( $args ) {
 	$body_row .= '</td></tr>';
 	// Footer.
 	$footer_row = '<tr><td align="center" style="background-color:#ffffff;padding:22px 28px 30px;border-top:1px solid #e6e6e6;color:#777777;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;">';
-	$footer_row .= 'EASY Safety Training &middot; 44 Austin Street, St. John&#39;s, NL A1B 4C2<br />';
+	$footer_row .= 'EASY Safety Training &middot; St. John&#39;s, NL<br />';
 	$footer_row .= 'Questions? Contact us at <a href="mailto:pam@easysafety.ca" style="color:#12853C;text-decoration:underline;">pam@easysafety.ca</a> or call <a href="tel:+17092217233" style="color:#12853C;text-decoration:underline;">(709) 221-7233</a>.';
+	$footer_row .= '<br /><a href="https://easysafety.ca/privacy-policy/" style="color:#12853C;text-decoration:underline;">Privacy Policy</a>';
 	$footer_row .= '</td></tr>';
 	// Close the inner content table, then the outer wrapper table.
 	$shell_close = '</table></td></tr></table>';

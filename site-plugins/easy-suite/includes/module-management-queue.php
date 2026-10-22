@@ -1087,6 +1087,28 @@ function easy_mgmt_queue_shortcode() {
 }
 add_shortcode('easy_management_queue', 'easy_mgmt_queue_shortcode');
 
+/**
+ * Logged-out visitors to the queue page go to the login page first and
+ * land back on the queue afterwards, instead of hitting a private-page
+ * wall. Same pattern as the certificates page redirect: the Ultimate
+ * Member login page honours redirect_to. Only this one path triggers
+ * it, and the login page itself is a different path, so no loop.
+ * Logged-in visitors are untouched; the shortcode still decides who
+ * may see the queue itself.
+ */
+add_action('template_redirect', function () {
+    if (is_user_logged_in()) {
+        return;
+    }
+    $request_path = isset($_SERVER['REQUEST_URI']) ? trim((string) parse_url(wp_unslash($_SERVER['REQUEST_URI']), PHP_URL_PATH), '/') : '';
+    $queue_path = trim((string) parse_url(home_url('/management-queue/'), PHP_URL_PATH), '/');
+    if ($request_path === '' || $request_path !== $queue_path) {
+        return;
+    }
+    wp_safe_redirect(add_query_arg('redirect_to', rawurlencode(home_url('/management-queue/')), home_url('/login/')), 302);
+    exit;
+});
+
 /* --- Admin: view responses and manage custom questions ---------------------- */
 
 function easy_mgmt_queue_admin_handle() {

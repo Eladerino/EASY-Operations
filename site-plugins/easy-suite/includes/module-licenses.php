@@ -887,7 +887,7 @@ function easy_licenses_email(array $rows, $to = '') {
       <p style="font-size:14px;line-height:1.6;color:#555;margin:0 0 16px 0;">Keys that aren\'t used by ' . esc_html($expires) . ' expire.</p>
       <p style="font-size:15px;line-height:1.6;color:#444;margin-top:30px;">Questions? Contact us at <a href="mailto:' . esc_attr($contact) . '" style="color:#12853C;text-decoration:none;">' . esc_html($contact) . '</a> or call ' . esc_html($phone) . '.</p>
     </td></tr>
-    <tr><td style="background:#f0f3f6;text-align:center;padding:15px;font-size:12px;color:#555;">EASY Safety Training &middot; 44 Austin Street, St. John\'s, NL A1B 4C2</td></tr>
+    <tr><td style="background:#f0f3f6;text-align:center;padding:15px;font-size:12px;color:#555;">EASY Safety Training &middot; St. John\'s, NL<br><a href=\"https://easysafety.ca/privacy-policy/\" style=\"color:#12853C;\">Privacy Policy</a></td></tr>
   </table>
 </div>';
     $plain = ($name !== '' ? "Hi {$name},\n\n" : "Hello,\n\n")
@@ -896,7 +896,8 @@ function easy_licenses_email(array $rows, $to = '') {
         . $redeem_url . "\n\n"
         . "Keys that aren't used by {$expires} expire.\n\n"
         . "Questions? Contact us at {$contact} or call {$phone}.\n\n"
-        . "EASY Safety Training \u{00B7} 44 Austin Street, St. John's, NL A1B 4C2\n";
+        . "EASY Safety Training \u{00B7} St. John's, NL\n"
+        . "Privacy Policy: https://easysafety.ca/privacy-policy/\n";
 
     $headers = [
         'Content-Type: text/html; charset=UTF-8',
