@@ -93,11 +93,23 @@ function easy_suite_updater_latest($allow_fetch) {
  * same shape WordPress core builds for wordpress.org plugins: a response
  * entry when the release is newer than the installed version, otherwise
  * a no_update entry so core does not treat the plugin as unknown.
+ *
+ * The comparison is against $value->checked (the version WordPress read
+ * from the plugin header on disk for this check), never against the
+ * EASY_SUITE_VERSION constant. After an update, core clears the update
+ * transient and forces a recheck that can still run inside the updating
+ * request, where the old code (and its old constant) is the code that is
+ * loaded even though the new files are already on disk; comparing
+ * against the constant there re-offered the version that had just been
+ * installed, so every update had to be run twice. Each branch also
+ * removes the opposite entry, because this filter can be handed a
+ * transient object that still carries the previous check's entry.
  */
 function easy_suite_updater_check_for_update($value) {
     if (!is_object($value) || empty($value->checked) || !isset($value->checked['easy-suite/easy-suite.php'])) {
         return $value;
     }
+    $installed = (string) $value->checked['easy-suite/easy-suite.php'];
     $latest = easy_suite_updater_latest(true);
     if ($latest === null || empty($latest)) {
         return $value;
@@ -112,13 +124,15 @@ function easy_suite_updater_check_for_update($value) {
     $item->requires    = '6.5';
     $item->requires_php = '8.0';
 
-    if (version_compare($latest['version'], EASY_SUITE_VERSION, '>')) {
+    if (version_compare($latest['version'], $installed, '>')) {
         $item->new_version = $latest['version'];
         $item->package     = $latest['package'];
+        unset($value->no_update['easy-suite/easy-suite.php']);
         $value->response['easy-suite/easy-suite.php'] = $item;
     } else {
-        $item->new_version = EASY_SUITE_VERSION;
+        $item->new_version = $installed;
         $item->package     = '';
+        unset($value->response['easy-suite/easy-suite.php']);
         $value->no_update['easy-suite/easy-suite.php'] = $item;
     }
     return $value;
