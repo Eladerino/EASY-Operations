@@ -160,7 +160,17 @@
   let setupIsRerun = false;
   let setupSavedUser = '';
 
+  // Fill every version label (main footer + setup screen) from the
+  // running app, so support can always ask "what version are you on".
+  function setVersionLabels(info) {
+    if (!info || !info.version) return;
+    document.querySelectorAll('.app-version').forEach((el) => {
+      el.textContent = 'EASY Operations v' + info.version;
+    });
+  }
+
   function showSetupScreen(isRerun, info) {
+    setVersionLabels(info);
     setupIsRerun = isRerun;
     document.body.classList.add('setup-mode');
     $('setupScreen').classList.remove('hidden');
@@ -949,6 +959,7 @@
     let info = null;
     try {
       info = await window.easyCert.getAppInfo();
+      setVersionLabels(info);
       const banner = $('configBanner');
       if (info.buildTag !== EXPECTED_BUILD_TAG) {
         banner.innerHTML = '';

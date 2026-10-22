@@ -641,7 +641,8 @@ class Easy_Safety_Cert_Notifications {
         $footer = '
     <tr>
       <td style="background:#f0f3f6;text-align:center;padding:15px;font-size:12px;color:#555;">
-        EASY Safety Training &middot; 44 Austin Street, St. John\'s, NL A1B 4C2<br>
+        EASY Safety Training &middot; St. John\'s, NL<br>
+        <a href="https://easysafety.ca/privacy-policy/" style="font-size:11px;color:#12853C;">Privacy Policy</a><br>
         <span style="font-size:11px;color:#777;">You&rsquo;re receiving this because you completed safety training with us.</span>
       </td>
     </tr>';
@@ -709,7 +710,8 @@ class Easy_Safety_Cert_Notifications {
                     . "Expiry Date: {$expiry_date}\n"
                     . "Instructor: {$instructor_name}\n\n"
                     . "Questions? Contact us at " . self::CONTACT_EMAIL . " or call " . self::CONTACT_PHONE . ".\n\n"
-                    . "EASY Safety Training · 44 Austin Street, St. John's, NL A1B 4C2\n"
+                    . "EASY Safety Training · St. John's, NL\n"
+                    . "Privacy Policy: https://easysafety.ca/privacy-policy/\n"
                     . "You're receiving this because you completed safety training with us.\n";
                 break;
 
@@ -782,7 +784,8 @@ class Easy_Safety_Cert_Notifications {
                     . "Expiry Date: {$expiry_date}\n"
                     . "Instructor: {$instructor_name}\n\n"
                     . "Questions? Contact us at " . self::CONTACT_EMAIL . " or call " . self::CONTACT_PHONE . ".\n\n"
-                    . "EASY Safety Training \u{00B7} 44 Austin Street, St. John's, NL A1B 4C2\n"
+                    . "EASY Safety Training \u{00B7} St. John's, NL\n"
+                    . "Privacy Policy: https://easysafety.ca/privacy-policy/\n"
                     . "You're receiving this because you completed safety training with us.\n";
                 break;
 
@@ -853,7 +856,8 @@ class Easy_Safety_Cert_Notifications {
                     . "Expiry Date: {$expiry_date}\n"
                     . "Instructor: {$instructor_name}\n\n"
                     . "Questions? Contact us at " . self::CONTACT_EMAIL . " or call " . self::CONTACT_PHONE . ".\n\n"
-                    . "EASY Safety Training \u{00B7} 44 Austin Street, St. John's, NL A1B 4C2\n"
+                    . "EASY Safety Training \u{00B7} St. John's, NL\n"
+                    . "Privacy Policy: https://easysafety.ca/privacy-policy/\n"
                     . "You're receiving this because you completed safety training with us.\n";
                 break;
 
@@ -1166,7 +1170,8 @@ class Easy_Safety_Cert_Notifications {
     </tr>
     <tr>
       <td style="background:#f0f3f6;text-align:center;padding:15px;font-size:12px;color:#555;">
-        EASY Safety Training &middot; 44 Austin Street, St. John\'s, NL A1B 4C2<br>
+        EASY Safety Training &middot; St. John\'s, NL<br>
+        <a href="https://easysafety.ca/privacy-policy/" style="font-size:11px;color:#12853C;">Privacy Policy</a><br>
         <span style="font-size:11px;color:#777;">You&rsquo;re receiving this because your organization was listed as the employer contact for these certifications.</span>
       </td>
     </tr>
@@ -1185,7 +1190,8 @@ class Easy_Safety_Cert_Notifications {
             . "If any details below look off, just reply to this email and we'll sort it out.\n\n"
             . $rows_text . "\n"
             . "Questions? Contact us at " . self::CONTACT_EMAIL . " or call " . self::CONTACT_PHONE . ".\n\n"
-            . "EASY Safety Training · 44 Austin Street, St. John's, NL A1B 4C2\n"
+            . "EASY Safety Training · St. John's, NL\n"
+            . "Privacy Policy: https://easysafety.ca/privacy-policy/\n"
             . "You're receiving this because your organization was listed as the employer contact for these certifications.\n";
 
         $mailed = false;
