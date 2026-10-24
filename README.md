@@ -45,11 +45,14 @@ Who can author or review courses is set in the same Settings page.
 
 1. `npm install`, then `npm start`. Installed copies come from the installer
    instead.
-2. On first launch, sign in with your WordPress username and an application
-   password. Create the password under Users → Profile → Application
-   Passwords; the setup screen has a button that opens that page. Click
-   **Test connection**, enter your email, pick the card printer if this
-   computer has one, then **Save & start**.
+2. On first launch, click **Sign in with easysafety.ca**. A window opens on
+   the website: sign in with your normal website login and approve the
+   computer. WordPress creates an application password for this computer
+   and hands it to the app; you never see it. Pick the card printer if this
+   computer has one, then **Save & start**. If the saved sign-in stops
+   working (for example it was revoked from your WordPress profile), sign in
+   the same way again. Pasting an application password by hand is still
+   available under **Use an application password instead**.
 3. Settings are saved to `%APPDATA%\EASYOperations\config.json`, with the
    password encrypted. The **Setup** button in the header changes the
    sign-in or the printer.
@@ -93,6 +96,10 @@ publishing.
 
 - The site address is fixed to `https://easysafety.ca`.
 - Application passwords are encrypted with the Windows credential store.
+- The website sign-in runs in its own window with a throwaway session, so
+  the website login is not kept. Each computer shows up by name under
+  Application Passwords on the user's WordPress profile, where it can be
+  revoked on its own.
 - The window can only load the app's own files. All network calls go
   through the main process.
 - Only known certificate fields are sent. EASY Suite checks them again on
@@ -119,6 +126,7 @@ publishing.
 | Path | What |
 |---|---|
 | `main.js` | Main process: sign-in, posting, printing and all site calls |
+| `websignin.js` | The "Sign in with easysafety.ca" window |
 | `preload.js` | The fixed set of functions the window can call |
 | `renderer/` | The UI, one script per tab |
 | `pdfgen.js`, `EASY_CertTemplate.pdf` | Certificate PDF generation and its template |
@@ -126,8 +134,8 @@ publishing.
 | `forge.config.js` | Packaging and installer settings |
 | `test/` | Unit tests |
 | `site-plugins/easy-suite/` | The WordPress plugin (not part of the app) |
-| `mobile/` | The EASY Manager Android app (see `mobile/README.md`) |
+| `mobile/` | The EASY Manager phone app: Android APK, and the web version for iPhones that EASY Suite serves (see `mobile/README.md`) |
 | `.github/workflows/release.yml` | Release build |
 | `.github/workflows/build-apk.yml` | EASY Manager APK build |
-| `.github/workflows/publish-suite.yml` | Packages the Suite zip onto a prerelease for the plugin self-updater |
+| `.github/workflows/publish-suite.yml` | Packages the Suite zip (with the EASY Manager web version) onto a prerelease for the plugin self-updater, and keeps only the two newest suite releases |
 | `.github/workflows/check-suite.yml` | Syntax-checks the Suite's PHP on pull requests |

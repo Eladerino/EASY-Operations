@@ -64,6 +64,7 @@ always stay on.
 | Certificate PDF gatekeeper (locked) | Keeps PDFs in a private folder, served at `/cert-pdf/<number>/` only to the owner and staff |
 | App bridge: approvals & expiring certs | Feeds the app's Accounts queue and Expiring soon list |
 | App bridge: Course Builder sync | Stores Course Builder courses, reviews and their photo/audio/video files on the site (files in a private folder, readable only by course authors and reviewers) |
+| EASY Manager web version | `/easy-app/` opens the phone app's web version (for iPhones), which the Publish Suite workflow copies into the plugin's `app/` folder. It is plain files; this module only adds the short address |
 | Online courses: license keys | Single-use course keys and enrollments (needs Course Builder sync) |
 | Certificate emails | Student email on publish, expiry reminders, twice-daily employer digest. Email footers give the city only (St. John's, NL) and link the Privacy Policy, as does the branded wrapper around other outgoing mail |
 | Instructor calendar feed | Private calendar feed per instructor at `/instructor-calendar/<token>.ics` (tokened URLs; instructors re-subscribe once) |

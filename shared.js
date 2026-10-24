@@ -509,8 +509,27 @@ Course chapters:
     return `${targetYear}-${pad(month)}-${pad(day)}`;
   }
 
+  // Reads the URL WordPress's "Authorize Application" page sends back
+  // after someone approves (or declines) the app. Returns
+  // { user, appPassword } on approval, { rejected: true } when declined,
+  // or null for anything that is not a well-formed answer from siteUrl.
+  function parseSignInCallback(rawUrl, scheme, siteUrl) {
+    let u;
+    try { u = new URL(String(rawUrl)); } catch (e) { return null; }
+    if (u.protocol !== scheme + ':' || u.hostname !== 'auth') return null;
+    if (u.pathname === '/rejected' || u.searchParams.get('success') === 'false') return { rejected: true };
+    if (u.pathname !== '/callback') return null;
+    const site = String(u.searchParams.get('site_url') || '').replace(/\/+$/, '').toLowerCase();
+    const user = String(u.searchParams.get('user_login') || '').trim();
+    const appPassword = String(u.searchParams.get('password') || '');
+    if (site !== String(siteUrl).replace(/\/+$/, '').toLowerCase()) return null;
+    if (!user || !appPassword) return null;
+    return { user, appPassword };
+  }
+
   const api = {
     titlesByCategory,
+    parseSignInCallback,
     WPNL_CATEGORY,
     FORKLIFT_VALUE,
     makeCertificateNumber,

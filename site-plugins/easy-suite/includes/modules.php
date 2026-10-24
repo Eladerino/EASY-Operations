@@ -37,6 +37,12 @@ function easy_suite_module_registry() {
             'default'     => true,
             'locked'      => false,
         ],
+        'phone-app' => [
+            'label'       => 'EASY Manager web version',
+            'description' => 'Serves the EASY Manager phone app as a web app (for iPhones: open it in Safari, then Share, Add to Home Screen) at /easy-app/. It is the same app as the Android version, copied in by the Publish Suite workflow, and signs in with the normal website login.',
+            'default'     => true,
+            'locked'      => false,
+        ],
         'licenses' => [
             'label'       => 'Online courses: license keys',
             'description' => 'Single-use course keys (EASY-XXXX-XXXX-XXXX), the route learners redeem them through, and EASY Suite → Online courses for issuing, looking up, revoking and resending keys. Creates three database tables the first time it runs. Needs Course Builder sync for its course list.',
