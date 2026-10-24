@@ -1,0 +1,217 @@
+// course-schema.js — the Course Builder's course format, no DOM.
+//
+// Every course carries `schemaVersion`. Anything that reads a course (this
+// computer's storage, the site, backup and review files) goes through
+// upgradeCourse(), which runs the migrations below in order and then fills
+// in anything missing, so a draft saved by any older app version opens in
+// this one. Courses with no schemaVersion are version 1 (everything saved
+// before versioning existed).
+//
+// A course saved by a NEWER app is left exactly as it is and marked
+// read-only: this app can't know what the newer fields mean, and rewriting
+// them would damage the course. The site refuses saves from an app older
+// than the course it holds (EASY Suite courses module, `schema` in the
+// request body), which also covers app versions from before this file.
+//
+// Changing the format:
+//   1. Bump SCHEMA_VERSION.
+//   2. Add MIGRATIONS[old] = (course) => course, turning a version-`old`
+//      course into version old + 1. Never edit an existing migration;
+//      courses in the wild may be at any version. Keep chapter, segment and
+//      question ids as they are: learner progress will refer to them.
+//   3. Add a sample course at the old version to test/fixtures/course-drafts/.
+//   4. Make sure the live site runs an EASY Suite with the format guard
+//      (2.2.43 or later) before releasing the app.
+// Loaded by the renderer via <script> and unit-testable in plain Node.
+(function (root) {
+  'use strict';
+
+  const SCHEMA_VERSION = 1;
+
+  // MIGRATIONS[n] upgrades a version-n course to version n + 1.
+  const MIGRATIONS = {};
+
+  const SEGMENT_TYPES = ['video', 'text', 'photo', 'interactive', 'quiz'];
+  const STATUSES = ['draft', 'in_review', 'approved'];
+  const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+  // Course ids become the site's post slug, so they follow the site's rule.
+  const COURSE_ID_RE = /^[a-z0-9_-]{1,64}$/;
+
+  const uid = (p) => (p || 'id') + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+  const str = (v) => (typeof v === 'string' ? v : '');
+  const num = (v, fallback) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
+  const clampInt = (v, lo, hi, fallback) => {
+    const n = Math.round(num(v, fallback));
+    return Math.max(lo, Math.min(hi, n));
+  };
+
+  /* ---------------- factories ---------------- */
+
+  function newQuestion() {
+    return { id: uid('q'), q: '', kind: 'mc', options: ['', ''], answer: 0 };
+  }
+  function newSegment(type) {
+    const base = { id: uid('seg'), type, title: '' };
+    switch (type) {
+      case 'video': return Object.assign(base, { fileName: '', durationSec: 0, transcript: '' });
+      case 'text': return Object.assign(base, { body: '', narrationScript: '', audioFileName: '', audioSec: 0 });
+      case 'photo': return Object.assign(base, { fileName: '', caption: '', alt: '' });
+      case 'interactive': return Object.assign(base, { description: '', estMin: 3 });
+      case 'quiz': return Object.assign(base, { questions: [newQuestion()] });
+      default: return base;
+    }
+  }
+  function newChapter(title) {
+    return { id: uid('ch'), title: title || 'New chapter', status: 'draft', segments: [], quizQuestions: [] };
+  }
+  function newCourse(title) {
+    const now = new Date().toISOString();
+    return {
+      id: uid('c'), schemaVersion: SCHEMA_VERSION,
+      title: title || 'Untitled course', description: '',
+      status: 'draft', reviewVersion: 0, approvedVersion: 0,
+      liveEditedSinceReview: false, reviewNote: '',
+      passMark: 80, maxAttempts: 3, onFail: 'retry',
+      chapters: [], finalQuiz: { questions: [] },
+      createdAt: now, updatedAt: now,
+    };
+  }
+
+  /* ---------------- versions ---------------- */
+
+  // The version a course says it is. Missing or unreadable means 1.
+  function schemaOf(course) {
+    const v = isObj(course) ? course.schemaVersion : undefined;
+    return Number.isInteger(v) && v >= 1 ? v : 1;
+  }
+  const isNewerThanApp = (course) => schemaOf(course) > SCHEMA_VERSION;
+
+  // Runs migrations from the course's version up to `target`. Exposed with
+  // the table as a parameter so tests can check the chain itself.
+  function migrateWith(course, migrations, target) {
+    let v = schemaOf(course);
+    while (v < target) {
+      const step = migrations[v];
+      if (typeof step !== 'function') throw new Error('No Course Builder migration from version ' + v + '.');
+      course = step(course) || course;
+      v += 1;
+      course.schemaVersion = v;
+    }
+    return course;
+  }
+
+  /* ---------------- normalization ----------------
+   * After migrating, fill in anything missing or malformed so a damaged
+   * shape (corrupted storage, hand-edited file) degrades gracefully instead
+   * of throwing halfway through a render. Unknown fields are kept. Ids that
+   * are missing, unsafe to put in the page, or used twice in one course get
+   * new ones, because edits find their target by id. */
+
+  function freshId(seen, id, prefix, re) {
+    if (typeof id === 'string' && (re || ID_RE).test(id) && !seen.has(id)) { seen.add(id); return id; }
+    let next = uid(prefix);
+    while (seen.has(next)) next = uid(prefix);
+    seen.add(next);
+    return next;
+  }
+
+  function normalizeQuestion(q, seen) {
+    if (!isObj(q)) q = {};
+    q.id = freshId(seen, q.id, 'q');
+    q.q = str(q.q);
+    if (q.kind !== 'tf' && q.kind !== 'mc') q.kind = 'mc';
+    if (q.kind === 'tf') {
+      q.options = ['True', 'False'];
+      if (q.answer !== 0 && q.answer !== 1) q.answer = 0;
+    } else {
+      const opts = Array.isArray(q.options) ? q.options.map((o) => (typeof o === 'string' ? o : (o == null ? '' : String(o)))) : [];
+      while (opts.length < 2) opts.push('');
+      q.options = opts;
+      if (!Number.isInteger(q.answer) || q.answer < 0 || q.answer >= q.options.length) q.answer = 0;
+    }
+    return q;
+  }
+
+  function normalizeSegment(seg, seen) {
+    if (!isObj(seg)) seg = {};
+    if (SEGMENT_TYPES.indexOf(seg.type) < 0) seg.type = 'text';
+    seg.id = freshId(seen, seg.id, 'seg');
+    seg.title = str(seg.title);
+    // Fill each field the segment type should have, with its blank value.
+    const blank = newSegment(seg.type);
+    Object.keys(blank).forEach((k) => {
+      if (k === 'id' || k === 'type' || k === 'questions') return;
+      if (typeof seg[k] !== typeof blank[k]) seg[k] = blank[k];
+    });
+    if (seg.type === 'video') seg.durationSec = Math.max(0, num(seg.durationSec, 0));
+    if (seg.type === 'text') seg.audioSec = Math.max(0, num(seg.audioSec, 0));
+    if (seg.type === 'interactive') seg.estMin = clampInt(seg.estMin, 1, 30, 3);
+    if (seg.type === 'quiz') {
+      seg.questions = (Array.isArray(seg.questions) ? seg.questions : []).map((q) => normalizeQuestion(q, seen));
+    }
+    return seg;
+  }
+
+  function normalizeChapter(ch, seen) {
+    if (!isObj(ch)) ch = {};
+    ch.id = freshId(seen, ch.id, 'ch');
+    ch.title = str(ch.title);
+    ch.segments = (Array.isArray(ch.segments) ? ch.segments : []).map((s) => normalizeSegment(s, seen));
+    ch.quizQuestions = (Array.isArray(ch.quizQuestions) ? ch.quizQuestions : []).map((q) => normalizeQuestion(q, seen));
+    return ch;
+  }
+
+  function normalizeCourse(c) {
+    if (!isObj(c)) return newCourse('');
+    const seen = new Set();
+    c.id = freshId(new Set(), c.id, 'c', COURSE_ID_RE);
+    c.schemaVersion = schemaOf(c);
+    c.title = str(c.title);
+    c.description = str(c.description);
+    if (STATUSES.indexOf(c.status) < 0) c.status = 'draft';
+    c.reviewVersion = Math.max(0, Math.round(num(c.reviewVersion, 0)));
+    c.approvedVersion = Math.max(0, Math.round(num(c.approvedVersion, 0)));
+    c.liveEditedSinceReview = !!c.liveEditedSinceReview;
+    c.reviewNote = str(c.reviewNote);
+    c.passMark = clampInt(c.passMark, 1, 100, 80);
+    c.maxAttempts = clampInt(c.maxAttempts, 1, 10, 3);
+    if (c.onFail !== 'retry' && c.onFail !== 'contact') c.onFail = 'retry';
+    const now = new Date().toISOString();
+    if (!str(c.createdAt) || Number.isNaN(Date.parse(c.createdAt))) c.createdAt = str(c.updatedAt) && !Number.isNaN(Date.parse(c.updatedAt)) ? c.updatedAt : now;
+    if (!str(c.updatedAt) || Number.isNaN(Date.parse(c.updatedAt))) c.updatedAt = c.createdAt;
+    c.chapters = (Array.isArray(c.chapters) ? c.chapters : []).map((ch) => normalizeChapter(ch, seen));
+    if (!isObj(c.finalQuiz)) c.finalQuiz = { questions: [] };
+    c.finalQuiz.questions = (Array.isArray(c.finalQuiz.questions) ? c.finalQuiz.questions : []).map((q) => normalizeQuestion(q, seen));
+    return c;
+  }
+
+  // The one way in for a course from anywhere. Returns a usable course at
+  // the current version, or (when it came from a newer app) the untouched
+  // original. Fields starting with "_" are this computer's sync bookkeeping
+  // and pass through unchanged.
+  function upgradeCourse(course) {
+    if (!isObj(course)) return normalizeCourse(null);
+    if (isNewerThanApp(course)) return course;
+    return normalizeCourse(migrateWith(course, MIGRATIONS, SCHEMA_VERSION));
+  }
+
+  const api = {
+    SCHEMA_VERSION,
+    MIGRATIONS,
+    SEGMENT_TYPES,
+    uid,
+    newQuestion,
+    newSegment,
+    newChapter,
+    newCourse,
+    schemaOf,
+    isNewerThanApp,
+    migrateWith,
+    normalizeCourse,
+    upgradeCourse,
+  };
+
+  root.EasyCourseSchema = api;
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this);

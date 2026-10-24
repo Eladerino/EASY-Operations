@@ -24,6 +24,14 @@
  * never rendered by WordPress). Anything that displays it must escape it, as
  * the app does.
  *
+ * Format versions. Each course says which format it is in (schemaVersion,
+ * missing = 1); the app upgrades older ones when it reads them (see
+ * renderer/course-schema.js). Saves send `schema`, the newest format that
+ * app understands (missing = 1, which covers apps from before versioning).
+ * A save over a course stored in a newer format than that is refused with
+ * 426, so an old app can't strip fields it doesn't know about. Snapshots and
+ * the final package carry schemaVersion so the module player can tell too.
+ *
  * Routes (easy/v1/course-builder/...):
  *   GET    me                             roles + pending review count
  *   GET    courses                        every course
@@ -157,6 +165,12 @@ function easy_course_signature($content) {
     return md5((string) easy_course_json_encode($copy));
 }
 
+/** Format version of stored or incoming course content (missing = 1). */
+function easy_course_schema_of($content) {
+    $v = (is_object($content) && isset($content->schemaVersion)) ? $content->schemaVersion : 1;
+    return (is_int($v) && $v >= 1) ? $v : 1;
+}
+
 function easy_course_iso($gmt) {
     return $gmt ? gmdate('c', strtotime($gmt . ' UTC')) : null;
 }
@@ -207,10 +221,19 @@ function easy_course_content_from_request(WP_REST_Request $request, $cid) {
     if ($json === false) {
         return new WP_Error('easy_course_invalid', 'The course could not be read.', ['status' => 400]);
     }
+    if (isset($course->schemaVersion) && !(is_int($course->schemaVersion) && $course->schemaVersion >= 1)) {
+        return new WP_Error('easy_course_invalid', 'The course format version is not readable.', ['status' => 400]);
+    }
     if (strlen($json) > EASY_COURSE_MAX_BYTES) {
         return new WP_Error('easy_course_too_big', 'This course is too large to save (over 2 MB). Media files are not stored in the course, so check for very long pasted text.', ['status' => 413]);
     }
-    return ['course' => $course, 'json' => $json, 'baseRev' => (is_object($body) && isset($body->baseRev)) ? (int) $body->baseRev : 0];
+    $schema = (is_object($body) && isset($body->schema) && is_int($body->schema) && $body->schema >= 1) ? $body->schema : 1;
+    return [
+        'course'  => $course,
+        'json'    => $json,
+        'baseRev' => (is_object($body) && isset($body->baseRev)) ? (int) $body->baseRev : 0,
+        'schema'  => $schema,
+    ];
 }
 
 function easy_course_stale_error(WP_Post $post) {
@@ -259,11 +282,19 @@ function easy_course_save_content($cid, array $input) {
         return get_post($id);
     }
 
+    $stored = easy_course_stored_content($post->ID);
+    if (easy_course_schema_of($stored) > $input['schema']) {
+        return new WP_Error(
+            'easy_course_newer_format',
+            'This course was saved by a newer version of EASY Operations. Update the app on this computer to keep editing it.',
+            ['status' => 426]
+        );
+    }
     $rev = (int) get_post_meta($post->ID, '_easy_course_rev', true);
     if ($input['baseRev'] !== $rev) {
         return easy_course_stale_error($post);
     }
-    $changed = easy_course_signature(easy_course_stored_content($post->ID)) !== easy_course_signature($input['course']);
+    $changed = easy_course_signature($stored) !== easy_course_signature($input['course']);
     // Compare-and-set: matches zero rows if another save already moved the counter on.
     if (!update_post_meta($post->ID, '_easy_course_rev', $rev + 1, (string) $rev)) {
         return easy_course_stale_error(get_post($post->ID));
@@ -317,7 +348,7 @@ function easy_course_export_snapshot(WP_Post $snap) {
 /** The part of a course a reviewer signs off on (same as the app's snapshotOf). */
 function easy_course_snapshot_content($course) {
     $snap = new stdClass();
-    foreach (['title', 'description', 'passMark', 'maxAttempts', 'onFail', 'chapters', 'finalQuiz'] as $key) {
+    foreach (['schemaVersion', 'title', 'description', 'passMark', 'maxAttempts', 'onFail', 'chapters', 'finalQuiz'] as $key) {
         if (property_exists($course, $key)) {
             $snap->$key = $course->$key;
         }
@@ -373,14 +404,15 @@ function easy_course_final_package(WP_Post $course) {
         if ((int) get_post_meta($snap->ID, '_easy_snap_version', true) === $version) {
             $s = easy_course_export_snapshot($snap);
             return [
-                'package'    => 'easy-course-final',
-                'format'     => 1,
-                'kind'       => 'final',
-                'courseId'   => $course->post_name,
-                'version'    => $version,
-                'approvedBy' => $s['decidedBy'],
-                'approvedAt' => $s['decidedAt'],
-                'course'     => $s['course'],
+                'package'       => 'easy-course-final',
+                'format'        => 1,
+                'kind'          => 'final',
+                'schemaVersion' => easy_course_schema_of($s['course']),
+                'courseId'      => $course->post_name,
+                'version'       => $version,
+                'approvedBy'    => $s['decidedBy'],
+                'approvedAt'    => $s['decidedAt'],
+                'course'        => $s['course'],
             ];
         }
     }

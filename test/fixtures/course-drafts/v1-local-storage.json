@@ -1,0 +1,67 @@
+{
+  "_about": "localStorage easyBuilder.courses.v1 as App 1.1-1.2.9 left it: no schemaVersion, sync bookkeeping fields, every segment type.",
+  "source": "localStorage",
+  "data": [
+    {
+      "id": "c_mgv3k2a1b2c3d4",
+      "title": "WHMIS 2015 Online Theory",
+      "description": "The classroom part of WHMIS, done at your own pace.",
+      "status": "in_review",
+      "reviewVersion": 2,
+      "approvedVersion": 1,
+      "liveEditedSinceReview": true,
+      "reviewNote": "",
+      "passMark": 80,
+      "maxAttempts": 3,
+      "onFail": "retry",
+      "createdAt": "2026-10-12T14:02:11.000Z",
+      "updatedAt": "2026-10-20T18:44:09.000Z",
+      "_rev": 14,
+      "_syncedSig": "{\"id\":\"c_mgv3k2a1b2c3d4\"}",
+      "_siteBy": "author1",
+      "chapters": [
+        {
+          "id": "ch_mgv3k9x1y2z3",
+          "title": "Welcome and why this matters",
+          "status": "draft",
+          "segments": [
+            { "id": "seg_mgv3ka1", "type": "video", "title": "Meet your instructor", "fileName": "welcome.mp4", "durationSec": 210, "transcript": "Hi, and welcome to WHMIS." },
+            { "id": "seg_mgv3ka2", "type": "text", "title": "What WHMIS covers", "body": "WHMIS stands for Workplace Hazardous Materials Information System.", "narrationScript": "WHMIS stands for...", "audioFileName": "whmis-intro.mp3", "audioSec": 95 },
+            { "id": "seg_mgv3ka3", "type": "photo", "title": "Supplier label", "fileName": "label-closeup.jpg", "caption": "A supplier label on a jug of degreaser", "alt": "Close up of a WHMIS supplier label with two pictograms" },
+            { "id": "seg_mgv3ka4", "type": "interactive", "title": "Match the pictograms", "description": "Drag each pictogram onto the product it belongs to.", "estMin": 4 },
+            { "id": "seg_mgv3ka5", "type": "quiz", "title": "Quick check", "questions": [
+              { "id": "q_mgv3kb1", "q": "Who must provide a safety data sheet?", "kind": "mc", "options": ["The supplier", "The worker", "Nobody"], "answer": 0 }
+            ] }
+          ],
+          "quizQuestions": [
+            { "id": "q_mgv3kb2", "q": "A supplier label must be on every container from the supplier.", "kind": "tf", "options": ["True", "False"], "answer": 0 }
+          ]
+        }
+      ],
+      "finalQuiz": {
+        "questions": [
+          { "id": "q_mgv3kb3", "q": "What does the skull and crossbones pictogram mean?", "kind": "mc", "options": ["Acute toxicity", "Flammable", "Corrosive", "Oxidizer"], "answer": 0 }
+        ]
+      }
+    },
+    {
+      "id": "c_mgv4aaaa0001",
+      "title": "Fall Protection Theory",
+      "description": "",
+      "status": "draft",
+      "reviewVersion": 0,
+      "approvedVersion": 0,
+      "liveEditedSinceReview": false,
+      "reviewNote": "Chapter 2 needs a transcript.",
+      "passMark": 75,
+      "maxAttempts": 2,
+      "onFail": "contact",
+      "createdAt": "2026-10-15T10:00:00.000Z",
+      "updatedAt": "2026-10-15T10:30:00.000Z",
+      "_rev": 0,
+      "_syncedSig": "",
+      "chapters": [],
+      "finalQuiz": { "questions": [] }
+    }
+  ]
+}
