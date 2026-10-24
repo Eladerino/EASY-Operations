@@ -235,3 +235,60 @@ test('migrations run in order from whatever version a course is at', () => {
   assert.deepEqual(current, { schemaVersion: 3, keep: true });
   assert.throws(() => S.migrateWith({}, { 1: (c) => c }, 3), /migration from version 2/);
 });
+
+test('lesson text: paragraphs, bullets and bold, with everything else escaped', () => {
+  assert.equal(
+    S.formatLessonText('Check the **forks** <daily>\n\n- Tires\n- Horn & lights\nThen sign off.'),
+    '<p>Check the <strong>forks</strong> &lt;daily&gt;</p><ul><li>Tires</li><li>Horn &amp; lights</li></ul><p>Then sign off.</p>'
+  );
+  assert.equal(S.formatLessonText('line one\nline two'), '<p>line one<br>line two</p>');
+  assert.equal(S.formatLessonText('** not bold **'), '<p>** not bold **</p>');
+  assert.equal(S.formatLessonText(''), '');
+});
+
+test('question explanations are kept, and courses without them are unchanged', () => {
+  const c = S.upgradeCourse({ chapters: [{ quizQuestions: [{ id: 'q_1', q: 'Why?', explain: 'Because.' }, { id: 'q_2', q: 'Old' }] }] });
+  assert.equal(c.chapters[0].quizQuestions[0].explain, 'Because.');
+  assert.ok(!('explain' in c.chapters[0].quizQuestions[1]));
+  assert.equal(S.newQuestion().explain, '');
+});
+
+test('duplicating gives new unique ids and the same content', () => {
+  const [c] = coursesIn(load('v1-local-storage.json'));
+  const course = S.upgradeCourse(copy(c));
+  const ch = course.chapters[0];
+  const dup = S.copyWithNewIds(ch, 'ch');
+  const ids = (x) => JSON.stringify(x).match(/"id":"[^"]+"/g);
+  ids(dup).forEach((id) => assert.ok(!ids(ch).includes(id), 'reused ' + id));
+  const strip = (x) => JSON.parse(JSON.stringify(x).replace(/"id":"[^"]+"/g, '"id":""'));
+  assert.deepEqual(strip(dup), strip(ch));
+  course.chapters.push(dup);
+  assertUsable(S.upgradeCourse(copy(course)), 'course with duplicate chapter');
+  assert.equal(dup.segments[0].file.name, 'welcome.mp4', 'file references are shared');
+});
+
+test('what changed: renames, additions, removals, answer changes, reorders', () => {
+  const [c] = coursesIn(load('v1-local-storage.json'));
+  const before = S.upgradeCourse(copy(c));
+  const after = copy(before);
+  assert.deepEqual(S.diffCourses(before, after), []);
+  after.passMark = 70;
+  const ch = after.chapters[0];
+  ch.title = 'Welcome';
+  ch.segments[1].body = 'New text';
+  ch.segments.splice(2, 1); // remove the photo
+  ch.segments.reverse();
+  ch.quizQuestions[0].answer = 1;
+  after.finalQuiz.questions.push({ id: 'q_new', q: 'Who can operate a forklift?', kind: 'mc', options: ['Anyone', 'Trained operators'], answer: 1 });
+  after.chapters.push({ id: 'ch_new', title: 'Stability', segments: [], quizQuestions: [] });
+  const d = S.diffCourses(before, after);
+  const has = (re) => assert.ok(d.some((t) => re.test(t)), 'missing ' + re + ' in ' + JSON.stringify(d, null, 1));
+  has(/^Pass mark 80% → 70%\.$/);
+  has(/renamed to "Welcome"/);
+  has(/text block "What WHMIS covers" changed \(lesson text\)/);
+  has(/photo block "Supplier label" removed/);
+  has(/blocks reordered/);
+  has(/question "A supplier label.*" changed \(correct answer is different\)/);
+  has(/^Final quiz: question "Who can operate a forklift\?" added\.$/);
+  has(/^Chapter 2 "Stability" added\.$/);
+});

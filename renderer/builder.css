@@ -616,3 +616,22 @@
 .b-pv-figure { margin: 0; }
 .b-pv-img { display: block; max-width: 100%; border-radius: 8px; }
 .b-pv-figure figcaption { font-size: 0.9rem; color: var(--muted); margin-top: 6px; }
+
+/* Learner preview: answerable questions. */
+.b-pv-qs { margin: 10px 0 0; padding-left: 20px; }
+.b-pv-q { margin-bottom: 14px; }
+.b-pv-q-text { margin: 0 0 6px; font-weight: 600; }
+.b-pv-opts { display: flex; flex-direction: column; gap: 6px; }
+.b-pv-opt {
+  text-align: left; padding: 8px 12px; border-radius: 8px; cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.25); background: rgba(255, 255, 255, 0.06); color: inherit; font: inherit;
+}
+.b-pv-opt:hover { background: rgba(255, 255, 255, 0.12); }
+.b-pv-opt-right { border-color: #4fbf7a; background: rgba(79, 191, 122, 0.2); }
+.b-pv-opt-wrong { border-color: #e06c6c; background: rgba(224, 108, 108, 0.2); }
+.b-pv-feedback { margin-top: 8px; font-size: 0.92rem; }
+.b-pv-lesson-body ul { margin: 6px 0 10px; padding-left: 22px; }
+.b-q-actions { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
+.b-diff { margin: 8px 0; font-size: 13px; }
+.b-diff summary { cursor: pointer; font-weight: 600; }
+.b-diff ul { margin: 6px 0 0; padding-left: 20px; }
