@@ -140,14 +140,44 @@ test('sync bookkeeping and unknown fields pass through', () => {
   assert.deepEqual(d.extraFieldFromSomewhere, { keep: 'me' });
 });
 
-test('real v1 content is unchanged apart from the version stamp', () => {
+test('v1 content is unchanged apart from the version and the 1 -> 2 file fields', () => {
   for (const name of ['v1-site-entry.json', 'v1-local-storage.json', 'v1-backup-file.json']) {
     for (const original of coursesIn(load(name))) {
       const out = S.upgradeCourse(copy(original));
+      // Undo exactly what migration 1 does; everything else must match.
       delete out.schemaVersion;
+      out.chapters.forEach((ch) => ch.segments.forEach((seg) => {
+        if (seg.type === 'video' || seg.type === 'photo') { seg.fileName = seg.file ? seg.file.name : ''; delete seg.file; }
+        if (seg.type === 'video') delete seg.url;
+        if (seg.type === 'text') { seg.audioFileName = seg.audioFile ? seg.audioFile.name : ''; delete seg.audioFile; }
+      }));
       assert.deepEqual(out, original, name);
     }
   }
+});
+
+test('migration 1 -> 2: file names become not-yet-uploaded file references', () => {
+  const [c] = coursesIn(load('v1-local-storage.json'));
+  const segs = S.upgradeCourse(copy(c)).chapters[0].segments;
+  assert.deepEqual(segs[0].file, { id: 0, name: 'welcome.mp4', size: 0, type: '' });
+  assert.equal(segs[0].url, '');
+  assert.ok(!('fileName' in segs[0]));
+  assert.deepEqual(segs[1].audioFile, { id: 0, name: 'whmis-intro.mp3', size: 0, type: '' });
+  assert.ok(!('audioFileName' in segs[1]));
+  assert.deepEqual(segs[2].file, { id: 0, name: 'label-closeup.jpg', size: 0, type: '' });
+  const [b] = coursesIn(load('v1-backup-file.json'));
+  assert.equal(S.upgradeCourse(copy(b)).chapters[0].segments[0].audioFile, null, 'empty name means no file');
+});
+
+test('uploaded file references survive, broken ones are cleared', () => {
+  const [c] = coursesIn(load('v2-site-entry.json'));
+  const out = S.upgradeCourse(copy(c));
+  const segs = out.chapters[0].segments;
+  assert.deepEqual(segs[0].file, { id: 812, name: 'tank.mp4', size: 48211234, type: 'video/mp4' });
+  assert.equal(segs[0].url, 'https://vimeo.com/123456789');
+  assert.deepEqual(segs[1].file, { id: 813, name: 'hatch.jpg', size: 912003, type: 'image/jpeg' });
+  assert.equal(segs[2].audioFile, null);
+  assert.equal(S.filesIn(out).length, 2);
 });
 
 test('damaged draft: repairs are what the builder needs', () => {
@@ -164,6 +194,7 @@ test('damaged draft: repairs are what the builder needs', () => {
   assert.match(segs[2].id, SAFE_ID);
   assert.equal(segs[2].estMin, 30);
   assert.equal(segs[0].transcript, '');
+  assert.equal(segs[0].file, null);
   const [noId, tf] = c.chapters[0].quizQuestions;
   assert.match(noId.id, SAFE_ID);
   assert.deepEqual(noId.options, ['Only one option', '']);

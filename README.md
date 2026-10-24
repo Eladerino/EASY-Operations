@@ -28,7 +28,8 @@ against easysafety.ca and needs the site's **EASY Suite** plugin
   computer sees the same copy. If the site doesn't have EASY Suite's Course
   Builder sync, courses stay on one computer and reviews are passed as files.
   Backups go to `%APPDATA%\EASYOperations\course-builder-backups\`.
-  Each course records its format version (`renderer/course-schema.js`);
+  Photos, narration audio and video files upload to a private folder on
+  the site. Each course records its format version (`renderer/course-schema.js`);
   older drafts are upgraded when opened, and newer ones stay read-only.
 
 The tabs show badge counts for work waiting (approvals, expiring

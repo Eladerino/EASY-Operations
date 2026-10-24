@@ -45,6 +45,7 @@
  *   POST   reviews/<sid>/approve
  *   POST   reviews/<sid>/send-back {note}
  *   GET|POST authors {authors: []}
+ *   POST media, GET media/<id>            files for courses (course-media.php)
  */
 
 defined('ABSPATH') || exit;
@@ -52,6 +53,8 @@ defined('ABSPATH') || exit;
 define('EASY_COURSE_ID_PATTERN', '[a-z0-9_-]{1,64}');
 define('EASY_COURSE_MAX_BYTES', 2 * 1024 * 1024);
 define('EASY_COURSE_DEFAULT_AUTHORS', []);
+
+require_once __DIR__ . '/course-media.php';
 
 add_action('init', function () {
     $common = [
@@ -442,6 +445,11 @@ add_action('rest_api_init', function () {
                 'canManageAuthors' => easy_course_rest_can_manage_authors(),
                 'authors'          => easy_course_authors(),
                 'pendingReviews'   => $reviewer ? easy_course_pending_review_count() : 0,
+                'mediaMaxBytes'    => [
+                    'image' => easy_course_media_max_bytes('image'),
+                    'audio' => easy_course_media_max_bytes('audio'),
+                    'video' => easy_course_media_max_bytes('video'),
+                ],
                 'version'          => EASY_SUITE_VERSION,
             ];
         },
