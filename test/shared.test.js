@@ -79,8 +79,8 @@ test('nextFreeCertificateNumber: malformed candidate passes through untouched', 
 });
 
 test('parseSignInCallback: approval hands back user and password', () => {
-  const url = 'easyops://auth/callback?site_url=https%3A%2F%2Feasysafety.ca&user_login=pevans&password=abcd%20efgh%20ijkl';
-  assert.deepEqual(S.parseSignInCallback(url, 'easyops', 'https://easysafety.ca'), { user: 'pevans', appPassword: 'abcd efgh ijkl' });
+  const url = 'easyops://auth/callback?site_url=https%3A%2F%2Feasysafety.ca&user_login=staff1&password=abcd%20efgh%20ijkl';
+  assert.deepEqual(S.parseSignInCallback(url, 'easyops', 'https://easysafety.ca'), { user: 'staff1', appPassword: 'abcd efgh ijkl' });
 });
 
 test('parseSignInCallback: decline is reported, not treated as success', () => {
