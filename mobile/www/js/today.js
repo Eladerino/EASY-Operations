@@ -31,7 +31,8 @@
   }
 
   function classCard(ev) {
-    const card = U.el('div', 'card card-clickable');
+    const withRoster = window.EasyRoles.can('rosters');
+    const card = U.el('div', withRoster ? 'card card-clickable' : 'card');
     card.appendChild(U.el('div', 'card-title', ev.title));
     const meta = [
       ev.organizerName ? 'Instructor: ' + ev.organizerName : '',
@@ -45,8 +46,12 @@
     seats.id = 'seats-' + ev.id;
     if (ev.seats !== '') seats.textContent = 'Capacity ' + ev.seats + ' seats';
     card.appendChild(seats);
-    card.appendChild(U.el('div', 'card-meta', 'Tap to see who is on the roster.'));
-    card.addEventListener('click', () => openRoster(ev));
+    // Full rosters are office-only on the site, so other accounts get
+    // the class details without a roster to open.
+    if (withRoster) {
+      card.appendChild(U.el('div', 'card-meta', 'Tap to see who is on the roster.'));
+      card.addEventListener('click', () => openRoster(ev));
+    }
     return card;
   }
 
@@ -183,35 +188,48 @@
       if (node) node.textContent = value;
     };
     const today = U.todayYmd();
+    const R = window.EasyRoles;
 
-    window.EasyApi.draftCertCount()
-      .then((n) => set('countCerts', String(n)))
-      .catch(() => set('countCerts', 'n/a'));
-    window.EasyApi.pendingUsers()
-      .then((list) => set('countAccounts', String(list.length)))
-      .catch(() => set('countAccounts', 'n/a'));
-    window.EasyApi.eventsInRange(today, U.addMonths(today, 12))
-      .then((events) => {
-        set('countClasses', String(events.filter((ev) => window.EasyApi.isWaitingClass(ev)).length));
-      })
-      .catch(() => set('countClasses', 'n/a'));
-    window.EasyApi.mgmtQueue()
-      .then((q) => {
-        const open = (q.counts && q.counts.open) || 0;
-        set('countQueue', String(open));
-      })
-      .catch(() => set('countQueue', 'n/a'));
-    // Course reviews: a real count only when Brandon is a reviewer and
-    // the site answers. Anything else is n/a, never a broken screen.
-    window.EasyApi.courseBuilderMe()
-      .then((me) => {
-        if (me && me.isReviewer && typeof me.pendingReviews === 'number') {
-          set('countReviews', String(me.pendingReviews));
-        } else {
-          set('countReviews', 'n/a');
-        }
-      })
-      .catch(() => set('countReviews', 'n/a'));
+    // Only the counts this account can act on are asked for (the boxes
+    // for the rest are hidden by roles.js).
+    if (R.can('publishCerts')) {
+      window.EasyApi.draftCertCount()
+        .then((n) => set('countCerts', String(n)))
+        .catch(() => set('countCerts', 'n/a'));
+    }
+    if (R.can('accounts')) {
+      window.EasyApi.pendingUsers()
+        .then((list) => set('countAccounts', String(list.length)))
+        .catch(() => set('countAccounts', 'n/a'));
+    }
+    if (R.can('classDrafts')) {
+      window.EasyApi.eventsInRange(today, U.addMonths(today, 12))
+        .then((events) => {
+          set('countClasses', String(events.filter((ev) => window.EasyApi.isWaitingClass(ev)).length));
+        })
+        .catch(() => set('countClasses', 'n/a'));
+    }
+    if (R.can('queue')) {
+      window.EasyApi.mgmtQueue()
+        .then((q) => {
+          const open = (q.counts && q.counts.open) || 0;
+          set('countQueue', String(open));
+        })
+        .catch(() => set('countQueue', 'n/a'));
+    }
+    // Course reviews: a real count only when the account is a reviewer
+    // and the site answers. Anything else is n/a, never a broken screen.
+    if (R.can('publishCerts')) {
+      window.EasyApi.courseBuilderMe()
+        .then((me) => {
+          if (me && me.isReviewer && typeof me.pendingReviews === 'number') {
+            set('countReviews', String(me.pendingReviews));
+          } else {
+            set('countReviews', 'n/a');
+          }
+        })
+        .catch(() => set('countReviews', 'n/a'));
+    }
     // Suite version line: also the "is the site even answering" check.
     window.EasyApi.appConfig()
       .then((cfg) => {
@@ -559,6 +577,9 @@
     $('todayMain').classList.add('hidden');
     $('activityView').classList.remove('hidden');
     if (window.EasyUi) window.EasyUi.openSubview(closeActivity);
+    // The site-wide log is management only (roles.js).
+    if (!window.EasyRoles.can('siteActivity')) activitySource = 'phone';
+    syncActivitySegment();
     // Re-entering on Site is a refresh, like tapping the segment.
     if (activitySource === 'site') loadSiteActivity(true);
     else renderActivity();

@@ -114,6 +114,8 @@ html, body {
 ::selection { background: var(--accent-ring); }
 
 .hidden { display: none !important; }
+/* Screens and sections this account has no use for (see roles.js). */
+.role-hidden { display: none !important; }
 
 /* App shell: body is a full-height flex column and #appView stacks the
    header, the scrolling pages, and the tab bar in normal flow. The
