@@ -602,3 +602,17 @@
 
 .b-kv { font-size: 13px; color: var(--muted); }
 .b-kv strong { color: var(--ink); }
+
+/* Course media: attached files in the editor and the learner preview. */
+.b-file { display: flex; flex-direction: column; gap: 6px; }
+.b-file-name { font-size: 13.5px; overflow-wrap: anywhere; }
+.b-file-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.b-media-thumb { max-width: 220px; max-height: 160px; border-radius: 6px; border: 1px solid var(--line); object-fit: cover; }
+.b-media-audio { width: 100%; max-width: 360px; }
+.b-media-video { width: 100%; max-width: 420px; border-radius: 6px; background: #000; }
+.b-media-loading { min-height: 40px; background: #f2f5f9; }
+.b-pv-media { margin: 8px 0; }
+.b-pv-media .b-media-video { max-width: 100%; }
+.b-pv-figure { margin: 0; }
+.b-pv-img { display: block; max-width: 100%; border-radius: 8px; }
+.b-pv-figure figcaption { font-size: 0.9rem; color: var(--muted); margin-top: 6px; }

@@ -12,6 +12,7 @@ on:
     branches: [main]
     paths:
       - 'site-plugins/**'
+      - 'test/php/**'
       - '.github/workflows/check-suite.yml'
   push:
     branches: [main]
@@ -44,3 +45,6 @@ jobs:
             echo "::error::No PHP files found under site-plugins."; exit 1
           fi
           exit $fail
+
+      - name: Course Builder format guard
+        run: php test/php/course-format-guard.php

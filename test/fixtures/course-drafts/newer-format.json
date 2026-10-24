@@ -1,0 +1,16 @@
+{
+  "_about": "A course saved by a future app in a format this app doesn't know. It must come back untouched and read-only.",
+  "source": "site",
+  "newer": true,
+  "data": {
+    "course": {
+      "id": "c_future0005",
+      "schemaVersion": 99,
+      "title": "Course from the future",
+      "modules": [ { "key": "m1", "blocks": [ { "kind": "video", "media": { "url": "https://example.invalid/v.mp4" } } ] } ],
+      "chapters": "not an array in this format"
+    },
+    "rev": 3,
+    "updatedBy": "someone"
+  }
+}
