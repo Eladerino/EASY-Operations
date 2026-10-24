@@ -545,6 +545,12 @@ const WHATS_NEW_FILE = () => path.join(app.getPath('userData'), 'whats-new.json'
 // Keep notes short and plain-language: Pam reads these. Nothing
 // business-internal here — instructors see these notes too.
 const WHATS_NEW_NOTES = {
+  '1.3.1': [
+    'Course Builder: each chapter quiz question can explain why the answer is right, and learners see it after they answer.',
+    'Course Builder: duplicate a chapter, block or question with one click.',
+    'Course Builder: lesson text supports bullet points (start a line with -) and bold (**like this**).',
+    'Course Builder: the learner preview lets you answer the quizzes, and reviewers see what changed since the last version.',
+  ],
   '1.3.0': [
     'Signing in is simpler: choose Sign in with easysafety.ca in Setup and use your normal website login. No more copying application passwords.',
   ],
