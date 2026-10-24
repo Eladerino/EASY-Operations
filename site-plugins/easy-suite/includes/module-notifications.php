@@ -1045,7 +1045,7 @@ class Easy_Safety_Cert_Notifications {
             $t_completed = get_field('completion_date', $post_id);
             $t_expiry = get_field('expiry_date', $post_id);
             $t_cert = get_field('certificate_number', $post_id);
-            $rows_text .= "- {$t_name} — {$t_course} (completed {$t_completed}, expires {$t_expiry}, cert #{$t_cert})\n";
+            $rows_text .= "- {$t_name}, {$t_course} (completed {$t_completed}, expires {$t_expiry}, cert #{$t_cert})\n";
             $rows_html .= '<tr>'
                 . '<td style="padding:8px 10px;border-bottom:1px solid #e5e9ef;font-size:14px;">' . esc_html(get_field('student_name', $post_id)) . '</td>'
                 . '<td style="padding:8px 10px;border-bottom:1px solid #e5e9ef;font-size:14px;">' . esc_html(self::course_label($post_id, get_field('course_title', $post_id))) . '</td>'
@@ -1117,7 +1117,7 @@ class Easy_Safety_Cert_Notifications {
                 . ' attached to this email.</p>';
         }
 
-        $subject = "Certificate copies for your team — EASY Safety Training";
+        $subject = "Certificate copies for your team from EASY Safety Training";
 
         $message = '
 <div style="font-family:Arial, Helvetica, sans-serif; color:#000; margin:0; padding:0; background:#f5f7fa; padding:40px 0;">

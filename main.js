@@ -544,6 +544,9 @@ const WHATS_NEW_FILE = () => path.join(app.getPath('userData'), 'whats-new.json'
 // Keep notes short and plain-language: Pam reads these. Nothing
 // business-internal here — instructors see these notes too.
 const WHATS_NEW_NOTES = {
+  '1.2.9': [
+    'Course Builder wording is clearer about who reviews a course.',
+  ],
   '1.2.7': [
     'Fixed: editing a student in the Students list keeps their link to the online order they booked with, so refunds still take them off the list.',
     'Fixed: a required update can no longer be skipped by mistake. If an update is waiting, the app asks you to restart before continuing.',

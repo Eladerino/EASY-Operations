@@ -19,7 +19,7 @@
 defined('ABSPATH') || exit;
 
 /** Where suite release zips are published. */
-define('EASY_SUITE_UPDATER_RELEASES_URL', 'https://api.github.com/repos/Eladerino/EASY-Operations/releases?per_page=30');
+define('EASY_SUITE_UPDATER_RELEASES_URL', 'https://api.github.com/repos/Eladerino/EASY-Operations/releases?per_page=100');
 
 /** Site transient holding the parsed newest-release result. */
 define('EASY_SUITE_UPDATER_CACHE_KEY', 'easy_suite_updater_release');
