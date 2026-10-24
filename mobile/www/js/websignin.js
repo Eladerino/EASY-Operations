@@ -116,30 +116,12 @@
       '#Intent;scheme=' + SCHEME + ';package=' + PACKAGE + ';end';
   }
 
-  // Android: the authorize page's success URL is the web version, so it
-  // has to be on the site before this can work. Asks for its manifest
-  // first and says so plainly if it is missing.
-  async function webVersionReady() {
-    try {
-      const res = await window.EasyApi.fetchWithTimeout(
-        site() + WEB_APP_PATH + 'manifest.webmanifest',
-        { method: 'GET', cache: 'no-store' },
-        10000
-      );
-      return res.ok;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  async function start() {
-    if (isNative() && !(await webVersionReady())) {
-      const err = new Error(
-        'Website sign-in needs the newest EASY Suite on the site. Use an application password below for now.'
-      );
-      err.notReady = true;
-      throw err;
-    }
+  // No check that the web version is on the site first: the app runs
+  // at https://localhost, and the site's plain files carry no CORS
+  // header, so the browser refuses to let the app read them even when
+  // they are there (that check blocked every sign-in in 0.5.0). EASY
+  // Suite 2.2.44 and newer carry the web version.
+  function start() {
     // In the Android app this opens the phone's browser (the app only
     // keeps its own pages); in the web version it is a normal page change.
     window.location.href = authorizeUrl();
