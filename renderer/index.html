@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; media-src blob:; font-src 'self'; connect-src 'self';">
   <title>EASY Operations</title>
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="schedule.css">
@@ -456,9 +456,6 @@
   </main>
 
   <main id="builderMain" class="hidden builder-main" aria-label="Course Builder">
-    <div class="concept-banner" role="note">
-      Courses are stored on this machine only until sent for review.
-    </div>
     <div id="builderRoot"></div>
   </main>
 
@@ -748,6 +745,7 @@
   <script src="cert-tools.js"></script>
   <script src="startup-scan.js"></script>
   <script src="online-learning.js"></script>
+  <script src="course-schema.js"></script>
   <script src="course-builder.js"></script>
 </body>
 </html>

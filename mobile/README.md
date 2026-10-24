@@ -163,7 +163,7 @@ and can be revoked there.
   one Open EASY Manager button: an `intent://` link that opens this app
   by package name with the new password
   (`easymanager://auth/callback`, received through the App plugin).
-  This needs the web version on the site (EASY Suite 2.2.43 or newer);
+  This needs the web version on the site (EASY Suite 2.2.44 or newer);
   the app checks first and says so if it is missing.
 - **Web version**: the success URL is the app page itself with
   `#connect`. The page reads the password and clears it from the

@@ -19,11 +19,12 @@
 
   /* ---------------- helpers ---------------- */
 
+  const S = window.EasyCourseSchema;
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => (
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
   ));
-  const uid = (p) => (p || 'id') + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  const uid = S.uid;
   const deepCopy = (o) => JSON.parse(JSON.stringify(o));
   const words = (s) => String(s || '').trim().split(/\s+/).filter(Boolean).length;
   const slug = (s) => String(s || 'course').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'course';
@@ -196,7 +197,7 @@
   const isDirty = (c) => !c._rev || contentSig(c) !== c._syncedSig;
 
   function fromSite(entry) {
-    const c = normalizeCourse(deepCopy(entry.course));
+    const c = readCourse(deepCopy(entry.course));
     c._rev = entry.rev || 0;
     c._syncedSig = contentSig(c);
     c._siteBy = entry.updatedBy || '';
@@ -264,7 +265,7 @@
 
   function setReviews(list) {
     sync.reviews = (Array.isArray(list) ? list : []).map((r) => {
-      try { r.course = normalizeCourse(r.course); } catch (e) { /* preview guards handle it */ }
+      try { r.course = readCourse(r.course); } catch (e) { /* preview guards handle it */ }
       return r;
     });
   }
@@ -329,7 +330,7 @@
   async function pushDirty() {
     sync.timer = null;
     if (sync.pushing) { sync.again = true; return; }
-    const dirty = courses.filter(isDirty);
+    const dirty = courses.filter((c) => isDirty(c) && !isNewer(c));
     if (!dirty.length) { paintSync(); return; }
     sync.pushing = true;
     paintSync();
@@ -351,7 +352,7 @@
   async function pushOne(c, retried) {
     if (!courses.includes(c)) return 'gone';
     const sig = contentSig(c);
-    const r = await courseApi().sync('save', { id: c.id, course: cleanCourse(c), baseRev: c._rev || 0 });
+    const r = await courseApi().sync('save', { id: c.id, course: cleanCourse(c), baseRev: c._rev || 0, schema: S.SCHEMA_VERSION });
     if (r.ok && r.data) {
       c._rev = r.data.rev;
       c._syncedSig = sig;
@@ -379,7 +380,7 @@
   function syncState() {
     if (!onSite()) return sync.error ? 'warn' : 'local';
     if (sync.mode === 'offline') return 'warn';
-    if (sync.pushing || (isAuthor() && courses.some(isDirty) && !sync.error)) return 'busy';
+    if (sync.pushing || (isAuthor() && courses.some((c) => isDirty(c) && !isNewer(c)) && !sync.error)) return 'busy';
     return sync.error ? 'warn' : 'ok';
   }
   function syncLabel() {
@@ -459,34 +460,7 @@
 
   /* ---------------- data factories ---------------- */
 
-  function newQuestion() {
-    return { id: uid('q'), q: '', kind: 'mc', options: ['', ''], answer: 0 };
-  }
-  function newSegment(type) {
-    const base = { id: uid('seg'), type, title: '' };
-    switch (type) {
-      case 'video': return Object.assign(base, { fileName: '', durationSec: 0, transcript: '' });
-      case 'text': return Object.assign(base, { body: '', narrationScript: '', audioFileName: '', audioSec: 0 });
-      case 'photo': return Object.assign(base, { fileName: '', caption: '', alt: '' });
-      case 'interactive': return Object.assign(base, { description: '', estMin: 3 });
-      case 'quiz': return Object.assign(base, { questions: [newQuestion()] });
-      default: return base;
-    }
-  }
-  function newChapter(title) {
-    return { id: uid('ch'), title: title || 'New chapter', status: 'draft', segments: [], quizQuestions: [] };
-  }
-  function newCourse(title) {
-    const now = new Date().toISOString();
-    return {
-      id: uid('c'), title: title || 'Untitled course', description: '',
-      status: 'draft', reviewVersion: 0, approvedVersion: 0,
-      liveEditedSinceReview: false, reviewNote: '',
-      passMark: 80, maxAttempts: 3, onFail: 'retry',
-      chapters: [], finalQuiz: { questions: [] },
-      createdAt: now, updatedAt: now,
-    };
-  }
+  const { newQuestion, newSegment, newChapter, newCourse } = S;
 
   /* ---------------- segment definitions & tips ---------------- */
 
@@ -516,70 +490,101 @@
 
   const STATUS_LABEL = { draft: 'Draft', in_review: 'With reviewer', approved: 'Approved' };
 
-  /* ---------------- data normalization ----------------
-   * Courses load from localStorage and imported JSON with no schema
-   * guarantee. Normalize everything on the way in so a malformed shape
-   * (corrupted storage, hand-edited file) degrades gracefully instead of
-   * throwing halfway through a render. */
+  /* ---------------- reading courses ----------------
+   * Courses load from localStorage, the site and imported files with no
+   * guarantee of shape or age. course-schema.js upgrades older formats and
+   * repairs damaged ones; a course from a newer app comes back untouched and
+   * stays read-only here (see isNewer). */
 
-  function normalizeQuestion(q) {
-    if (!q || typeof q !== 'object') q = {};
-    if (!Array.isArray(q.options) || q.options.length < 2) {
-      const keep = Array.isArray(q.options) ? q.options.filter((o) => typeof o === 'string') : [];
-      while (keep.length < 2) keep.push('');
-      q.options = keep.slice(0, 2);
-    }
-    if (typeof q.answer !== 'number' || q.answer < 0 || q.answer >= q.options.length) q.answer = 0;
-    if (typeof q.q !== 'string') q.q = '';
-    if (q.kind !== 'tf' && q.kind !== 'mc') q.kind = 'mc';
-    return q;
-  }
-
-  function normalizeSegment(seg) {
-    if (!seg || typeof seg !== 'object') seg = {};
-    if (typeof seg.type !== 'string' || !SEG_DEFS[seg.type]) seg.type = 'text';
-    if (typeof seg.title !== 'string') seg.title = '';
-    if (typeof seg.id !== 'string' || !seg.id) seg.id = uid('seg');
-    if (seg.type === 'quiz') {
-      if (!Array.isArray(seg.questions)) seg.questions = [];
-      seg.questions = seg.questions.map(normalizeQuestion);
-    }
-    return seg;
-  }
-
-  function normalizeChapter(ch) {
-    if (!ch || typeof ch !== 'object') ch = {};
-    if (!Array.isArray(ch.segments)) ch.segments = [];
-    if (!Array.isArray(ch.quizQuestions)) ch.quizQuestions = [];
-    if (typeof ch.title !== 'string') ch.title = '';
-    if (typeof ch.id !== 'string' || !ch.id) ch.id = uid('ch');
-    ch.segments = ch.segments.map(normalizeSegment);
-    ch.quizQuestions = ch.quizQuestions.map(normalizeQuestion);
-    return ch;
-  }
-
-  function normalizeCourse(c) {
-    if (!c || typeof c !== 'object') return newCourse('');
-    if (!Array.isArray(c.chapters)) c.chapters = [];
-    if (!c.finalQuiz || typeof c.finalQuiz !== 'object') c.finalQuiz = { questions: [] };
-    if (!Array.isArray(c.finalQuiz.questions)) c.finalQuiz.questions = [];
-    if (typeof c.title !== 'string') c.title = '';
-    if (typeof c.id !== 'string' || !c.id) c.id = uid('c');
-    if (typeof c.passMark !== 'number') c.passMark = 80;
-    c.chapters = c.chapters.map(normalizeChapter);
-    c.finalQuiz.questions = c.finalQuiz.questions.map(normalizeQuestion);
-    return c;
-  }
+  const readCourse = S.upgradeCourse;
+  const isNewer = (c) => S.isNewerThanApp(c);
+  const NEWER_MSG = 'was saved by a newer version of EASY Operations. Update the app on this computer to open it.';
 
   // Apply to anything already loaded from localStorage, including review
   // snapshots parked in the inbox (their previews render the same way).
-  courses = courses.filter((c) => c && typeof c === 'object').map(normalizeCourse);
+  courses = (Array.isArray(courses) ? courses : []).filter((c) => c && typeof c === 'object').map(readCourse);
+  if (!Array.isArray(inbox)) inbox = [];
   if (!Array.isArray(authors)) authors = [];
   inbox.forEach((item) => {
     if (item && item.payload && item.payload.course) {
-      try { item.payload.course = normalizeCourse(item.payload.course); } catch (e) { /* leave as-is */ }
+      try { item.payload.course = readCourse(item.payload.course); } catch (e) { /* leave as-is */ }
     }
   });
+
+  /* ---------------- media files ----------------
+   * With site sync, photos, narration audio and video files upload to a
+   * private folder on the site (EASY Suite course-media.php) and the course
+   * keeps a reference { id, name, size, type }. Without it, only the file
+   * name is recorded (id 0), as before. Files are fetched through the main
+   * process, which holds the credentials, and shown from blob: URLs. */
+
+  // Where a video can come from: 'url' (a hosted video link), 'file' (upload).
+  const VIDEO_SOURCES = ['url'];
+  const MEDIA_KIND = { file: (seg) => (seg.type === 'photo' ? 'image' : 'video'), audioFile: () => 'audio' };
+  const mediaUrls = new Map(); // file id -> Promise<blob URL | null>
+
+  const fmtBytes = (n) => (n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round((n || 0) / 1024)) + ' KB');
+  const canUpload = () => sync.mode === 'site' && !!courseApi() && !!courseApi().uploadMedia && isAuthor();
+
+  function mediaUrl(id) {
+    if (!mediaUrls.has(id)) {
+      mediaUrls.set(id, (async () => {
+        const api = courseApi();
+        if (!api || !api.getMedia) return null;
+        const r = await api.getMedia(id);
+        if (!r.ok) { mediaUrls.delete(id); return null; }
+        return URL.createObjectURL(new Blob([r.data], { type: r.type }));
+      })());
+    }
+    return mediaUrls.get(id);
+  }
+
+  // Fills every <img>/<audio>/<video data-media-id> on the page once its file arrives.
+  function hydrateMedia() {
+    document.querySelectorAll('#builderRoot [data-media-id]').forEach(async (el) => {
+      const id = parseInt(el.getAttribute('data-media-id'), 10);
+      if (!(id > 0) || !onSite()) return;
+      const url = await mediaUrl(id);
+      if (url && el.isConnected) { el.src = url; el.classList.remove('b-media-loading'); }
+      else if (el.isConnected) el.replaceWith(Object.assign(document.createElement('span'), { className: 'hint', textContent: 'Could not load this file from the site.' }));
+    });
+  }
+
+  function mediaTag(file, kind) {
+    if (!file || !(file.id > 0) || !onSite()) return '';
+    if (kind === 'image') return '<img class="b-media-thumb b-media-loading" data-media-id="' + file.id + '" alt="">';
+    if (kind === 'audio') return '<audio class="b-media-audio" controls preload="none" data-media-id="' + file.id + '"></audio>';
+    return '<video class="b-media-video" controls preload="metadata" data-media-id="' + file.id + '"></video>';
+  }
+
+  // The file box shown in a segment editor: what's attached, and the buttons.
+  function fileBox(seg, ch, field, author) {
+    const file = seg[field];
+    const kind = MEDIA_KIND[field](seg);
+    const attrs = ' data-ch="' + ch.id + '" data-id="' + seg.id + '" data-f="' + field + '" data-kind="' + kind + '"';
+    let html = '<div class="b-file">';
+    if (file) {
+      html += '<div class="b-file-name"><strong>' + esc(file.name) + '</strong> '
+        + (file.id > 0
+          ? '<span class="b-kv">uploaded · ' + esc(fmtBytes(file.size)) + '</span>'
+          : '<span class="b-kv">' + (onSite() ? 'name only, not uploaded yet' : 'file name recorded') + '</span>')
+        + '</div>';
+      html += mediaTag(file, kind);
+    } else {
+      html += '<div class="b-kv">No file yet.</div>';
+    }
+    if (author) {
+      html += '<div class="b-file-actions">';
+      if (canUpload()) html += '<button type="button" class="btn btn-secondary btn-small" data-act="seg-upload"' + attrs + '>' + (file && file.id > 0 ? 'Replace…' : 'Upload…') + '</button>';
+      else html += '<button type="button" class="btn btn-secondary btn-small" data-act="seg-file"' + attrs + '>Choose…</button>';
+      if (file) html += '<button type="button" class="btn btn-secondary btn-small" data-act="seg-file-clear"' + attrs + '>Remove</button>';
+      html += '</div>';
+    }
+    if (author && !canUpload()) {
+      html += '<div class="hint">' + (onSite() ? 'Uploading needs a connection to the site.' : 'Without the site\'s Course Builder sync, only the file name is recorded.') + '</div>';
+    }
+    return html + '</div>';
+  }
 
   /* ---------------- view state ---------------- */
 
@@ -657,6 +662,15 @@
       } else {
         html += '<div class="b-course-grid">';
         courses.forEach((c) => {
+          if (isNewer(c)) {
+            html += '<div class="card b-course-card">';
+            html += '<div><span class="b-status b-status-draft">Needs a newer app</span></div>';
+            html += '<h3>' + esc(c.title || 'Untitled course') + '</h3>';
+            html += '<div class="b-kv">This course ' + esc(NEWER_MSG) + ' Nothing here changes it.</div>';
+            html += '<div class="b-course-actions"><button type="button" class="btn btn-secondary btn-small" data-act="export" data-id="' + esc(c.id) + '">Export</button></div>';
+            html += '</div>';
+            return;
+          }
           const n = c.chapters.length;
           html += '<div class="card b-course-card">';
           html += '<div>' + statusBadge(c) + '</div>';
@@ -881,26 +895,28 @@
     html += '<div class="b-tip">' + def.tip + '</div>';
 
     if (seg.type === 'video') {
-      html += '<div class="grid"><div class="field"><label>Video file</label><div class="lookup-row">'
-        + '<input type="text" data-sfield="fileName" placeholder="e.g. welcome.mp4" value="' + esc(seg.fileName) + '"' + dis + '>'
-        + (author ? '<button type="button" class="btn btn-secondary btn-small" data-act="seg-file" data-ch="' + ch.id + '" data-id="' + seg.id + '" data-f="fileName">Choose…</button>' : '')
-        + '</div><div class="hint">For now, just the file name is recorded here.</div></div>'
-        + '<div class="field"><label>Duration (m:ss)</label><input type="text" data-sfield="duration" value="' + esc(fmtDurationInput(seg.durationSec)) + '" placeholder="3:30"' + dis + '></div>'
+      html += '<div class="grid">';
+      if (VIDEO_SOURCES.indexOf('url') >= 0) {
+        html += '<div class="field"><label>Video link <span class="optional">(unlisted Vimeo, YouTube or Bunny link)</span></label>'
+          + '<input type="url" data-sfield="url" placeholder="https://vimeo.com/…" value="' + esc(seg.url) + '"' + dis + '></div>';
+      }
+      if (VIDEO_SOURCES.indexOf('file') >= 0 || seg.file) {
+        html += '<div class="field"><label>Video file</label>' + fileBox(seg, ch, 'file', author) + '</div>';
+      }
+      html += '<div class="field"><label>Duration (m:ss)</label><input type="text" data-sfield="duration" value="' + esc(fmtDurationInput(seg.durationSec)) + '" placeholder="3:30"' + dis + '></div>'
         + '<div class="field span-2"><label>Transcript <span class="optional">(required — captions &amp; accessibility)</span></label>'
         + '<textarea data-sfield="transcript" rows="3" placeholder="Everything said in the video, word for word…"' + dis + '>' + esc(seg.transcript) + '</textarea></div></div>';
     } else if (seg.type === 'text') {
       html += '<div class="field"><label>Lesson text</label><textarea data-sfield="body" rows="4" placeholder="Write the lesson…"' + dis + '>' + esc(seg.body) + '</textarea></div>'
         + '<div class="grid"><div class="field"><label>Narration script <span class="optional">(if someone records voiceover)</span></label>'
         + '<textarea data-sfield="narrationScript" rows="3" placeholder="Spoken version — doubles as the transcript…"' + dis + '>' + esc(seg.narrationScript) + '</textarea></div>'
-        + '<div class="field"><label>Audio file <span class="optional">(optional)</span></label><div class="lookup-row">'
-        + '<input type="text" data-sfield="audioFileName" placeholder="e.g. narration.mp3" value="' + esc(seg.audioFileName) + '"' + dis + '>'
-        + (author ? '<button type="button" class="btn btn-secondary btn-small" data-act="seg-file" data-ch="' + ch.id + '" data-id="' + seg.id + '" data-f="audioFileName">Choose…</button>' : '')
-        + '</div><div class="field" style="margin-top:8px"><label>Audio length (m:ss)</label><input type="text" data-sfield="audioDur" value="' + esc(fmtDurationInput(seg.audioSec)) + '" placeholder="2:15"' + dis + '></div></div></div>';
+        + '<div class="field"><label>Narration audio <span class="optional">(optional)</span></label>'
+        + fileBox(seg, ch, 'audioFile', author)
+        + '<div class="field" style="margin-top:8px"><label>Audio length (m:ss)</label><input type="text" data-sfield="audioDur" value="' + esc(fmtDurationInput(seg.audioSec)) + '" placeholder="2:15"' + dis + '></div></div></div>';
     } else if (seg.type === 'photo') {
-      html += '<div class="grid"><div class="field"><label>Photo file</label><div class="lookup-row">'
-        + '<input type="text" data-sfield="fileName" placeholder="e.g. harness-closeup.jpg" value="' + esc(seg.fileName) + '"' + dis + '>'
-        + (author ? '<button type="button" class="btn btn-secondary btn-small" data-act="seg-file" data-ch="' + ch.id + '" data-id="' + seg.id + '" data-f="fileName">Choose…</button>' : '')
-        + '</div><div class="hint">Real photos from EASY\'s facility — learners should recognize the gear at their practical.</div></div>'
+      html += '<div class="grid"><div class="field"><label>Photo</label>'
+        + fileBox(seg, ch, 'file', author)
+        + '<div class="hint">Real photos from EASY\'s facility — learners should recognize the gear at their practical.</div></div>'
         + '<div class="field"><label>Caption <span class="optional">(shown under the photo)</span></label><input type="text" data-sfield="caption" value="' + esc(seg.caption) + '" placeholder="What the learner is looking at…"' + dis + '></div>'
         + '<div class="field span-2"><label>Alt text <span class="optional">(required — read aloud by screen readers)</span></label>'
         + '<input type="text" data-sfield="alt" value="' + esc(seg.alt) + '" placeholder="Describe the photo for someone who can\'t see it…"' + dis + '></div></div>';
@@ -1035,6 +1051,8 @@
       if (secs === null) return 'invalid';
       if (field === 'duration') seg.durationSec = secs; else seg.audioSec = secs;
     }
+    else if (field === 'file' || field === 'audioFile') seg[field] = value;
+    else if (field === 'url') seg.url = String(value || '').trim();
     else if (field === 'estMin') {
       const n = parseInt(value, 10);
       seg.estMin = Math.max(1, Math.min(30, Number.isNaN(n) ? 3 : n));
@@ -1048,13 +1066,11 @@
 
     const ct = $('bCourseTitle');
     if (ct) {
-      ct.addEventListener('input', () => { course.title = ct.value; });
-      ct.addEventListener('change', () => { touch(course); });
+      ct.addEventListener('input', () => { course.title = ct.value; touch(course); });
     }
     const cd = $('bCourseDesc');
     if (cd) {
-      cd.addEventListener('input', () => { course.description = cd.value; });
-      cd.addEventListener('change', () => touch(course));
+      cd.addEventListener('input', () => { course.description = cd.value; touch(course); });
     }
     [['bPassMark', 'passMark', 1, 100, 80], ['bMaxAttempts', 'maxAttempts', 1, 10, 3]].forEach(([id, f, lo, hi, fb]) => {
       const el = $(id);
@@ -1075,9 +1091,8 @@
       if (titleEl) {
         titleEl.addEventListener('input', () => {
           const ch = findChapter(course, chId);
-          if (ch) { ch.title = titleEl.value; }
+          if (ch) { ch.title = titleEl.value; touch(course); }
         });
-        titleEl.addEventListener('change', () => touch(course));
       }
       // Segment fields
       chEl.querySelectorAll('[data-seg]').forEach((segEl) => {
@@ -1181,8 +1196,16 @@
     return false;
   }
 
+  // Only exporting works on a course from a newer app (see course-schema.js).
+  const NEWER_OK = ['back', 'export', 'sync-refresh', 'open-backups', 'new-course', 'author-add', 'author-del', 'inbox-import', 'inbox-remove'];
+
   async function handleAction(act, id, el) {
     const course = currentCourse();
+    const target = getCourse(id) || course;
+    if (target && isNewer(target) && NEWER_OK.indexOf(act) < 0) {
+      toast('"' + (target.title || 'Untitled course') + '" ' + NEWER_MSG, 'error', 9000);
+      return;
+    }
     switch (act) {
       case 'back': ui.view = 'library'; ui.courseId = null; render(); break;
 
@@ -1302,16 +1325,52 @@
         break;
       }
       case 'seg-file': {
+        // No site to upload to: record the file name only.
         if (!requireAuthor() || !course) break;
         const chId = el.getAttribute('data-ch');
         const field = el.getAttribute('data-f');
         pickFile('', (f) => {
           if (!f) return;
-          setSegField(course, chId, id, field, f.name);
+          setSegField(course, chId, id, field, { id: 0, name: f.name, size: f.size || 0, type: f.type || '' });
           persistCourses();
           toast('Recorded file name: ' + f.name, 'success');
           render();
         });
+        break;
+      }
+      case 'seg-upload': {
+        if (!requireAuthor() || !course || !canUpload()) break;
+        const chId = el.getAttribute('data-ch');
+        const field = el.getAttribute('data-f');
+        const kind = el.getAttribute('data-kind');
+        const limits = (sync.roles && sync.roles.mediaMaxBytes) || {};
+        el.disabled = true;
+        el.textContent = 'Uploading…';
+        const r = await courseApi().uploadMedia(kind, limits[kind] || 0);
+        if (r.canceled) { render(); break; }
+        if (!r.ok) {
+          toast(r.missing ? 'The site\'s EASY Suite is too old for uploads. Update it to 2.2.43 or later.' : (r.error || 'Upload failed.'), 'error', 10000);
+          render();
+          break;
+        }
+        const ch = findChapter(course, chId);
+        const seg = ch && findSegment(ch, id);
+        if (seg) {
+          seg[field] = { id: r.data.id, name: r.data.name, size: r.data.size || 0, type: r.data.type || '' };
+          touch(course);
+          persistCourses();
+          toast('Uploaded ' + r.data.name + '.', 'success');
+        }
+        render();
+        break;
+      }
+      case 'seg-file-clear': {
+        if (!requireAuthor() || !course) break;
+        const ch = findChapter(course, el.getAttribute('data-ch'));
+        const seg = ch && findSegment(ch, id);
+        if (!seg) break;
+        seg[el.getAttribute('data-f')] = null;
+        touch(course); render();
         break;
       }
 
@@ -1475,6 +1534,7 @@
 
       case 'inbox-approve': {
         const item = allInbox().find((x) => x.id === id);
+        if (item && item.payload && isNewer(item.payload.course)) { toast('This review version ' + NEWER_MSG, 'error', 9000); break; }
         if (item) await approveSnapshot(item);
         break;
       }
@@ -1501,10 +1561,11 @@
     if (!ui.preview) return null;
     if (ui.preview.kind === 'course') {
       const c = getCourse(ui.preview.id);
-      return c ? { course: c, label: 'Live course', frozen: false } : null;
+      return c && !isNewer(c) ? { course: c, label: 'Live course', frozen: false } : null;
     }
     const item = allInbox().find((x) => x.id === ui.preview.id);
     if (!item || !item.payload || !item.payload.course) return null;
+    if (isNewer(item.payload.course)) { toast('This review version ' + NEWER_MSG, 'error', 9000); return null; }
     return { course: item.payload.course, label: 'Review snapshot v' + item.version, frozen: true };
   }
 
@@ -1529,11 +1590,14 @@
     const title = seg.title || (SEG_DEFS[seg.type] || {}).label || seg.type;
     let body = '';
     if (seg.type === 'video') {
-      body = '<div class="b-pv-video"><span class="b-pv-play"></span>'
-        + '<div><strong>Instructor video placeholder</strong>'
-        + '<span>' + esc(seg.fileName || 'video file to be added')
-        + (seg.durationSec ? ' · ' + fmtEst(seg.durationSec).replace(/^≈ /, '') : '')
-        + ' · Captions on</span></div></div>'
+      const uploaded = seg.file && seg.file.id > 0 && onSite();
+      body = (uploaded
+        ? '<div class="b-pv-media">' + mediaTag(seg.file, 'video') + '</div>'
+        : '<div class="b-pv-video"><span class="b-pv-play"></span>'
+          + '<div><strong>' + (seg.url ? 'Hosted video' : 'Instructor video placeholder') + '</strong>'
+          + '<span>' + esc(seg.url || (seg.file && seg.file.name) || 'video to be added')
+          + (seg.durationSec ? ' · ' + fmtEst(seg.durationSec).replace(/^≈ /, '') : '')
+          + ' · Captions on</span></div></div>')
         + (seg.transcript
           ? '<details class="b-pv-transcript"><summary>Read transcript</summary><p>' + esc(seg.transcript).replace(/\n/g, '<br>') + '</p></details>'
           : '<p class="hint">No transcript yet.</p>');
@@ -1541,11 +1605,17 @@
       body = seg.body
         ? '<p>' + esc(seg.body).replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>') + '</p>'
         : '<p class="hint">Text coming soon.</p>';
-      if (seg.narrationScript) body += '<p class="b-kv">🎙 Narrated version available (' + esc(seg.audioFileName || 'audio to be added') + ').</p>';
+      if (seg.audioFile && seg.audioFile.id > 0 && onSite()) body += '<div class="b-pv-media">' + mediaTag(seg.audioFile, 'audio') + '</div>';
+      else if (seg.narrationScript) body += '<p class="b-kv">🎙 Narrated version available (' + esc((seg.audioFile && seg.audioFile.name) || 'audio to be added') + ').</p>';
     } else if (seg.type === 'photo') {
-      body = '<div class="b-pv-photo"><div><strong>📷 ' + esc(seg.fileName || 'Awaiting real photography') + '</strong>'
-        + (seg.caption ? '<span>' + esc(seg.caption) + '</span>' : '')
-        + '<span class="b-pv-noai">No AI-generated image will be used.</span></div></div>';
+      if (seg.file && seg.file.id > 0 && onSite()) {
+        body = '<figure class="b-pv-figure"><img class="b-pv-img b-media-loading" data-media-id="' + seg.file.id + '" alt="' + esc(seg.alt) + '">'
+          + (seg.caption ? '<figcaption>' + esc(seg.caption) + '</figcaption>' : '') + '</figure>';
+      } else {
+        body = '<div class="b-pv-photo"><div><strong>📷 ' + esc((seg.file && seg.file.name) || 'Awaiting real photography') + '</strong>'
+          + (seg.caption ? '<span>' + esc(seg.caption) + '</span>' : '')
+          + '<span class="b-pv-noai">No AI-generated image will be used.</span></div></div>';
+      }
     } else if (seg.type === 'interactive') {
       body = '<div class="b-pv-interactive">'
         + (seg.description ? '<p>' + esc(seg.description) + '</p>' : '<p class="hint">Exercise description coming soon.</p>')
@@ -1556,7 +1626,7 @@
     }
     return '<article class="b-pv-lesson"><div class="b-pv-lesson-head"><div><h3>' + esc(title) + '</h3>'
       + '<p>' + (PV_MODE[seg.type] || '') + '</p></div>'
-      + (PV_CHIP[seg.type] || '') + '</div>'
+      + (seg.type === 'photo' && seg.file && seg.file.id > 0 ? '<span class="b-chip b-chip-photo">Original photo</span>' : (PV_CHIP[seg.type] || '')) + '</div>'
       + '<div class="b-pv-lesson-body">' + body + '</div></article>';
   }
 
@@ -1662,9 +1732,11 @@
       (ch.segments || []).forEach((s) => {
         const snm = SEG_DEFS[s.type].label + ' "' + (s.title || 'untitled') + '"';
         if (s.type === 'video') need(s.transcript && s.transcript.trim(), snm + ' has a transcript', true);
-        if (s.type === 'video') need(s.fileName && s.fileName.trim(), snm + ' has a video file', true);
+        if (s.type === 'video') need(s.url || (s.file && (s.file.id > 0 || !onSite())), snm + (VIDEO_SOURCES.indexOf('file') >= 0 ? ' has a video' : ' has a video link'), true);
         if (s.type === 'photo') need(s.alt && s.alt.trim(), snm + ' has alt text', true);
-        if (s.type === 'photo') need(s.fileName && s.fileName.trim(), snm + ' has a photo file', true);
+        if (s.type === 'photo') need(s.file && (s.file.id > 0 || !onSite()), snm + (onSite() ? ' has an uploaded photo' : ' has a photo file'), true);
+        if (s.type === 'video' && s.url) need(/^https:\/\/\S+$/.test(s.url), snm + ' video link starts with https://');
+        if (s.type === 'text' && s.audioFile && !(s.audioFile.id > 0) && onSite()) need(false, snm + ' narration audio is uploaded', true);
         if (s.type === 'interactive') need(s.description && s.description.trim(), snm + ' has a description');
         if (s.type === 'quiz') (s.questions || []).forEach((q, qi) => {
           need(q.q && q.q.trim(), snm + ' — question ' + (qi + 1) + ' has text');
@@ -1711,6 +1783,7 @@
 
   function snapshotOf(course) {
     return {
+      schemaVersion: S.schemaOf(course),
       title: course.title, description: course.description,
       passMark: course.passMark, maxAttempts: course.maxAttempts, onFail: course.onFail,
       chapters: deepCopy(course.chapters), finalQuiz: deepCopy(course.finalQuiz),
@@ -1755,7 +1828,7 @@
     }
     await waitForPush();
     const sig = contentSig(course);
-    const r = await courseApi().sync('submit', { id: course.id, course: cleanCourse(course), baseRev: course._rev || 0 });
+    const r = await courseApi().sync('submit', { id: course.id, course: cleanCourse(course), baseRev: course._rev || 0, schema: S.SCHEMA_VERSION });
     if (!r.ok) {
       if (r.status === 409 && r.data && r.data.current) {
         keepBoth(course, r.data.current);
@@ -1829,6 +1902,7 @@
     const now = new Date().toISOString();
     download(slug((c && c.title) || 'course') + '-v' + item.version + '.final.json', {
       package: 'easy-course-final', format: 1, kind: 'final',
+      schemaVersion: S.schemaOf(c),
       courseId: item.courseId, version: item.version,
       approvedBy: accountUser, approvedAt: now,
       course: deepCopy(c),
@@ -1877,6 +1951,7 @@
     if (obj.format !== 1) { toast('Unsupported package format — this builder reads format 1.', 'error'); return; }
     const kind = obj.kind;
     const hasCourse = obj.course && typeof obj.course === 'object';
+    if (hasCourse && isNewer(obj.course)) { toast('That file ' + NEWER_MSG, 'error', 9000); return; }
     // Reviews and change-requests are keyed by (courseId, version, kind) so
     // importing the same file twice can't create duplicate inbox entries.
     const alreadyInInbox = (k) => inbox.some((i) => i.kind === k && i.courseId === obj.courseId && i.version === obj.version);
@@ -1885,7 +1960,7 @@
         toast('That review package is missing required fields (courseId, version, course).', 'error'); return;
       }
       if (alreadyInInbox('review')) { toast('That review package is already in the inbox.', 'info'); return; }
-      try { obj.course = normalizeCourse(obj.course); } catch (e) { /* keep as-is; preview guards handle it */ }
+      try { obj.course = readCourse(obj.course); } catch (e) { /* keep as-is; preview guards handle it */ }
       inbox.unshift({
         id: uid('in'), kind: 'review', courseId: obj.courseId, version: obj.version,
         from: obj.submittedBy, at: obj.submittedAt, note: '', payload: obj, handled: false,
@@ -1914,7 +1989,7 @@
       }
     } else if (kind === 'backup' || kind === 'final') {
       if (!hasCourse) { toast('That package has no course data to import.', 'error'); return; }
-      const c = normalizeCourse(cleanCourse(obj.course));
+      const c = readCourse(cleanCourse(obj.course));
       const now = new Date().toISOString();
       c.id = uid('c');
       c.reviewNote = '';
@@ -1975,7 +2050,9 @@
         if (item.note) html += '<div class="b-review-note"><strong>Note:</strong> ' + esc(item.note) + '</div>';
         html += '<div class="b-course-actions">';
         html += '<button type="button" class="btn btn-secondary btn-small" data-act="inbox-preview" data-id="' + item.id + '">Preview snapshot</button>';
-        if (!item.handled && item.kind === 'review' && (!item.site || isReviewer())) {
+        if (c && isNewer(c)) {
+          html += '<span class="b-kv">This version ' + esc(NEWER_MSG) + '</span>';
+        } else if (!item.handled && item.kind === 'review' && (!item.site || isReviewer())) {
           html += '<button type="button" class="btn btn-primary btn-small" data-act="inbox-approve" data-id="' + item.id + '">Approve</button>';
           html += '<button type="button" class="btn btn-secondary btn-small" data-act="inbox-sendback" data-id="' + item.id + '">Send back with note</button>';
         }
@@ -1997,7 +2074,7 @@
   function render() {
     if (ui.view === 'builder') {
       const c = getCourse(ui.courseId);
-      if (!c) { ui.view = 'library'; ui.courseId = null; return render(); }
+      if (!c || isNewer(c)) { ui.view = 'library'; ui.courseId = null; return render(); }
       renderBuilder(c);
     } else if (ui.view === 'preview') {
       renderPreviewView();
@@ -2005,6 +2082,7 @@
       ui.view = 'library';
       renderLibrary();
     }
+    hydrateMedia();
     paintBadge();
   }
 

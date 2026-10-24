@@ -1,0 +1,40 @@
+{
+  "_about": "An Export backup file (.draft.json) from App 1.1-1.2.9.",
+  "source": "file",
+  "data": {
+    "package": "easy-course-backup",
+    "format": 1,
+    "kind": "backup",
+    "exportedAt": "2026-10-18T12:00:00.000Z",
+    "exportedBy": "bglynn",
+    "course": {
+      "id": "c_mgv5bbbb0002",
+      "title": "Confined Space Awareness",
+      "description": "Recognizing confined spaces before you enter one.",
+      "status": "approved",
+      "reviewVersion": 1,
+      "approvedVersion": 1,
+      "liveEditedSinceReview": false,
+      "reviewNote": "",
+      "passMark": 80,
+      "maxAttempts": 3,
+      "onFail": "retry",
+      "createdAt": "2026-10-11T09:00:00.000Z",
+      "updatedAt": "2026-10-17T16:20:00.000Z",
+      "chapters": [
+        {
+          "id": "ch_mgv5c1",
+          "title": "What counts as a confined space",
+          "status": "draft",
+          "segments": [
+            { "id": "seg_mgv5d1", "type": "text", "title": "The three tests", "body": "Not designed for continuous occupancy.\n\nLimited entry or exit.", "narrationScript": "", "audioFileName": "", "audioSec": 0 }
+          ],
+          "quizQuestions": []
+        }
+      ],
+      "finalQuiz": { "questions": [
+        { "id": "q_mgv5e1", "q": "Is a crawlspace with one small hatch a confined space?", "kind": "tf", "options": ["True", "False"], "answer": 0 }
+      ] }
+    }
+  }
+}

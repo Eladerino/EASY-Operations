@@ -548,6 +548,11 @@ const WHATS_NEW_NOTES = {
   '1.3.0': [
     'Signing in is simpler: choose Sign in with easysafety.ca in Setup and use your normal website login. No more copying application passwords.',
   ],
+  '1.2.10': [
+    'Course Builder: photos and narration audio now upload to the website instead of only recording the file name, and show in the editor and the learner preview. Videos take a link to where they are hosted.',
+    'Course Builder: courses made in earlier versions keep opening as the builder grows, and a course saved by a newer app is protected until this one updates.',
+    'Course Builder: titles are saved as you type, so closing the app mid-word keeps them.',
+  ],
   '1.2.9': [
     'Course Builder wording is clearer about who reviews a course.',
   ],
@@ -1234,6 +1239,9 @@ function courseSyncRoute(op, args) {
   const content = () => ({
     course: args.course && typeof args.course === 'object' ? args.course : null,
     baseRev: Number.isInteger(args.baseRev) && args.baseRev > 0 ? args.baseRev : 0,
+    // Newest course format this app understands; the site refuses saves
+    // over a course in a newer one (see renderer/course-schema.js).
+    schema: Number.isInteger(args.schema) && args.schema > 0 ? args.schema : 1,
   });
   switch (op) {
     case 'me': return ['GET', '/course-builder/me'];
@@ -1276,6 +1284,85 @@ ipcMain.handle('course-sync', async (_event, { op, args = {} } = {}) => {
       error: (r.json && r.json.message) || `WordPress returned HTTP ${r.status}.`,
       data: r.json && r.json.data,
     };
+  } catch (err) {
+    return { ok: false, offline: true, error: `Could not reach the site: ${err.message}` };
+  }
+});
+
+/* ------------------------------------------------------------------ */
+/* Course Builder — media files (EASY Suite course-media.php)           */
+/*                                                                     */
+/* Photos, narration audio and video files are uploaded to a private    */
+/* folder on the site. The file is picked here with the system dialog,  */
+/* so the renderer never handles paths, and read back here because the  */
+/* site needs the account's credentials. Results match course-sync.     */
+/* ------------------------------------------------------------------ */
+
+const COURSE_MEDIA_KINDS = {
+  image: { label: 'Photos', extensions: ['jpg', 'jpeg', 'png', 'webp'] },
+  audio: { label: 'Audio', extensions: ['mp3', 'm4a', 'ogg', 'wav'] },
+  video: { label: 'Video', extensions: ['mp4', 'm4v', 'webm'] },
+};
+
+ipcMain.handle('course-media-upload', async (event, { kind, maxBytes } = {}) => {
+  const spec = COURSE_MEDIA_KINDS[kind];
+  if (!spec) return { ok: false, error: 'Unknown file kind.' };
+  const config = getConfig();
+  if (!config.ok) return { ok: false, error: config.error };
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const pick = await dialog.showOpenDialog(win, {
+    title: 'Choose a file to upload',
+    properties: ['openFile'],
+    filters: [{ name: spec.label, extensions: spec.extensions }],
+  });
+  if (pick.canceled || !pick.filePaths.length) return { ok: false, canceled: true };
+  const filePath = pick.filePaths[0];
+  const name = path.basename(filePath);
+  try {
+    const { size } = await fs.promises.stat(filePath);
+    if (Number.isInteger(maxBytes) && maxBytes > 0 && size > maxBytes) {
+      const mb = (n) => `${Math.round(n / 1048576)} MB`;
+      return { ok: false, error: `${name} is ${mb(size)}; the site takes up to ${mb(maxBytes)} for this.` };
+    }
+    const form = new FormData();
+    form.append('kind', kind);
+    form.append('file', new File([await fs.promises.readFile(filePath)], name));
+    const auth = effectiveAuth(config);
+    const res = await fetch(easyBase(config) + '/course-builder/media', {
+      method: 'POST',
+      headers: { Authorization: basicAuth(auth.post) },
+      body: form,
+      signal: AbortSignal.timeout(15 * 60 * 1000),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (res.ok && json && json.id) return { ok: true, status: res.status, data: json };
+    return {
+      ok: false,
+      status: res.status,
+      missing: res.status === 404 && json && json.code === 'rest_no_route',
+      error: (json && json.message) || (res.status === 413 ? `${name} is bigger than the site accepts.` : `WordPress returned HTTP ${res.status}.`),
+    };
+  } catch (err) {
+    return { ok: false, offline: true, error: `Could not upload ${name}: ${err.message}` };
+  }
+});
+
+ipcMain.handle('course-media-get', async (_event, { id } = {}) => {
+  const mid = parseInt(id, 10);
+  if (!(mid > 0)) return { ok: false, error: 'Invalid file id.' };
+  const config = getConfig();
+  if (!config.ok) return { ok: false, error: config.error };
+  try {
+    const auth = effectiveAuth(config);
+    const res = await fetch(easyBase(config) + `/course-builder/media/${mid}`, {
+      headers: { Authorization: basicAuth(auth.post) },
+      signal: AbortSignal.timeout(5 * 60 * 1000),
+    });
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      return { ok: false, status: res.status, error: (json && json.message) || `WordPress returned HTTP ${res.status}.` };
+    }
+    return { ok: true, type: res.headers.get('content-type') || '', data: new Uint8Array(await res.arrayBuffer()) };
   } catch (err) {
     return { ok: false, offline: true, error: `Could not reach the site: ${err.message}` };
   }
