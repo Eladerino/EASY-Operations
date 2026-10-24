@@ -441,8 +441,12 @@
   async function loadAll() {
     const errors = [];
     const ok = { certs: false, classes: false, accounts: false };
+    const R = window.EasyRoles;
+    const skip = () => Promise.resolve();
+    // Queues this account cannot act on are hidden (roles.js) and not
+    // asked for.
     const jobs = [
-      window.EasyApi.draftCerts()
+      !R.can('publishCerts') ? skip() : window.EasyApi.draftCerts()
         .then((r) => {
           ok.certs = true;
           state.certs = r.certs;
@@ -450,7 +454,7 @@
           renderCerts();
         })
         .catch((e) => errors.push('certificates: ' + e.message)),
-      (async () => {
+      !R.can('classDrafts') ? skip() : (async () => {
         const today = U.todayYmd();
         const events = await window.EasyApi.eventsInRange(today, U.addMonths(today, 12));
         ok.classes = true;
@@ -459,7 +463,7 @@
           .sort((a, b) => (a.startStamp < b.startStamp ? -1 : 1));
         renderClasses();
       })().catch((e) => errors.push('classes: ' + e.message)),
-      window.EasyApi.pendingUsers()
+      !R.can('accounts') ? skip() : window.EasyApi.pendingUsers()
         .then((list) => {
           ok.accounts = true;
           state.accounts = list;

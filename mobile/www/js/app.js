@@ -142,6 +142,8 @@
   /* ---------------- tabs ---------------- */
 
   function showTab(name) {
+    const btn = document.querySelector('.tab-btn[data-tab="' + name + '"]');
+    if (btn && btn.classList.contains('role-hidden')) name = 'today';
     closeSubview();
     currentTab = name;
     for (const page of document.querySelectorAll('.tab-page')) {
@@ -351,29 +353,39 @@
     });
   }
 
-  /* ---------------- capability heads-up ---------------- */
+  /* ---------------- roles ---------------- */
 
-  // Sign-in accepts any account whose application password works, but
-  // the queues need real rights. If the probe returned capabilities and
-  // key ones are missing, say so once in plain language instead of
-  // letting every screen fail quietly. Never blocks entry.
-  async function checkCapabilities(user) {
+  // Shows only the screens this account can use (roles.js). The Suite's
+  // app-config adds proxyPoster (office staff who post for others); if
+  // it cannot be reached the capabilities alone decide. "Needs
+  // attention" disappears when none of its boxes apply.
+  function applyRoles() {
+    window.EasyRoles.apply();
+    const grid = $('needsAttentionGrid');
+    const anyBox = grid && grid.querySelector('[data-role]:not(.role-hidden)');
+    if ($('needsAttentionTitle')) $('needsAttentionTitle').classList.toggle('role-hidden', Boolean(grid) && !anyBox);
+    if (grid) grid.classList.toggle('role-hidden', !anyBox);
+    const active = document.querySelector('.tab-btn[data-tab="' + currentTab + '"]');
+    if (active && active.classList.contains('role-hidden')) showTab('today');
+  }
+
+  async function loadRoles(user) {
     const caps = user && user.capabilities;
-    if (!caps || typeof caps !== 'object') return;
-    const missing = [];
-    if (!caps.promote_users) missing.push('review account signups');
-    if (!caps.manage_options) missing.push('use the management queue');
-    if (!caps.edit_posts) missing.push('publish certificates and classes');
-    if (!missing.length) return;
-    const key = 'caps_warned_' + (user.slug || user.name || 'account');
-    if (await window.EasyStore.getFlag(key)) return;
-    await window.EasyStore.setFlag(key);
-    toast(
-      'Heads up: this account cannot ' + missing.join(', ') +
-        '. Those parts of the app will not work. Your admin account can do all of it.',
-      'error',
-      10000
-    );
+    window.EasyRoles.set(caps, false);
+    applyRoles();
+    if (!window.EasyRoles.isManager() && caps) {
+      try {
+        const cfg = await window.EasyApi.appConfig();
+        const proxy = Boolean(cfg && cfg.proxyPoster);
+        if (proxy) {
+          window.EasyRoles.set(caps, true);
+          applyRoles();
+          if (currentTab === 'today') window.EasyToday.show();
+        }
+      } catch (e) {
+        // Keep the capability-only view.
+      }
+    }
   }
 
   /* ---------------- sign-in / app views ---------------- */
@@ -391,8 +403,8 @@
     $('signinView').classList.add('hidden');
     $('appView').classList.remove('hidden');
     $('signedInAs').textContent = user && user.name ? 'Signed in as ' + user.name : '';
+    loadRoles(user);
     showTab('today');
-    checkCapabilities(user);
     // Self-update check on launch (throttled inside the updater).
     window.EasyUpdater.check(false);
   }
@@ -428,6 +440,7 @@
     if (!yes) return;
     await window.EasyStore.clearCreds();
     window.EasyApi.setCreds(null);
+    window.EasyRoles.reset();
     signedInUser = null;
     showSignIn('');
   }

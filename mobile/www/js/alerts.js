@@ -37,6 +37,7 @@
   const SOURCES = [
     {
       key: 'certs',
+      role: 'publishCerts',
       label: 'certificate drafts',
       run: async (counts, items) => {
         const n = await window.EasyApi.draftCertCount();
@@ -52,6 +53,7 @@
     },
     {
       key: 'classes',
+      role: 'classDrafts',
       label: 'class drafts',
       run: async (counts, items) => {
         const today = U.todayYmd();
@@ -69,6 +71,7 @@
     },
     {
       key: 'accounts',
+      role: 'accounts',
       label: 'account signups',
       run: async (counts, items) => {
         const list = await window.EasyApi.pendingUsers();
@@ -84,6 +87,7 @@
     },
     {
       key: 'queue',
+      role: 'queue',
       label: 'management queue',
       run: async (counts, items) => {
         const q = await window.EasyApi.mgmtQueue();
@@ -124,8 +128,11 @@
     const items = [];
     const counts = {};
     const failed = [];
+    // Only the checks this account can act on (roles.js); the rest are
+    // neither run nor reported as failed.
+    const sources = SOURCES.filter((src) => !src.role || window.EasyRoles.can(src.role));
     await Promise.all(
-      SOURCES.map(async (src) => {
+      sources.map(async (src) => {
         try {
           await src.run(counts, items);
         } catch (e) {
@@ -246,6 +253,8 @@
     const note = $('healthUpdated');
     if (!box) return;
     box.innerHTML = '';
+    // Site health is an administrator route; others never see the section.
+    if (!window.EasyRoles.can('siteHealth')) return;
     try {
       const h = await window.EasyApi.siteHealth();
       lastHealth = h;
