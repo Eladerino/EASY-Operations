@@ -15,7 +15,7 @@ const crypto = require('crypto');
 const printer = require('pdf-to-printer');
 const { fillCertificatePdf } = require('./pdfgen');
 const shared = require('./shared');
-const { openWebsiteSignIn } = require('./websignin');
+const { openWebsiteSignIn, APP_ID: WEBSIGNIN_APP_ID } = require('./websignin');
 
 // Standard Squirrel.Windows startup handling (install / update / uninstall).
 if (require('electron-squirrel-startup')) app.quit();
@@ -449,6 +449,9 @@ if (!singleInstance) {
     createWindow();
     initUpdater();
     maybeShowWhatsNew();
+    if (config.ok && config.wpUser && config.wpUser.user) {
+      retirePendingAppPassword(config.wpBaseUrl.replace(/\/+$/, ''), effectiveAuth(config).post).catch(() => {});
+    }
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -545,6 +548,9 @@ const WHATS_NEW_FILE = () => path.join(app.getPath('userData'), 'whats-new.json'
 // Keep notes short and plain-language: Pam reads these. Nothing
 // business-internal here — instructors see these notes too.
 const WHATS_NEW_NOTES = {
+  '1.3.2': [
+    'Signing in again on this computer now removes its old sign-in from your website profile, so the list there stays tidy.',
+  ],
   '1.3.1': [
     'Course Builder: each chapter quiz question can explain why the answer is right, and learners see it after they answer.',
     'Course Builder: duplicate a chapter, block or question with one click.',
@@ -795,6 +801,73 @@ ipcMain.handle('website-sign-in', async (event) => {
   return openWebsiteSignIn({ siteUrl: SETUP_SITE_URL, parent });
 });
 
+// ---- Retiring the old application password ------------------------------
+// Each website sign-in makes a new application password. When this
+// computer signs in again, the one it used before is removed from the
+// person's profile, but only after the new one has passed the connection
+// test and been saved. Only passwords the website sign-in made for this
+// app (matching app_id) are removed: one made by hand on the profile page
+// may be in use on another device too, so it stays.
+
+const APP_PASSWORDS_PATH = '/wp-json/wp/v2/users/me/application-passwords';
+
+function revokePendingPath() {
+  return path.join(app.getPath('userData'), 'revoke-pending.json');
+}
+
+// { user, uuid } for the password `auth` signs in with, or null when it
+// isn't one this app may remove (or the site can't say).
+async function oldAppPassword(base, auth) {
+  try {
+    const res = await fetch(`${base}${APP_PASSWORDS_PATH}/introspect`, {
+      headers: { Authorization: basicAuth(auth) },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return null;
+    return shared.revokeCandidate(await res.json().catch(() => null), auth.user, WEBSIGNIN_APP_ID);
+  } catch (e) {
+    return null;
+  }
+}
+
+// DELETE with `auth`. True once the password is gone (or already was).
+async function deleteAppPassword(base, auth, uuid) {
+  try {
+    const res = await fetch(`${base}${APP_PASSWORDS_PATH}/${encodeURIComponent(uuid)}`, {
+      method: 'DELETE',
+      headers: { Authorization: basicAuth(auth) },
+      signal: AbortSignal.timeout(8000),
+    });
+    return res.ok || res.status === 404;
+  } catch (e) {
+    return false;
+  }
+}
+
+// Sign-in replaced in place (Setup, Change sign-in): the old password
+// still works, so it removes itself.
+async function retireReplacedAppPassword(base, oldAuth) {
+  const old = await oldAppPassword(base, oldAuth);
+  if (old) await deleteAppPassword(base, oldAuth, old.uuid);
+}
+
+// After Sign out the old password is no longer on this computer, so its
+// id is kept in revoke-pending.json and the next sign-in as the same
+// person removes it. Another person's sign-in can't remove it; that one
+// is left for its owner's profile page. Tried again at launch if the
+// site couldn't be reached.
+async function retirePendingAppPassword(base, newAuth) {
+  const file = revokePendingPath();
+  let pending = null;
+  try { pending = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { return; }
+  const drop = () => { try { fs.unlinkSync(file); } catch (e) { /* already gone */ } };
+  if (!pending || !pending.uuid || !shared.sameLogin(pending.user, newAuth.user)) {
+    drop();
+    return;
+  }
+  if (await deleteAppPassword(base, newAuth, pending.uuid)) drop();
+}
+
 ipcMain.handle('get-printers', async () => {
   try {
     const list = await getPrinterList();
@@ -812,6 +885,8 @@ ipcMain.handle('save-setup', async (_event, setup = {}) => {
     if (rawBase.toLowerCase() !== SETUP_SITE_URL) {
       return { ok: false, error: `This app only connects to ${SETUP_SITE_URL}.` };
     }
+    const previous = getConfig();
+    const oldAuth = previous.ok && previous.wpUser && previous.wpUser.user ? effectiveAuth(previous).post : null;
     const encPassword = encryptPassword(setup.appPassword || '');
     const config = {
       wpBaseUrl: SETUP_SITE_URL,
@@ -829,6 +904,17 @@ ipcMain.handle('save-setup', async (_event, setup = {}) => {
     fs.mkdirSync(path.dirname(userPath), { recursive: true });
     writeConfigAtomic(userPath, config);
     cachedConfig = null;
+    // The new sign-in passed the connection test and is saved, so the
+    // password it replaces can go. Runs in the background; a failure
+    // only leaves the old one on the profile page.
+    const newAuth = { user: config.wpUser.user, appPassword: String(setup.appPassword || '') };
+    const replaced = oldAuth && oldAuth.appPassword &&
+      !(shared.sameLogin(oldAuth.user, newAuth.user) &&
+        oldAuth.appPassword.replace(/\s+/g, '') === newAuth.appPassword.replace(/\s+/g, ''));
+    (async () => {
+      if (replaced) await retireReplacedAppPassword(SETUP_SITE_URL, oldAuth);
+      await retirePendingAppPassword(SETUP_SITE_URL, newAuth);
+    })().catch(() => {});
     return { ok: true };
   } catch (err) {
     return { ok: false, error: `Could not save the setup: ${err.message}` };
@@ -854,6 +940,13 @@ ipcMain.handle('set-printer', async (_event, name) => {
 // Signs out: deletes the saved login so the setup wizard runs again.
 ipcMain.handle('reset-setup', async () => {
   try {
+    // Note the password being signed out of, so the next sign-in as the
+    // same person can remove it (see retirePendingAppPassword).
+    const previous = getConfig();
+    if (previous.ok && previous.wpUser && previous.wpUser.user) {
+      const old = await oldAppPassword(previous.wpBaseUrl.replace(/\/+$/, ''), effectiveAuth(previous).post);
+      if (old) writeConfigAtomic(revokePendingPath(), old);
+    }
     const { userPath, devPath } = configPaths();
     if (fs.existsSync(userPath)) fs.unlinkSync(userPath);
     if (!app.isPackaged && fs.existsSync(devPath)) fs.unlinkSync(devPath);

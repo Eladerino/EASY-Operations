@@ -44,19 +44,26 @@
 
   // The name on the person's WordPress profile. WordPress refuses a
   // second password with the same name, so the sign-in time is part of
-  // it; it also tells the devices apart when one needs revoking.
-  function appName(now) {
+  // it; it also tells the devices apart when one needs revoking. An
+  // optional label from the sign-in screen ("Brandon's Pixel") goes
+  // first so the profile page says which phone it is.
+  function cleanLabel(label) {
+    return String(label || '').replace(/[\s,()]+/g, ' ').trim().slice(0, 40);
+  }
+
+  function appName(now, label) {
     const d = now || new Date();
     const pad = (n) => String(n).padStart(2, '0');
     const stamp = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
       ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
-    return 'EASY Manager (' + (isNative() ? 'Android' : 'web') + ', ' + stamp + ')';
+    const name = cleanLabel(label);
+    return 'EASY Manager (' + (name ? name + ', ' : '') + (isNative() ? 'Android' : 'web') + ', ' + stamp + ')';
   }
 
-  function authorizeUrl() {
+  function authorizeUrl(label) {
     const back = webAppUrl();
     const params = new URLSearchParams({
-      app_name: appName(),
+      app_name: appName(null, label),
       app_id: isNative() ? ANDROID_APP_ID : WEB_APP_ID,
       success_url: back + (isNative() ? '#connect-android' : '#connect'),
       reject_url: back + (isNative() ? '#connect-android-rejected' : '#connect-rejected'),
@@ -121,10 +128,29 @@
   // header, so the browser refuses to let the app read them even when
   // they are there (that check blocked every sign-in in 0.5.0). EASY
   // Suite 2.2.44 and newer carry the web version.
-  function start() {
+  function start(label) {
     // In the Android app this opens the phone's browser (the app only
     // keeps its own pages); in the web version it is a normal page change.
-    window.location.href = authorizeUrl();
+    window.location.href = authorizeUrl(label);
+  }
+
+  // Picks out the application password a new sign-in replaces, from
+  // WordPress's introspect answer for the old one. Only a password the
+  // website sign-in made for EASY Manager (Android or web app_id)
+  // qualifies; one made by hand on the profile page may be in use on
+  // another device too. Returns { username, uuid } or null.
+  function revokeCandidate(introspect, username) {
+    if (!introspect || typeof introspect.uuid !== 'string' || !introspect.uuid) return null;
+    if (introspect.app_id !== ANDROID_APP_ID && introspect.app_id !== WEB_APP_ID) return null;
+    const login = String(username || '').trim();
+    if (!login) return null;
+    return { username: login, uuid: introspect.uuid };
+  }
+
+  // WordPress logins compare without case.
+  function sameLogin(a, b) {
+    const x = String(a || '').trim().toLowerCase();
+    return x !== '' && x === String(b || '').trim().toLowerCase();
   }
 
   // Android: listen for the hand-back, including the one that launched
@@ -156,6 +182,9 @@
     parseAppUrl,
     androidHandoffLink,
     appName,
+    cleanLabel,
+    revokeCandidate,
+    sameLogin,
     WEB_APP_PATH,
   };
 })();

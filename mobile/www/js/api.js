@@ -194,6 +194,33 @@
     return res.json();
   }
 
+  /* ---------------- application passwords ---------------- */
+
+  // The saved password's own record ({ uuid, app_id, name, ... }), or
+  // null when the site can't say. Never throws.
+  async function introspectAppPassword() {
+    try {
+      const r = await rawRequest(WP + '/wp/v2/users/me/application-passwords/introspect');
+      return r.status === 200 ? r.json : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Removes one of the signed-in person's application passwords. True
+  // once it is gone (or already was); false if the site couldn't be
+  // reached or refused. Never throws.
+  async function deleteAppPassword(uuid) {
+    try {
+      const r = await rawRequest(WP + '/wp/v2/users/me/application-passwords/' + encodeURIComponent(uuid), {
+        method: 'DELETE',
+      });
+      return (r.status >= 200 && r.status < 300) || r.status === 404;
+    } catch (e) {
+      return false;
+    }
+  }
+
   /* ---------------- account approvals (EASY Suite) ---------------- */
 
   async function pendingUsers() {
@@ -970,6 +997,8 @@
   window.EasyApi = {
     setCreds,
     fetchMe,
+    introspectAppPassword,
+    deleteAppPassword,
     fetchWithTimeout,
     invalidateCache,
     isWaitingClass,
