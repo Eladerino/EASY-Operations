@@ -109,7 +109,9 @@ WordPress credentials at runtime.
 The app follows the phone's light or dark setting by default; a Theme
 setting (System, Light, Dark) at the foot of the Today screen can
 force either look, and the choice is applied before first paint.
-Every tab reloads its data when it is opened, and pulling down from
+Every tab reloads its data when it is opened, and again when the app
+comes back to the front after five minutes or more away (unless a
+dialog or subview is open). Pulling down from
 the top of any tab refreshes that tab (pull-to-refresh, on the main
 view of each tab only, not inside subviews like the roster or the
 class editor). The Android Back button closes dialogs and subviews
@@ -175,8 +177,9 @@ phone offers it as an update (or sideload the workflow artifact).
 
 ## Self-update
 
-On launch (at most once every 6 hours, ETag-cached) the app asks GitHub
-for this repo's recent releases and scans them newest first, because
+On launch and when the app comes back to the front (at most once every
+6 hours, ETag-cached) the app asks GitHub for this repo's newest 100
+releases and scans them newest first, because
 most releases here are desktop app releases and the APK rides along as
 an asset on only some of them. Among all APK assets found, the newest
 app version wins. If it is newer than the running app, a banner offers
