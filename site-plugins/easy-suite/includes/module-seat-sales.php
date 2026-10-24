@@ -460,7 +460,7 @@ add_action('woocommerce_after_checkout_billing_form', function ($checkout) {
         return;
     }
     echo '<div class="easy-seat-attendees"><h3>' . esc_html__('Who is attending?', 'easy-suite') . '</h3>';
-    echo '<p>' . esc_html__('We print certificates from these details — please double-check spelling.', 'easy-suite') . '</p>';
+    echo '<p>' . esc_html__('We print certificates from these details, so please double-check spelling.', 'easy-suite') . '</p>';
     foreach ($items as $it) {
         $title = get_the_title($it['event_id']);
         $date_label = function_exists('tribe_get_start_date')

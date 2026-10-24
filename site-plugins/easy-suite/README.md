@@ -115,7 +115,9 @@ The full route list is at the top of `module-courses.php` and
 
 - Each module is `includes/module-<key>.php`, and `includes/modules.php`
   lists them all.
-- Run `php -l` on every file before packaging.
+- Run `php -l` on every file before packaging. The Check Suite workflow
+  does this on every pull request that touches the plugin, and Publish
+  Suite refuses to publish if any file fails.
 - For a new version, update both `Version:` and `EASY_SUITE_VERSION` in
   `easy-suite.php`.
 - If you change the key tables, raise `EASY_LICENSES_DB`.

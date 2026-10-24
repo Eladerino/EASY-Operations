@@ -497,7 +497,7 @@
     },
     text: {
       label: 'Text / narration', delivery: 'volatile',
-      tip: '<strong>Cheap to update:</strong> this is where specific figures, dates, and rule details belong. If Dad records narration, paste the script here too — it doubles as the accessibility transcript.',
+      tip: '<strong>Cheap to update:</strong> this is where specific figures, dates, and rule details belong. If someone records narration, paste the script here too. It doubles as the accessibility transcript.',
     },
     photo: {
       label: 'Photo', delivery: 'volatile',
@@ -817,7 +817,7 @@
     html += '</div>';
     html += onSite()
       ? '<p class="hint" style="margin-bottom:0">Sending for review freezes a versioned snapshot and puts it in the reviewers\' Review inbox here in the app. You can keep editing afterwards; new edits won\'t touch the snapshot under review.</p>'
-      : '<p class="hint" style="margin-bottom:0">Sending for review freezes a versioned snapshot and downloads a review file — send that file to Brandon/Pam. You can keep editing afterwards; new edits won\'t touch the snapshot under review.</p>';
+      : '<p class="hint" style="margin-bottom:0">Sending for review freezes a versioned snapshot and downloads a review file. Send that file to a course reviewer. You can keep editing afterwards; new edits won\'t touch the snapshot under review.</p>';
     html += '</div>';
 
     // Data view
@@ -890,7 +890,7 @@
         + '<textarea data-sfield="transcript" rows="3" placeholder="Everything said in the video, word for word…"' + dis + '>' + esc(seg.transcript) + '</textarea></div></div>';
     } else if (seg.type === 'text') {
       html += '<div class="field"><label>Lesson text</label><textarea data-sfield="body" rows="4" placeholder="Write the lesson…"' + dis + '>' + esc(seg.body) + '</textarea></div>'
-        + '<div class="grid"><div class="field"><label>Narration script <span class="optional">(if Dad records voiceover)</span></label>'
+        + '<div class="grid"><div class="field"><label>Narration script <span class="optional">(if someone records voiceover)</span></label>'
         + '<textarea data-sfield="narrationScript" rows="3" placeholder="Spoken version — doubles as the transcript…"' + dis + '>' + esc(seg.narrationScript) + '</textarea></div>'
         + '<div class="field"><label>Audio file <span class="optional">(optional)</span></label><div class="lookup-row">'
         + '<input type="text" data-sfield="audioFileName" placeholder="e.g. narration.mp3" value="' + esc(seg.audioFileName) + '"' + dis + '>'
@@ -1744,7 +1744,7 @@
     course.reviewNote = '';
     course.updatedAt = now;
     persistCourses();
-    toast('Snapshot v' + version + ' downloaded — send the file to Brandon/Pam for review.', 'success', 8000);
+    toast('Snapshot v' + version + ' downloaded. Send the file to a course reviewer.', 'success', 8000);
     render();
   }
 
@@ -1852,12 +1852,12 @@
     const c = item.payload && item.payload.course;
     const note = await modalPrompt({
       title: 'Send back with a note',
-      bodyHtml: '<p>Tell Dad what needs fixing in v' + item.version + ' of "' + esc((c && c.title) || 'untitled') + '".</p>',
+      bodyHtml: '<p>Tell the author what needs fixing in v' + item.version + ' of "' + esc((c && c.title) || 'untitled') + '".</p>',
       placeholder: 'e.g. Chapter 2\'s quiz needs an answer marked on question 3…',
       okText: 'Download changes file',
     });
     if (note === null) return;
-    if (!note) { toast('A short note helps Dad know what to fix.', 'error'); return; }
+    if (!note) { toast('A short note helps the author know what to fix.', 'error'); return; }
     const now = new Date().toISOString();
     download(slug((c && c.title) || 'course') + '-v' + item.version + '.changes.json', {
       package: 'easy-course-changes', format: 1, kind: 'changes',
@@ -1960,7 +1960,7 @@
       html += '<div class="card b-empty"><h3>Inbox is empty</h3>'
         + (onSite()
           ? '<p>When an author sends a course for review, it appears here. Preview it as the learner would see it, then approve it or send it back with a note.</p></div>'
-          : '<p>When Dad sends a course for review, its snapshot file lands here once you import it. Preview it as the learner would see it, then approve it or send it back with a note.</p></div>');
+          : '<p>When an author sends a course for review, its snapshot file lands here once you import it. Preview it as the learner would see it, then approve it or send it back with a note.</p></div>');
     } else {
       items.forEach((item) => {
         const c = item.payload && item.payload.course;

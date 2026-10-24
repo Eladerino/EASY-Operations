@@ -75,7 +75,7 @@ SumatraPDF.
    `main`. It builds the installer, checks it and publishes release
    `v<version>`.
 
-Installed apps check for updates on launch and every 10 minutes, and offer
+Installed apps check for updates on launch and every hour, and offer
 to restart once one is downloaded. Every published release prompts every
 user, so only publish something worth installing.
 
@@ -127,3 +127,4 @@ publishing.
 | `.github/workflows/release.yml` | Release build |
 | `.github/workflows/build-apk.yml` | EASY Manager APK build |
 | `.github/workflows/publish-suite.yml` | Packages the Suite zip onto a prerelease for the plugin self-updater |
+| `.github/workflows/check-suite.yml` | Syntax-checks the Suite's PHP on pull requests |
