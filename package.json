@@ -23,9 +23,10 @@
     "make": "electron-forge make",
     "package": "electron-forge package",
     "start": "electron-forge start",
-    "publish": "electron-forge publish"
+    "publish": "electron-forge publish",
+    "test": "node --test test/*.test.js"
   },
-  "version": "1.2.9",
+  "version": "1.2.10",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Eladerino/EASY-Operations.git"

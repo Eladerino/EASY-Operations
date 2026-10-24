@@ -1,0 +1,26 @@
+{
+  "_about": "A review file (.review.json) from file-based review: snapshot only, no id, status or timestamps.",
+  "source": "file",
+  "data": {
+    "package": "easy-course-review",
+    "format": 1,
+    "kind": "review",
+    "courseId": "c_mgv5bbbb0002",
+    "version": 2,
+    "submittedBy": "bglynn",
+    "submittedAt": "2026-10-19T08:00:00.000Z",
+    "course": {
+      "title": "Confined Space Awareness",
+      "description": "Recognizing confined spaces before you enter one.",
+      "passMark": 80,
+      "maxAttempts": 3,
+      "onFail": "retry",
+      "chapters": [
+        { "id": "ch_mgv5c1", "title": "What counts as a confined space", "status": "draft",
+          "segments": [ { "id": "seg_mgv5d1", "type": "video", "title": "Walkthrough of a tank entry", "fileName": "tank.mp4", "durationSec": 300, "transcript": "We're standing at the tank hatch." } ],
+          "quizQuestions": [] }
+      ],
+      "finalQuiz": { "questions": [] }
+    }
+  }
+}

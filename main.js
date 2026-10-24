@@ -544,6 +544,10 @@ const WHATS_NEW_FILE = () => path.join(app.getPath('userData'), 'whats-new.json'
 // Keep notes short and plain-language: Pam reads these. Nothing
 // business-internal here — instructors see these notes too.
 const WHATS_NEW_NOTES = {
+  '1.2.10': [
+    'Course Builder: courses made in earlier versions keep opening as the builder grows, and a course saved by a newer app is protected until this one updates.',
+    'Course Builder: titles are saved as you type, so closing the app mid-word keeps them.',
+  ],
   '1.2.9': [
     'Course Builder wording is clearer about who reviews a course.',
   ],
@@ -1222,6 +1226,9 @@ function courseSyncRoute(op, args) {
   const content = () => ({
     course: args.course && typeof args.course === 'object' ? args.course : null,
     baseRev: Number.isInteger(args.baseRev) && args.baseRev > 0 ? args.baseRev : 0,
+    // Newest course format this app understands; the site refuses saves
+    // over a course in a newer one (see renderer/course-schema.js).
+    schema: Number.isInteger(args.schema) && args.schema > 0 ? args.schema : 1,
   });
   switch (op) {
     case 'me': return ['GET', '/course-builder/me'];

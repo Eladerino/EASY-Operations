@@ -19,11 +19,12 @@
 
   /* ---------------- helpers ---------------- */
 
+  const S = window.EasyCourseSchema;
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => (
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
   ));
-  const uid = (p) => (p || 'id') + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  const uid = S.uid;
   const deepCopy = (o) => JSON.parse(JSON.stringify(o));
   const words = (s) => String(s || '').trim().split(/\s+/).filter(Boolean).length;
   const slug = (s) => String(s || 'course').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'course';
@@ -196,7 +197,7 @@
   const isDirty = (c) => !c._rev || contentSig(c) !== c._syncedSig;
 
   function fromSite(entry) {
-    const c = normalizeCourse(deepCopy(entry.course));
+    const c = readCourse(deepCopy(entry.course));
     c._rev = entry.rev || 0;
     c._syncedSig = contentSig(c);
     c._siteBy = entry.updatedBy || '';
@@ -264,7 +265,7 @@
 
   function setReviews(list) {
     sync.reviews = (Array.isArray(list) ? list : []).map((r) => {
-      try { r.course = normalizeCourse(r.course); } catch (e) { /* preview guards handle it */ }
+      try { r.course = readCourse(r.course); } catch (e) { /* preview guards handle it */ }
       return r;
     });
   }
@@ -329,7 +330,7 @@
   async function pushDirty() {
     sync.timer = null;
     if (sync.pushing) { sync.again = true; return; }
-    const dirty = courses.filter(isDirty);
+    const dirty = courses.filter((c) => isDirty(c) && !isNewer(c));
     if (!dirty.length) { paintSync(); return; }
     sync.pushing = true;
     paintSync();
@@ -351,7 +352,7 @@
   async function pushOne(c, retried) {
     if (!courses.includes(c)) return 'gone';
     const sig = contentSig(c);
-    const r = await courseApi().sync('save', { id: c.id, course: cleanCourse(c), baseRev: c._rev || 0 });
+    const r = await courseApi().sync('save', { id: c.id, course: cleanCourse(c), baseRev: c._rev || 0, schema: S.SCHEMA_VERSION });
     if (r.ok && r.data) {
       c._rev = r.data.rev;
       c._syncedSig = sig;
@@ -379,7 +380,7 @@
   function syncState() {
     if (!onSite()) return sync.error ? 'warn' : 'local';
     if (sync.mode === 'offline') return 'warn';
-    if (sync.pushing || (isAuthor() && courses.some(isDirty) && !sync.error)) return 'busy';
+    if (sync.pushing || (isAuthor() && courses.some((c) => isDirty(c) && !isNewer(c)) && !sync.error)) return 'busy';
     return sync.error ? 'warn' : 'ok';
   }
   function syncLabel() {
@@ -459,34 +460,7 @@
 
   /* ---------------- data factories ---------------- */
 
-  function newQuestion() {
-    return { id: uid('q'), q: '', kind: 'mc', options: ['', ''], answer: 0 };
-  }
-  function newSegment(type) {
-    const base = { id: uid('seg'), type, title: '' };
-    switch (type) {
-      case 'video': return Object.assign(base, { fileName: '', durationSec: 0, transcript: '' });
-      case 'text': return Object.assign(base, { body: '', narrationScript: '', audioFileName: '', audioSec: 0 });
-      case 'photo': return Object.assign(base, { fileName: '', caption: '', alt: '' });
-      case 'interactive': return Object.assign(base, { description: '', estMin: 3 });
-      case 'quiz': return Object.assign(base, { questions: [newQuestion()] });
-      default: return base;
-    }
-  }
-  function newChapter(title) {
-    return { id: uid('ch'), title: title || 'New chapter', status: 'draft', segments: [], quizQuestions: [] };
-  }
-  function newCourse(title) {
-    const now = new Date().toISOString();
-    return {
-      id: uid('c'), title: title || 'Untitled course', description: '',
-      status: 'draft', reviewVersion: 0, approvedVersion: 0,
-      liveEditedSinceReview: false, reviewNote: '',
-      passMark: 80, maxAttempts: 3, onFail: 'retry',
-      chapters: [], finalQuiz: { questions: [] },
-      createdAt: now, updatedAt: now,
-    };
-  }
+  const { newQuestion, newSegment, newChapter, newCourse } = S;
 
   /* ---------------- segment definitions & tips ---------------- */
 
@@ -516,68 +490,24 @@
 
   const STATUS_LABEL = { draft: 'Draft', in_review: 'With reviewer', approved: 'Approved' };
 
-  /* ---------------- data normalization ----------------
-   * Courses load from localStorage and imported JSON with no schema
-   * guarantee. Normalize everything on the way in so a malformed shape
-   * (corrupted storage, hand-edited file) degrades gracefully instead of
-   * throwing halfway through a render. */
+  /* ---------------- reading courses ----------------
+   * Courses load from localStorage, the site and imported files with no
+   * guarantee of shape or age. course-schema.js upgrades older formats and
+   * repairs damaged ones; a course from a newer app comes back untouched and
+   * stays read-only here (see isNewer). */
 
-  function normalizeQuestion(q) {
-    if (!q || typeof q !== 'object') q = {};
-    if (!Array.isArray(q.options) || q.options.length < 2) {
-      const keep = Array.isArray(q.options) ? q.options.filter((o) => typeof o === 'string') : [];
-      while (keep.length < 2) keep.push('');
-      q.options = keep.slice(0, 2);
-    }
-    if (typeof q.answer !== 'number' || q.answer < 0 || q.answer >= q.options.length) q.answer = 0;
-    if (typeof q.q !== 'string') q.q = '';
-    if (q.kind !== 'tf' && q.kind !== 'mc') q.kind = 'mc';
-    return q;
-  }
-
-  function normalizeSegment(seg) {
-    if (!seg || typeof seg !== 'object') seg = {};
-    if (typeof seg.type !== 'string' || !SEG_DEFS[seg.type]) seg.type = 'text';
-    if (typeof seg.title !== 'string') seg.title = '';
-    if (typeof seg.id !== 'string' || !seg.id) seg.id = uid('seg');
-    if (seg.type === 'quiz') {
-      if (!Array.isArray(seg.questions)) seg.questions = [];
-      seg.questions = seg.questions.map(normalizeQuestion);
-    }
-    return seg;
-  }
-
-  function normalizeChapter(ch) {
-    if (!ch || typeof ch !== 'object') ch = {};
-    if (!Array.isArray(ch.segments)) ch.segments = [];
-    if (!Array.isArray(ch.quizQuestions)) ch.quizQuestions = [];
-    if (typeof ch.title !== 'string') ch.title = '';
-    if (typeof ch.id !== 'string' || !ch.id) ch.id = uid('ch');
-    ch.segments = ch.segments.map(normalizeSegment);
-    ch.quizQuestions = ch.quizQuestions.map(normalizeQuestion);
-    return ch;
-  }
-
-  function normalizeCourse(c) {
-    if (!c || typeof c !== 'object') return newCourse('');
-    if (!Array.isArray(c.chapters)) c.chapters = [];
-    if (!c.finalQuiz || typeof c.finalQuiz !== 'object') c.finalQuiz = { questions: [] };
-    if (!Array.isArray(c.finalQuiz.questions)) c.finalQuiz.questions = [];
-    if (typeof c.title !== 'string') c.title = '';
-    if (typeof c.id !== 'string' || !c.id) c.id = uid('c');
-    if (typeof c.passMark !== 'number') c.passMark = 80;
-    c.chapters = c.chapters.map(normalizeChapter);
-    c.finalQuiz.questions = c.finalQuiz.questions.map(normalizeQuestion);
-    return c;
-  }
+  const readCourse = S.upgradeCourse;
+  const isNewer = (c) => S.isNewerThanApp(c);
+  const NEWER_MSG = 'was saved by a newer version of EASY Operations. Update the app on this computer to open it.';
 
   // Apply to anything already loaded from localStorage, including review
   // snapshots parked in the inbox (their previews render the same way).
-  courses = courses.filter((c) => c && typeof c === 'object').map(normalizeCourse);
+  courses = (Array.isArray(courses) ? courses : []).filter((c) => c && typeof c === 'object').map(readCourse);
+  if (!Array.isArray(inbox)) inbox = [];
   if (!Array.isArray(authors)) authors = [];
   inbox.forEach((item) => {
     if (item && item.payload && item.payload.course) {
-      try { item.payload.course = normalizeCourse(item.payload.course); } catch (e) { /* leave as-is */ }
+      try { item.payload.course = readCourse(item.payload.course); } catch (e) { /* leave as-is */ }
     }
   });
 
@@ -657,6 +587,15 @@
       } else {
         html += '<div class="b-course-grid">';
         courses.forEach((c) => {
+          if (isNewer(c)) {
+            html += '<div class="card b-course-card">';
+            html += '<div><span class="b-status b-status-draft">Needs a newer app</span></div>';
+            html += '<h3>' + esc(c.title || 'Untitled course') + '</h3>';
+            html += '<div class="b-kv">This course ' + esc(NEWER_MSG) + ' Nothing here changes it.</div>';
+            html += '<div class="b-course-actions"><button type="button" class="btn btn-secondary btn-small" data-act="export" data-id="' + esc(c.id) + '">Export</button></div>';
+            html += '</div>';
+            return;
+          }
           const n = c.chapters.length;
           html += '<div class="card b-course-card">';
           html += '<div>' + statusBadge(c) + '</div>';
@@ -1048,13 +987,11 @@
 
     const ct = $('bCourseTitle');
     if (ct) {
-      ct.addEventListener('input', () => { course.title = ct.value; });
-      ct.addEventListener('change', () => { touch(course); });
+      ct.addEventListener('input', () => { course.title = ct.value; touch(course); });
     }
     const cd = $('bCourseDesc');
     if (cd) {
-      cd.addEventListener('input', () => { course.description = cd.value; });
-      cd.addEventListener('change', () => touch(course));
+      cd.addEventListener('input', () => { course.description = cd.value; touch(course); });
     }
     [['bPassMark', 'passMark', 1, 100, 80], ['bMaxAttempts', 'maxAttempts', 1, 10, 3]].forEach(([id, f, lo, hi, fb]) => {
       const el = $(id);
@@ -1075,9 +1012,8 @@
       if (titleEl) {
         titleEl.addEventListener('input', () => {
           const ch = findChapter(course, chId);
-          if (ch) { ch.title = titleEl.value; }
+          if (ch) { ch.title = titleEl.value; touch(course); }
         });
-        titleEl.addEventListener('change', () => touch(course));
       }
       // Segment fields
       chEl.querySelectorAll('[data-seg]').forEach((segEl) => {
@@ -1181,8 +1117,16 @@
     return false;
   }
 
+  // Only exporting works on a course from a newer app (see course-schema.js).
+  const NEWER_OK = ['back', 'export', 'sync-refresh', 'open-backups', 'new-course', 'author-add', 'author-del', 'inbox-import', 'inbox-remove'];
+
   async function handleAction(act, id, el) {
     const course = currentCourse();
+    const target = getCourse(id) || course;
+    if (target && isNewer(target) && NEWER_OK.indexOf(act) < 0) {
+      toast('"' + (target.title || 'Untitled course') + '" ' + NEWER_MSG, 'error', 9000);
+      return;
+    }
     switch (act) {
       case 'back': ui.view = 'library'; ui.courseId = null; render(); break;
 
@@ -1475,6 +1419,7 @@
 
       case 'inbox-approve': {
         const item = allInbox().find((x) => x.id === id);
+        if (item && item.payload && isNewer(item.payload.course)) { toast('This review version ' + NEWER_MSG, 'error', 9000); break; }
         if (item) await approveSnapshot(item);
         break;
       }
@@ -1501,10 +1446,11 @@
     if (!ui.preview) return null;
     if (ui.preview.kind === 'course') {
       const c = getCourse(ui.preview.id);
-      return c ? { course: c, label: 'Live course', frozen: false } : null;
+      return c && !isNewer(c) ? { course: c, label: 'Live course', frozen: false } : null;
     }
     const item = allInbox().find((x) => x.id === ui.preview.id);
     if (!item || !item.payload || !item.payload.course) return null;
+    if (isNewer(item.payload.course)) { toast('This review version ' + NEWER_MSG, 'error', 9000); return null; }
     return { course: item.payload.course, label: 'Review snapshot v' + item.version, frozen: true };
   }
 
@@ -1711,6 +1657,7 @@
 
   function snapshotOf(course) {
     return {
+      schemaVersion: S.schemaOf(course),
       title: course.title, description: course.description,
       passMark: course.passMark, maxAttempts: course.maxAttempts, onFail: course.onFail,
       chapters: deepCopy(course.chapters), finalQuiz: deepCopy(course.finalQuiz),
@@ -1755,7 +1702,7 @@
     }
     await waitForPush();
     const sig = contentSig(course);
-    const r = await courseApi().sync('submit', { id: course.id, course: cleanCourse(course), baseRev: course._rev || 0 });
+    const r = await courseApi().sync('submit', { id: course.id, course: cleanCourse(course), baseRev: course._rev || 0, schema: S.SCHEMA_VERSION });
     if (!r.ok) {
       if (r.status === 409 && r.data && r.data.current) {
         keepBoth(course, r.data.current);
@@ -1829,6 +1776,7 @@
     const now = new Date().toISOString();
     download(slug((c && c.title) || 'course') + '-v' + item.version + '.final.json', {
       package: 'easy-course-final', format: 1, kind: 'final',
+      schemaVersion: S.schemaOf(c),
       courseId: item.courseId, version: item.version,
       approvedBy: accountUser, approvedAt: now,
       course: deepCopy(c),
@@ -1877,6 +1825,7 @@
     if (obj.format !== 1) { toast('Unsupported package format — this builder reads format 1.', 'error'); return; }
     const kind = obj.kind;
     const hasCourse = obj.course && typeof obj.course === 'object';
+    if (hasCourse && isNewer(obj.course)) { toast('That file ' + NEWER_MSG, 'error', 9000); return; }
     // Reviews and change-requests are keyed by (courseId, version, kind) so
     // importing the same file twice can't create duplicate inbox entries.
     const alreadyInInbox = (k) => inbox.some((i) => i.kind === k && i.courseId === obj.courseId && i.version === obj.version);
@@ -1885,7 +1834,7 @@
         toast('That review package is missing required fields (courseId, version, course).', 'error'); return;
       }
       if (alreadyInInbox('review')) { toast('That review package is already in the inbox.', 'info'); return; }
-      try { obj.course = normalizeCourse(obj.course); } catch (e) { /* keep as-is; preview guards handle it */ }
+      try { obj.course = readCourse(obj.course); } catch (e) { /* keep as-is; preview guards handle it */ }
       inbox.unshift({
         id: uid('in'), kind: 'review', courseId: obj.courseId, version: obj.version,
         from: obj.submittedBy, at: obj.submittedAt, note: '', payload: obj, handled: false,
@@ -1914,7 +1863,7 @@
       }
     } else if (kind === 'backup' || kind === 'final') {
       if (!hasCourse) { toast('That package has no course data to import.', 'error'); return; }
-      const c = normalizeCourse(cleanCourse(obj.course));
+      const c = readCourse(cleanCourse(obj.course));
       const now = new Date().toISOString();
       c.id = uid('c');
       c.reviewNote = '';
@@ -1975,7 +1924,9 @@
         if (item.note) html += '<div class="b-review-note"><strong>Note:</strong> ' + esc(item.note) + '</div>';
         html += '<div class="b-course-actions">';
         html += '<button type="button" class="btn btn-secondary btn-small" data-act="inbox-preview" data-id="' + item.id + '">Preview snapshot</button>';
-        if (!item.handled && item.kind === 'review' && (!item.site || isReviewer())) {
+        if (c && isNewer(c)) {
+          html += '<span class="b-kv">This version ' + esc(NEWER_MSG) + '</span>';
+        } else if (!item.handled && item.kind === 'review' && (!item.site || isReviewer())) {
           html += '<button type="button" class="btn btn-primary btn-small" data-act="inbox-approve" data-id="' + item.id + '">Approve</button>';
           html += '<button type="button" class="btn btn-secondary btn-small" data-act="inbox-sendback" data-id="' + item.id + '">Send back with note</button>';
         }
@@ -1997,7 +1948,7 @@
   function render() {
     if (ui.view === 'builder') {
       const c = getCourse(ui.courseId);
-      if (!c) { ui.view = 'library'; ui.courseId = null; return render(); }
+      if (!c || isNewer(c)) { ui.view = 'library'; ui.courseId = null; return render(); }
       renderBuilder(c);
     } else if (ui.view === 'preview') {
       renderPreviewView();
