@@ -1,0 +1,30 @@
+# Runs the desktop app's unit tests (npm test) on pull requests and pushes
+# that touch the app, including the Course Builder's older-draft samples.
+
+name: Check App
+
+on:
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - 'site-plugins/**'
+      - 'mobile/**'
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'site-plugins/**'
+      - 'mobile/**'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      # The tests use only Node's built-in runner, so no npm install.
+      - run: npm test

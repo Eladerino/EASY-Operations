@@ -28,6 +28,9 @@ against easysafety.ca and needs the site's **EASY Suite** plugin
   computer sees the same copy. If the site doesn't have EASY Suite's Course
   Builder sync, courses stay on one computer and reviews are passed as files.
   Backups go to `%APPDATA%\EASYOperations\course-builder-backups\`.
+  Photos, narration audio and video files upload to a private folder on
+  the site. Each course records its format version (`renderer/course-schema.js`);
+  older drafts are upgraded when opened, and newer ones stay read-only.
 
 The tabs show badge counts for work waiting (approvals, expiring
 certificates), filled in by a scan shortly after the app opens. A
@@ -63,7 +66,7 @@ SumatraPDF.
 | Command | Does |
 |---|---|
 | `npm start` | Run in development (no auto-updates) |
-| `node --test` | Run the unit tests in `test/` |
+| `npm test` | Run the unit tests in `test/` |
 | `npm run make` | Build the installer, update files and zip into `out/make/` (Windows) |
 | `npm run publish` | Build and publish a release from your own PC (fallback, see below) |
 

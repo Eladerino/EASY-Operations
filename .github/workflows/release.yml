@@ -73,6 +73,8 @@ jobs:
 
       - run: npm ci
 
+      - run: npm test
+
       - run: npm run make
 
       - name: Check the package
