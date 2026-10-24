@@ -51,6 +51,8 @@ contextBridge.exposeInMainWorld('easyCert', {
     sync: (op, args) => ipcRenderer.invoke('course-sync', { op, args }),
     backup: (snapshot) => ipcRenderer.invoke('course-builder-backup', snapshot),
     openBackups: () => ipcRenderer.invoke('course-builder-backup-folder'),
+    uploadMedia: (kind, maxBytes) => ipcRenderer.invoke('course-media-upload', { kind, maxBytes }),
+    getMedia: (id) => ipcRenderer.invoke('course-media-get', { id }),
   },
   certTools: {
     search: (query) => ipcRenderer.invoke('cert-tools-search', query),

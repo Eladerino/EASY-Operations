@@ -26,10 +26,35 @@
 (function (root) {
   'use strict';
 
-  const SCHEMA_VERSION = 1;
+  // Format history:
+  //   1  (App 1.1 to 1.2.9) media recorded as file names only:
+  //      video/photo fileName, text audioFileName.
+  //   2  media are file references { id, name, size, type } uploaded to the
+  //      site (id 0 = only the name is known, nothing uploaded): video/photo
+  //      `file`, text `audioFile`; video also takes a `url` to a hosted video.
+  const SCHEMA_VERSION = 2;
+
+  // A file reference with only a name, as version 1 recorded it.
+  const nameOnly = (name) => (typeof name === 'string' && name.trim() ? { id: 0, name: name.trim(), size: 0, type: '' } : null);
 
   // MIGRATIONS[n] upgrades a version-n course to version n + 1.
-  const MIGRATIONS = {};
+  const MIGRATIONS = {
+    1: (c) => {
+      const each = (ch) => (ch && Array.isArray(ch.segments) ? ch.segments : []).forEach((seg) => {
+        if (!seg || typeof seg !== 'object') return;
+        if (seg.type === 'video' || seg.type === 'photo') {
+          if (!('file' in seg)) seg.file = nameOnly(seg.fileName);
+          delete seg.fileName;
+          if (seg.type === 'video' && !('url' in seg)) seg.url = '';
+        } else if (seg.type === 'text') {
+          if (!('audioFile' in seg)) seg.audioFile = nameOnly(seg.audioFileName);
+          delete seg.audioFileName;
+        }
+      });
+      (Array.isArray(c.chapters) ? c.chapters : []).forEach(each);
+      return c;
+    },
+  };
 
   const SEGMENT_TYPES = ['video', 'text', 'photo', 'interactive', 'quiz'];
   const STATUSES = ['draft', 'in_review', 'approved'];
@@ -54,9 +79,9 @@
   function newSegment(type) {
     const base = { id: uid('seg'), type, title: '' };
     switch (type) {
-      case 'video': return Object.assign(base, { fileName: '', durationSec: 0, transcript: '' });
-      case 'text': return Object.assign(base, { body: '', narrationScript: '', audioFileName: '', audioSec: 0 });
-      case 'photo': return Object.assign(base, { fileName: '', caption: '', alt: '' });
+      case 'video': return Object.assign(base, { file: null, url: '', durationSec: 0, transcript: '' });
+      case 'text': return Object.assign(base, { body: '', narrationScript: '', audioFile: null, audioSec: 0 });
+      case 'photo': return Object.assign(base, { file: null, caption: '', alt: '' });
       case 'interactive': return Object.assign(base, { description: '', estMin: 3 });
       case 'quiz': return Object.assign(base, { questions: [newQuestion()] });
       default: return base;
@@ -133,6 +158,19 @@
     return q;
   }
 
+  // Fields of each segment type that hold a file reference.
+  const FILE_FIELDS = { video: ['file'], photo: ['file'], text: ['audioFile'] };
+
+  function normalizeFile(f) {
+    if (!isObj(f)) return null;
+    const id = Number.isInteger(f.id) && f.id > 0 ? f.id : 0;
+    const name = str(f.name).trim();
+    if (!id && !name) return null;
+    return Object.assign(f, {
+      id, name: name || 'file', size: Math.max(0, Math.round(num(f.size, 0))), type: str(f.type),
+    });
+  }
+
   function normalizeSegment(seg, seen) {
     if (!isObj(seg)) seg = {};
     if (SEGMENT_TYPES.indexOf(seg.type) < 0) seg.type = 'text';
@@ -140,10 +178,12 @@
     seg.title = str(seg.title);
     // Fill each field the segment type should have, with its blank value.
     const blank = newSegment(seg.type);
+    const fileFields = FILE_FIELDS[seg.type] || [];
     Object.keys(blank).forEach((k) => {
-      if (k === 'id' || k === 'type' || k === 'questions') return;
+      if (k === 'id' || k === 'type' || k === 'questions' || fileFields.indexOf(k) >= 0) return;
       if (typeof seg[k] !== typeof blank[k]) seg[k] = blank[k];
     });
+    fileFields.forEach((k) => { seg[k] = normalizeFile(seg[k]); });
     if (seg.type === 'video') seg.durationSec = Math.max(0, num(seg.durationSec, 0));
     if (seg.type === 'text') seg.audioSec = Math.max(0, num(seg.audioSec, 0));
     if (seg.type === 'interactive') seg.estMin = clampInt(seg.estMin, 1, 30, 3);
@@ -196,8 +236,19 @@
     return normalizeCourse(migrateWith(course, MIGRATIONS, SCHEMA_VERSION));
   }
 
+  // Every file reference in a course, for showing or checking uploads.
+  function filesIn(course) {
+    const out = [];
+    ((course && course.chapters) || []).forEach((ch) => ((ch && ch.segments) || []).forEach((seg) => {
+      (FILE_FIELDS[seg && seg.type] || []).forEach((k) => { if (seg[k]) out.push({ seg, field: k, file: seg[k] }); });
+    }));
+    return out;
+  }
+
   const api = {
     SCHEMA_VERSION,
+    FILE_FIELDS,
+    filesIn,
     MIGRATIONS,
     SEGMENT_TYPES,
     uid,

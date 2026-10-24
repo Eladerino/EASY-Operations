@@ -511,6 +511,81 @@
     }
   });
 
+  /* ---------------- media files ----------------
+   * With site sync, photos, narration audio and video files upload to a
+   * private folder on the site (EASY Suite course-media.php) and the course
+   * keeps a reference { id, name, size, type }. Without it, only the file
+   * name is recorded (id 0), as before. Files are fetched through the main
+   * process, which holds the credentials, and shown from blob: URLs. */
+
+  // Where a video can come from: 'url' (a hosted video link), 'file' (upload).
+  const VIDEO_SOURCES = ['url'];
+  const MEDIA_KIND = { file: (seg) => (seg.type === 'photo' ? 'image' : 'video'), audioFile: () => 'audio' };
+  const mediaUrls = new Map(); // file id -> Promise<blob URL | null>
+
+  const fmtBytes = (n) => (n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round((n || 0) / 1024)) + ' KB');
+  const canUpload = () => sync.mode === 'site' && !!courseApi() && !!courseApi().uploadMedia && isAuthor();
+
+  function mediaUrl(id) {
+    if (!mediaUrls.has(id)) {
+      mediaUrls.set(id, (async () => {
+        const api = courseApi();
+        if (!api || !api.getMedia) return null;
+        const r = await api.getMedia(id);
+        if (!r.ok) { mediaUrls.delete(id); return null; }
+        return URL.createObjectURL(new Blob([r.data], { type: r.type }));
+      })());
+    }
+    return mediaUrls.get(id);
+  }
+
+  // Fills every <img>/<audio>/<video data-media-id> on the page once its file arrives.
+  function hydrateMedia() {
+    document.querySelectorAll('#builderRoot [data-media-id]').forEach(async (el) => {
+      const id = parseInt(el.getAttribute('data-media-id'), 10);
+      if (!(id > 0) || !onSite()) return;
+      const url = await mediaUrl(id);
+      if (url && el.isConnected) { el.src = url; el.classList.remove('b-media-loading'); }
+      else if (el.isConnected) el.replaceWith(Object.assign(document.createElement('span'), { className: 'hint', textContent: 'Could not load this file from the site.' }));
+    });
+  }
+
+  function mediaTag(file, kind) {
+    if (!file || !(file.id > 0) || !onSite()) return '';
+    if (kind === 'image') return '<img class="b-media-thumb b-media-loading" data-media-id="' + file.id + '" alt="">';
+    if (kind === 'audio') return '<audio class="b-media-audio" controls preload="none" data-media-id="' + file.id + '"></audio>';
+    return '<video class="b-media-video" controls preload="metadata" data-media-id="' + file.id + '"></video>';
+  }
+
+  // The file box shown in a segment editor: what's attached, and the buttons.
+  function fileBox(seg, ch, field, author) {
+    const file = seg[field];
+    const kind = MEDIA_KIND[field](seg);
+    const attrs = ' data-ch="' + ch.id + '" data-id="' + seg.id + '" data-f="' + field + '" data-kind="' + kind + '"';
+    let html = '<div class="b-file">';
+    if (file) {
+      html += '<div class="b-file-name"><strong>' + esc(file.name) + '</strong> '
+        + (file.id > 0
+          ? '<span class="b-kv">uploaded · ' + esc(fmtBytes(file.size)) + '</span>'
+          : '<span class="b-kv">' + (onSite() ? 'name only, not uploaded yet' : 'file name recorded') + '</span>')
+        + '</div>';
+      html += mediaTag(file, kind);
+    } else {
+      html += '<div class="b-kv">No file yet.</div>';
+    }
+    if (author) {
+      html += '<div class="b-file-actions">';
+      if (canUpload()) html += '<button type="button" class="btn btn-secondary btn-small" data-act="seg-upload"' + attrs + '>' + (file && file.id > 0 ? 'Replace…' : 'Upload…') + '</button>';
+      else html += '<button type="button" class="btn btn-secondary btn-small" data-act="seg-file"' + attrs + '>Choose…</button>';
+      if (file) html += '<button type="button" class="btn btn-secondary btn-small" data-act="seg-file-clear"' + attrs + '>Remove</button>';
+      html += '</div>';
+    }
+    if (author && !canUpload()) {
+      html += '<div class="hint">' + (onSite() ? 'Uploading needs a connection to the site.' : 'Without the site\'s Course Builder sync, only the file name is recorded.') + '</div>';
+    }
+    return html + '</div>';
+  }
+
   /* ---------------- view state ---------------- */
 
   const ui = { view: 'library', sub: 'courses', courseId: null, preview: null, showData: false };
@@ -820,26 +895,28 @@
     html += '<div class="b-tip">' + def.tip + '</div>';
 
     if (seg.type === 'video') {
-      html += '<div class="grid"><div class="field"><label>Video file</label><div class="lookup-row">'
-        + '<input type="text" data-sfield="fileName" placeholder="e.g. welcome.mp4" value="' + esc(seg.fileName) + '"' + dis + '>'
-        + (author ? '<button type="button" class="btn btn-secondary btn-small" data-act="seg-file" data-ch="' + ch.id + '" data-id="' + seg.id + '" data-f="fileName">Choose…</button>' : '')
-        + '</div><div class="hint">For now, just the file name is recorded here.</div></div>'
-        + '<div class="field"><label>Duration (m:ss)</label><input type="text" data-sfield="duration" value="' + esc(fmtDurationInput(seg.durationSec)) + '" placeholder="3:30"' + dis + '></div>'
+      html += '<div class="grid">';
+      if (VIDEO_SOURCES.indexOf('url') >= 0) {
+        html += '<div class="field"><label>Video link <span class="optional">(unlisted Vimeo, YouTube or Bunny link)</span></label>'
+          + '<input type="url" data-sfield="url" placeholder="https://vimeo.com/…" value="' + esc(seg.url) + '"' + dis + '></div>';
+      }
+      if (VIDEO_SOURCES.indexOf('file') >= 0 || seg.file) {
+        html += '<div class="field"><label>Video file</label>' + fileBox(seg, ch, 'file', author) + '</div>';
+      }
+      html += '<div class="field"><label>Duration (m:ss)</label><input type="text" data-sfield="duration" value="' + esc(fmtDurationInput(seg.durationSec)) + '" placeholder="3:30"' + dis + '></div>'
         + '<div class="field span-2"><label>Transcript <span class="optional">(required — captions &amp; accessibility)</span></label>'
         + '<textarea data-sfield="transcript" rows="3" placeholder="Everything said in the video, word for word…"' + dis + '>' + esc(seg.transcript) + '</textarea></div></div>';
     } else if (seg.type === 'text') {
       html += '<div class="field"><label>Lesson text</label><textarea data-sfield="body" rows="4" placeholder="Write the lesson…"' + dis + '>' + esc(seg.body) + '</textarea></div>'
         + '<div class="grid"><div class="field"><label>Narration script <span class="optional">(if someone records voiceover)</span></label>'
         + '<textarea data-sfield="narrationScript" rows="3" placeholder="Spoken version — doubles as the transcript…"' + dis + '>' + esc(seg.narrationScript) + '</textarea></div>'
-        + '<div class="field"><label>Audio file <span class="optional">(optional)</span></label><div class="lookup-row">'
-        + '<input type="text" data-sfield="audioFileName" placeholder="e.g. narration.mp3" value="' + esc(seg.audioFileName) + '"' + dis + '>'
-        + (author ? '<button type="button" class="btn btn-secondary btn-small" data-act="seg-file" data-ch="' + ch.id + '" data-id="' + seg.id + '" data-f="audioFileName">Choose…</button>' : '')
-        + '</div><div class="field" style="margin-top:8px"><label>Audio length (m:ss)</label><input type="text" data-sfield="audioDur" value="' + esc(fmtDurationInput(seg.audioSec)) + '" placeholder="2:15"' + dis + '></div></div></div>';
+        + '<div class="field"><label>Narration audio <span class="optional">(optional)</span></label>'
+        + fileBox(seg, ch, 'audioFile', author)
+        + '<div class="field" style="margin-top:8px"><label>Audio length (m:ss)</label><input type="text" data-sfield="audioDur" value="' + esc(fmtDurationInput(seg.audioSec)) + '" placeholder="2:15"' + dis + '></div></div></div>';
     } else if (seg.type === 'photo') {
-      html += '<div class="grid"><div class="field"><label>Photo file</label><div class="lookup-row">'
-        + '<input type="text" data-sfield="fileName" placeholder="e.g. harness-closeup.jpg" value="' + esc(seg.fileName) + '"' + dis + '>'
-        + (author ? '<button type="button" class="btn btn-secondary btn-small" data-act="seg-file" data-ch="' + ch.id + '" data-id="' + seg.id + '" data-f="fileName">Choose…</button>' : '')
-        + '</div><div class="hint">Real photos from EASY\'s facility — learners should recognize the gear at their practical.</div></div>'
+      html += '<div class="grid"><div class="field"><label>Photo</label>'
+        + fileBox(seg, ch, 'file', author)
+        + '<div class="hint">Real photos from EASY\'s facility — learners should recognize the gear at their practical.</div></div>'
         + '<div class="field"><label>Caption <span class="optional">(shown under the photo)</span></label><input type="text" data-sfield="caption" value="' + esc(seg.caption) + '" placeholder="What the learner is looking at…"' + dis + '></div>'
         + '<div class="field span-2"><label>Alt text <span class="optional">(required — read aloud by screen readers)</span></label>'
         + '<input type="text" data-sfield="alt" value="' + esc(seg.alt) + '" placeholder="Describe the photo for someone who can\'t see it…"' + dis + '></div></div>';
@@ -974,6 +1051,8 @@
       if (secs === null) return 'invalid';
       if (field === 'duration') seg.durationSec = secs; else seg.audioSec = secs;
     }
+    else if (field === 'file' || field === 'audioFile') seg[field] = value;
+    else if (field === 'url') seg.url = String(value || '').trim();
     else if (field === 'estMin') {
       const n = parseInt(value, 10);
       seg.estMin = Math.max(1, Math.min(30, Number.isNaN(n) ? 3 : n));
@@ -1246,16 +1325,52 @@
         break;
       }
       case 'seg-file': {
+        // No site to upload to: record the file name only.
         if (!requireAuthor() || !course) break;
         const chId = el.getAttribute('data-ch');
         const field = el.getAttribute('data-f');
         pickFile('', (f) => {
           if (!f) return;
-          setSegField(course, chId, id, field, f.name);
+          setSegField(course, chId, id, field, { id: 0, name: f.name, size: f.size || 0, type: f.type || '' });
           persistCourses();
           toast('Recorded file name: ' + f.name, 'success');
           render();
         });
+        break;
+      }
+      case 'seg-upload': {
+        if (!requireAuthor() || !course || !canUpload()) break;
+        const chId = el.getAttribute('data-ch');
+        const field = el.getAttribute('data-f');
+        const kind = el.getAttribute('data-kind');
+        const limits = (sync.roles && sync.roles.mediaMaxBytes) || {};
+        el.disabled = true;
+        el.textContent = 'Uploading…';
+        const r = await courseApi().uploadMedia(kind, limits[kind] || 0);
+        if (r.canceled) { render(); break; }
+        if (!r.ok) {
+          toast(r.missing ? 'The site\'s EASY Suite is too old for uploads. Update it to 2.2.43 or later.' : (r.error || 'Upload failed.'), 'error', 10000);
+          render();
+          break;
+        }
+        const ch = findChapter(course, chId);
+        const seg = ch && findSegment(ch, id);
+        if (seg) {
+          seg[field] = { id: r.data.id, name: r.data.name, size: r.data.size || 0, type: r.data.type || '' };
+          touch(course);
+          persistCourses();
+          toast('Uploaded ' + r.data.name + '.', 'success');
+        }
+        render();
+        break;
+      }
+      case 'seg-file-clear': {
+        if (!requireAuthor() || !course) break;
+        const ch = findChapter(course, el.getAttribute('data-ch'));
+        const seg = ch && findSegment(ch, id);
+        if (!seg) break;
+        seg[el.getAttribute('data-f')] = null;
+        touch(course); render();
         break;
       }
 
@@ -1475,11 +1590,14 @@
     const title = seg.title || (SEG_DEFS[seg.type] || {}).label || seg.type;
     let body = '';
     if (seg.type === 'video') {
-      body = '<div class="b-pv-video"><span class="b-pv-play"></span>'
-        + '<div><strong>Instructor video placeholder</strong>'
-        + '<span>' + esc(seg.fileName || 'video file to be added')
-        + (seg.durationSec ? ' · ' + fmtEst(seg.durationSec).replace(/^≈ /, '') : '')
-        + ' · Captions on</span></div></div>'
+      const uploaded = seg.file && seg.file.id > 0 && onSite();
+      body = (uploaded
+        ? '<div class="b-pv-media">' + mediaTag(seg.file, 'video') + '</div>'
+        : '<div class="b-pv-video"><span class="b-pv-play"></span>'
+          + '<div><strong>' + (seg.url ? 'Hosted video' : 'Instructor video placeholder') + '</strong>'
+          + '<span>' + esc(seg.url || (seg.file && seg.file.name) || 'video to be added')
+          + (seg.durationSec ? ' · ' + fmtEst(seg.durationSec).replace(/^≈ /, '') : '')
+          + ' · Captions on</span></div></div>')
         + (seg.transcript
           ? '<details class="b-pv-transcript"><summary>Read transcript</summary><p>' + esc(seg.transcript).replace(/\n/g, '<br>') + '</p></details>'
           : '<p class="hint">No transcript yet.</p>');
@@ -1487,11 +1605,17 @@
       body = seg.body
         ? '<p>' + esc(seg.body).replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>') + '</p>'
         : '<p class="hint">Text coming soon.</p>';
-      if (seg.narrationScript) body += '<p class="b-kv">🎙 Narrated version available (' + esc(seg.audioFileName || 'audio to be added') + ').</p>';
+      if (seg.audioFile && seg.audioFile.id > 0 && onSite()) body += '<div class="b-pv-media">' + mediaTag(seg.audioFile, 'audio') + '</div>';
+      else if (seg.narrationScript) body += '<p class="b-kv">🎙 Narrated version available (' + esc((seg.audioFile && seg.audioFile.name) || 'audio to be added') + ').</p>';
     } else if (seg.type === 'photo') {
-      body = '<div class="b-pv-photo"><div><strong>📷 ' + esc(seg.fileName || 'Awaiting real photography') + '</strong>'
-        + (seg.caption ? '<span>' + esc(seg.caption) + '</span>' : '')
-        + '<span class="b-pv-noai">No AI-generated image will be used.</span></div></div>';
+      if (seg.file && seg.file.id > 0 && onSite()) {
+        body = '<figure class="b-pv-figure"><img class="b-pv-img b-media-loading" data-media-id="' + seg.file.id + '" alt="' + esc(seg.alt) + '">'
+          + (seg.caption ? '<figcaption>' + esc(seg.caption) + '</figcaption>' : '') + '</figure>';
+      } else {
+        body = '<div class="b-pv-photo"><div><strong>📷 ' + esc((seg.file && seg.file.name) || 'Awaiting real photography') + '</strong>'
+          + (seg.caption ? '<span>' + esc(seg.caption) + '</span>' : '')
+          + '<span class="b-pv-noai">No AI-generated image will be used.</span></div></div>';
+      }
     } else if (seg.type === 'interactive') {
       body = '<div class="b-pv-interactive">'
         + (seg.description ? '<p>' + esc(seg.description) + '</p>' : '<p class="hint">Exercise description coming soon.</p>')
@@ -1502,7 +1626,7 @@
     }
     return '<article class="b-pv-lesson"><div class="b-pv-lesson-head"><div><h3>' + esc(title) + '</h3>'
       + '<p>' + (PV_MODE[seg.type] || '') + '</p></div>'
-      + (PV_CHIP[seg.type] || '') + '</div>'
+      + (seg.type === 'photo' && seg.file && seg.file.id > 0 ? '<span class="b-chip b-chip-photo">Original photo</span>' : (PV_CHIP[seg.type] || '')) + '</div>'
       + '<div class="b-pv-lesson-body">' + body + '</div></article>';
   }
 
@@ -1608,9 +1732,11 @@
       (ch.segments || []).forEach((s) => {
         const snm = SEG_DEFS[s.type].label + ' "' + (s.title || 'untitled') + '"';
         if (s.type === 'video') need(s.transcript && s.transcript.trim(), snm + ' has a transcript', true);
-        if (s.type === 'video') need(s.fileName && s.fileName.trim(), snm + ' has a video file', true);
+        if (s.type === 'video') need(s.url || (s.file && (s.file.id > 0 || !onSite())), snm + (VIDEO_SOURCES.indexOf('file') >= 0 ? ' has a video' : ' has a video link'), true);
         if (s.type === 'photo') need(s.alt && s.alt.trim(), snm + ' has alt text', true);
-        if (s.type === 'photo') need(s.fileName && s.fileName.trim(), snm + ' has a photo file', true);
+        if (s.type === 'photo') need(s.file && (s.file.id > 0 || !onSite()), snm + (onSite() ? ' has an uploaded photo' : ' has a photo file'), true);
+        if (s.type === 'video' && s.url) need(/^https:\/\/\S+$/.test(s.url), snm + ' video link starts with https://');
+        if (s.type === 'text' && s.audioFile && !(s.audioFile.id > 0) && onSite()) need(false, snm + ' narration audio is uploaded', true);
         if (s.type === 'interactive') need(s.description && s.description.trim(), snm + ' has a description');
         if (s.type === 'quiz') (s.questions || []).forEach((q, qi) => {
           need(q.q && q.q.trim(), snm + ' — question ' + (qi + 1) + ' has text');
@@ -1956,6 +2082,7 @@
       ui.view = 'library';
       renderLibrary();
     }
+    hydrateMedia();
     paintBadge();
   }
 

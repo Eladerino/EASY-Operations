@@ -25,6 +25,7 @@ class WP_REST_Request {
 $GLOBALS['posts'] = [];
 $GLOBALS['meta'] = [];
 function add_action() {}
+function wp_max_upload_size() { return 64 * 1024 * 1024; }
 function register_post_type() {}
 function is_wp_error($v) { return $v instanceof WP_Error; }
 function wp_json_encode($v, $flags = 0) { return json_encode($v, $flags); }
@@ -108,6 +109,8 @@ check(is_wp_error($r) && $r->data['status'] === 400, 'unreadable schemaVersion: 
 $snap = easy_course_snapshot_content((object) ($v2 + ['id' => 'c_test', 'status' => 'draft']));
 check(isset($snap->schemaVersion) && $snap->schemaVersion === 2 && !isset($snap->status), 'review snapshot keeps schemaVersion, drops workflow fields');
 check(easy_course_schema_of((object) $v1) === 1 && easy_course_schema_of((object) $v2) === 2, 'schema_of: missing = 1');
+
+check(easy_course_media_max_bytes('image') === 15 * 1024 * 1024 && easy_course_media_max_bytes('video') === 64 * 1024 * 1024 && easy_course_media_max_bytes('pdf') === 0, 'media size caps: kind cap, limited by the site upload limit');
 
 echo $failures ? "\n$failures failed\n" : "\nall passed\n";
 exit($failures ? 1 : 0);

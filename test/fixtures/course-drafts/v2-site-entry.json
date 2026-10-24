@@ -1,0 +1,34 @@
+{
+  "_about": "A version 2 course from the site with uploaded files (App 1.2.10+), plus a broken file reference.",
+  "source": "site",
+  "data": {
+    "course": {
+      "id": "c_mgw1eeee0006",
+      "schemaVersion": 2,
+      "title": "Confined Space Rescue",
+      "description": "",
+      "passMark": 80,
+      "maxAttempts": 3,
+      "onFail": "retry",
+      "createdAt": "2026-10-24T13:00:00.000Z",
+      "updatedAt": "2026-10-24T14:00:00.000Z",
+      "chapters": [
+        { "id": "ch_mgw1f1", "title": "Before you go in", "status": "draft",
+          "segments": [
+            { "id": "seg_mgw1g1", "type": "video", "title": "Tank entry", "file": { "id": 812, "name": "tank.mp4", "size": 48211234, "type": "video/mp4" }, "url": "https://vimeo.com/123456789", "durationSec": 300, "transcript": "We're at the hatch." },
+            { "id": "seg_mgw1g2", "type": "photo", "title": "The hatch", "file": { "id": 813, "name": "hatch.jpg", "size": 912003, "type": "image/jpeg" }, "caption": "A 24 inch hatch", "alt": "Round steel hatch on top of a tank" },
+            { "id": "seg_mgw1g3", "type": "text", "title": "Permits", "body": "Every entry needs a permit.", "narrationScript": "", "audioFile": { "id": "not-a-number" }, "audioSec": 0 }
+          ],
+          "quizQuestions": [] }
+      ],
+      "finalQuiz": { "questions": [] },
+      "status": "draft",
+      "reviewVersion": 0,
+      "approvedVersion": 0,
+      "liveEditedSinceReview": false,
+      "reviewNote": ""
+    },
+    "rev": 2,
+    "updatedBy": "bglynn"
+  }
+}
