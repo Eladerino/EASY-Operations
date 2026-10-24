@@ -22,6 +22,14 @@
 //   3. Add a sample course at the old version to test/fixtures/course-drafts/.
 //   4. Make sure the live site runs an EASY Suite with the format guard
 //      (2.2.43 or later) before releasing the app.
+//
+// Optional fields can be added without a new version as long as a course
+// without them still means the same thing (question `explain` is one).
+//
+// Lesson text is plain text with three rules, applied by formatLessonText()
+// in the preview and to be applied the same way by the module player: a
+// blank line starts a paragraph, a line starting with "- " is a bullet, and
+// **double stars** make bold.
 // Loaded by the renderer via <script> and unit-testable in plain Node.
 (function (root) {
   'use strict';
@@ -74,7 +82,7 @@
   /* ---------------- factories ---------------- */
 
   function newQuestion() {
-    return { id: uid('q'), q: '', kind: 'mc', options: ['', ''], answer: 0 };
+    return { id: uid('q'), q: '', kind: 'mc', options: ['', ''], answer: 0, explain: '' };
   }
   function newSegment(type) {
     const base = { id: uid('seg'), type, title: '' };
@@ -145,6 +153,8 @@
     if (!isObj(q)) q = {};
     q.id = freshId(seen, q.id, 'q');
     q.q = str(q.q);
+    // Why the answer is right, shown to learners after they answer (optional).
+    if ('explain' in q) q.explain = str(q.explain);
     if (q.kind !== 'tf' && q.kind !== 'mc') q.kind = 'mc';
     if (q.kind === 'tf') {
       q.options = ['True', 'False'];
@@ -245,8 +255,126 @@
     return out;
   }
 
+  /* ---------------- copies ---------------- */
+
+  // A deep copy of a chapter, segment or question with new ids throughout,
+  // for the Duplicate buttons. File references are shared, not copied.
+  function copyWithNewIds(item, prefix) {
+    const out = JSON.parse(JSON.stringify(item));
+    const walk = (o, p) => {
+      if (!isObj(o)) return;
+      if (typeof o.id === 'string') o.id = uid(p);
+      (Array.isArray(o.segments) ? o.segments : []).forEach((x) => walk(x, 'seg'));
+      (Array.isArray(o.quizQuestions) ? o.quizQuestions : []).forEach((x) => walk(x, 'q'));
+      (Array.isArray(o.questions) ? o.questions : []).forEach((x) => walk(x, 'q'));
+    };
+    walk(out, prefix);
+    return out;
+  }
+
+  /* ---------------- lesson text ---------------- */
+
+  const escHtml = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+
+  // Lesson text to safe HTML: paragraphs, "- " bullets, **bold**.
+  function formatLessonText(text) {
+    const inline = (line) => escHtml(line).replace(/\*\*(?=\S)(.+?)\*\*/g, '<strong>$1</strong>');
+    return String(text || '').replace(/\r\n?/g, '\n').split(/\n\s*\n/).map((block) => {
+      const lines = block.split('\n').filter((l) => l.trim() !== '');
+      if (!lines.length) return '';
+      let html = '';
+      let list = [];
+      let para = [];
+      const flushList = () => { if (list.length) { html += '<ul>' + list.map((l) => '<li>' + inline(l) + '</li>').join('') + '</ul>'; list = []; } };
+      const flushPara = () => { if (para.length) { html += '<p>' + para.map(inline).join('<br>') + '</p>'; para = []; } };
+      lines.forEach((l) => {
+        const m = l.match(/^\s*[-•]\s+(.*)$/);
+        if (m) { flushPara(); list.push(m[1]); } else { flushList(); para.push(l); }
+      });
+      flushPara(); flushList();
+      return html;
+    }).join('');
+  }
+
+  /* ---------------- what changed ---------------- */
+
+  const FIELD_LABEL = {
+    title: 'title', body: 'lesson text', narrationScript: 'narration script', audioFile: 'narration audio',
+    audioSec: 'audio length', file: 'file', url: 'video link', durationSec: 'length', transcript: 'transcript',
+    caption: 'caption', alt: 'alt text', description: 'description', estMin: 'time estimate', type: 'block type',
+  };
+
+  // Plain-language list of differences between two versions of a course
+  // (older first), matched by id so renames and moves read as such.
+  function diffCourses(before, after) {
+    const out = [];
+    if (!isObj(before) || !isObj(after)) return out;
+    const name = (x, fallback) => '"' + (str(x && x.title).trim() || fallback) + '"';
+    const qName = (q) => '"' + (str(q.q).trim() || 'untitled question') + '"';
+    const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+    if (str(before.title) !== str(after.title)) out.push('Course renamed from ' + name(before, 'untitled') + ' to ' + name(after, 'untitled') + '.');
+    if (str(before.description) !== str(after.description)) out.push('Short description changed.');
+    if (before.passMark !== after.passMark) out.push('Pass mark ' + before.passMark + '% → ' + after.passMark + '%.');
+    if (before.maxAttempts !== after.maxAttempts) out.push('Quiz attempts ' + before.maxAttempts + ' → ' + after.maxAttempts + '.');
+    if (before.onFail !== after.onFail) out.push('What happens after the last attempt changed.');
+
+    function questions(label, a, b) {
+      a = Array.isArray(a) ? a : [];
+      b = Array.isArray(b) ? b : [];
+      const old = new Map(a.map((q) => [q.id, q]));
+      const now = new Set(b.map((q) => q.id));
+      b.forEach((q) => {
+        const was = old.get(q.id);
+        if (!was) out.push(label + ': question ' + qName(q) + ' added.');
+        else if (!same(was, q)) out.push(label + ': question ' + qName(q) + ' changed' + (was.answer !== q.answer ? ' (correct answer is different)' : '') + '.');
+      });
+      a.forEach((q) => { if (!now.has(q.id)) out.push(label + ': question ' + qName(q) + ' removed.'); });
+      const order = (list) => list.filter((q) => old.has(q.id) && now.has(q.id)).map((q) => q.id).join();
+      if (order(a) !== order(b)) out.push(label + ': questions reordered.');
+    }
+
+    const bCh = Array.isArray(before.chapters) ? before.chapters : [];
+    const aCh = Array.isArray(after.chapters) ? after.chapters : [];
+    const oldCh = new Map(bCh.map((c) => [c.id, c]));
+    const nowCh = new Set(aCh.map((c) => c.id));
+    aCh.forEach((ch, i) => {
+      const was = oldCh.get(ch.id);
+      const label = 'Chapter ' + (i + 1) + ' ' + name(ch, 'untitled');
+      if (!was) { out.push(label + ' added.'); return; }
+      if (same(was, ch)) return;
+      if (str(was.title) !== str(ch.title)) out.push('Chapter ' + name(was, 'untitled') + ' renamed to ' + name(ch, 'untitled') + '.');
+      const oldSeg = new Map((was.segments || []).map((s) => [s.id, s]));
+      const nowSeg = new Set((ch.segments || []).map((s) => s.id));
+      (ch.segments || []).forEach((seg) => {
+        const w = oldSeg.get(seg.id);
+        const segLabel = label + ': ' + seg.type + ' block ' + name(seg, 'untitled');
+        if (!w) out.push(segLabel + ' added.');
+        else if (seg.type === 'quiz') questions(segLabel, w.questions, seg.questions);
+        else if (!same(w, seg)) {
+          const fields = Object.keys(Object.assign({}, w, seg)).filter((k) => k !== 'id' && !same(w[k], seg[k]));
+          out.push(segLabel + ' changed (' + fields.map((k) => FIELD_LABEL[k] || k).join(', ') + ').');
+        }
+      });
+      (was.segments || []).forEach((seg) => { if (!nowSeg.has(seg.id)) out.push(label + ': ' + seg.type + ' block ' + name(seg, 'untitled') + ' removed.'); });
+      const order = (list) => list.filter((s) => oldSeg.has(s.id) && nowSeg.has(s.id)).map((s) => s.id).join();
+      if (order(was.segments || []) !== order(ch.segments || [])) out.push(label + ': blocks reordered.');
+      questions(label + ' check', was.quizQuestions, ch.quizQuestions);
+    });
+    bCh.forEach((ch) => { if (!nowCh.has(ch.id)) out.push('Chapter ' + name(ch, 'untitled') + ' removed.'); });
+    const chOrder = (list) => list.filter((c) => oldCh.has(c.id) && nowCh.has(c.id)).map((c) => c.id).join();
+    if (chOrder(bCh) !== chOrder(aCh)) out.push('Chapters reordered.');
+    questions('Final quiz', before.finalQuiz && before.finalQuiz.questions, after.finalQuiz && after.finalQuiz.questions);
+    return out;
+  }
+
   const api = {
     SCHEMA_VERSION,
+    copyWithNewIds,
+    formatLessonText,
+    diffCourses,
     FILE_FIELDS,
     filesIn,
     MIGRATIONS,

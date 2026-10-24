@@ -852,6 +852,7 @@
     if (author) {
       html += '<button type="button" class="b-icon-btn" data-act="chapter-up" data-id="' + ch.id + '" title="Move up">↑</button>';
       html += '<button type="button" class="b-icon-btn" data-act="chapter-down" data-id="' + ch.id + '" title="Move down">↓</button>';
+      html += '<button type="button" class="b-icon-btn" data-act="chapter-dup" data-id="' + ch.id + '" title="Duplicate chapter" aria-label="Duplicate chapter">⧉</button>';
       html += '<button type="button" class="b-icon-btn danger" data-act="chapter-del" data-id="' + ch.id + '" title="Delete chapter">×</button>';
     }
     html += '</div><div class="b-chapter-body">';
@@ -889,6 +890,7 @@
     if (author) {
       html += '<button type="button" class="b-icon-btn" data-act="seg-up" data-ch="' + ch.id + '" data-id="' + seg.id + '" title="Move up">↑</button>';
       html += '<button type="button" class="b-icon-btn" data-act="seg-down" data-ch="' + ch.id + '" data-id="' + seg.id + '" title="Move down">↓</button>';
+      html += '<button type="button" class="b-icon-btn" data-act="seg-dup" data-ch="' + ch.id + '" data-id="' + seg.id + '" title="Duplicate this block" aria-label="Duplicate this block">⧉</button>';
       html += '<button type="button" class="b-del-btn" data-act="seg-del" data-ch="' + ch.id + '" data-id="' + seg.id + '" title="Delete this ' + def.label.toLowerCase() + ' block">× Delete</button>';
     }
     html += '</div>';
@@ -907,7 +909,8 @@
         + '<div class="field span-2"><label>Transcript <span class="optional">(required — captions &amp; accessibility)</span></label>'
         + '<textarea data-sfield="transcript" rows="3" placeholder="Everything said in the video, word for word…"' + dis + '>' + esc(seg.transcript) + '</textarea></div></div>';
     } else if (seg.type === 'text') {
-      html += '<div class="field"><label>Lesson text</label><textarea data-sfield="body" rows="4" placeholder="Write the lesson…"' + dis + '>' + esc(seg.body) + '</textarea></div>'
+      html += '<div class="field"><label>Lesson text</label><textarea data-sfield="body" rows="4" placeholder="Write the lesson…"' + dis + '>' + esc(seg.body) + '</textarea>'
+        + '<div class="hint">Leave a blank line between paragraphs. Start a line with - for a bullet point. Put **double stars** around words to make them bold.</div></div>'
         + '<div class="grid"><div class="field"><label>Narration script <span class="optional">(if someone records voiceover)</span></label>'
         + '<textarea data-sfield="narrationScript" rows="3" placeholder="Spoken version — doubles as the transcript…"' + dis + '>' + esc(seg.narrationScript) + '</textarea></div>'
         + '<div class="field"><label>Narration audio <span class="optional">(optional)</span></label>'
@@ -958,7 +961,15 @@
           + '<option value="0"' + (q.answer === 0 ? ' selected' : '') + '>True</option>'
           + '<option value="1"' + (q.answer === 1 ? ' selected' : '') + '>False</option></select></div>';
       }
-      if (author) html += '<div style="margin-top:6px"><button type="button" class="btn btn-secondary btn-small" data-act="q-del" data-qscope="' + scope + '" data-qid="' + q.id + '" style="color:var(--error)">Remove question</button></div>';
+      // Chapter checks teach, so they explain; the final quiz is the exam.
+      if (scope !== 'final' && (author || q.explain)) {
+        html += '<div class="field"><label>Why this is the answer <span class="optional">(optional, shown to learners after they answer)</span></label>'
+          + '<textarea data-qfield="explain" rows="2" placeholder="e.g. The load centre moves forward when the load is raised, so the truck tips more easily."' + dis + '>' + esc(q.explain) + '</textarea></div>';
+      }
+      if (author) {
+        html += '<div class="b-q-actions"><button type="button" class="btn btn-secondary btn-small" data-act="q-dup" data-qid="' + q.id + '">Duplicate question</button>'
+          + '<button type="button" class="btn btn-secondary btn-small" data-act="q-del" data-qscope="' + scope + '" data-qid="' + q.id + '" style="color:var(--error)">Remove question</button></div>';
+      }
       html += '</div>';
     });
     if (!(questions || []).length) html += '<p class="hint">No questions yet.</p>';
@@ -1157,6 +1168,7 @@
         else if (field === 'opt') q.options[parseInt(fEl.getAttribute('data-oi'), 10)] = fEl.value;
         else if (field === 'answer' && fEl.checked) q.answer = parseInt(fEl.value, 10);
         else if (field === 'tfanswer') q.answer = parseInt(fEl.value, 10);
+        else if (field === 'explain') q.explain = fEl.value;
         touch(course);
       };
       const evt = (fEl.type === 'radio' || fEl.tagName === 'SELECT') ? 'change' : 'input';
@@ -1276,6 +1288,28 @@
         if (move(course.chapters, i, act === 'chapter-up' ? -1 : 1)) { touch(course); render(); }
         break;
       }
+      case 'chapter-dup': {
+        if (!requireAuthor() || !course) break;
+        const i = course.chapters.findIndex((c) => c.id === id);
+        if (i < 0) break;
+        const copy = S.copyWithNewIds(course.chapters[i], 'ch');
+        copy.title = (copy.title || 'Chapter') + ' (copy)';
+        course.chapters.splice(i + 1, 0, copy);
+        touch(course); render();
+        toast('Chapter duplicated. The copy is right below the original.', 'success');
+        break;
+      }
+      case 'seg-dup': {
+        if (!requireAuthor() || !course) break;
+        const ch = findChapter(course, el.getAttribute('data-ch'));
+        const i = ch ? ch.segments.findIndex((x) => x.id === id) : -1;
+        if (i < 0) break;
+        const copy = S.copyWithNewIds(ch.segments[i], 'seg');
+        if (copy.title) copy.title += ' (copy)';
+        ch.segments.splice(i + 1, 0, copy);
+        touch(course); render();
+        break;
+      }
       case 'chapter-del': {
         if (!requireAuthor() || !course) break;
         const ch = findChapter(course, id);
@@ -1392,6 +1426,12 @@
           });
           if (yes) { p.list.splice(p.index, 1); touch(course); render(); }
         }
+        break;
+      }
+      case 'q-dup': {
+        if (!requireAuthor() || !course) break;
+        const p = findQParent(course, el.getAttribute('data-qid'));
+        if (p) { p.list.splice(p.index + 1, 0, S.copyWithNewIds(p.list[p.index], 'q')); touch(course); render(); }
         break;
       }
       case 'q-opt-add': {
@@ -1566,7 +1606,7 @@
     const item = allInbox().find((x) => x.id === ui.preview.id);
     if (!item || !item.payload || !item.payload.course) return null;
     if (isNewer(item.payload.course)) { toast('This review version ' + NEWER_MSG, 'error', 9000); return null; }
-    return { course: item.payload.course, label: 'Review snapshot v' + item.version, frozen: true };
+    return { course: item.payload.course, label: 'Review snapshot v' + item.version, frozen: true, item };
   }
 
   // Learner-facing mode tags and chips, mirroring the module player:
@@ -1586,6 +1626,34 @@
     quiz: '',
   };
 
+  // Questions the author can answer in the preview. `teach` shows the
+  // explanation after each answer (chapter checks); the final quiz doesn't.
+  function previewQuestions(questions, teach) {
+    return '<ol class="b-pv-qs">' + (questions || []).map((q) => {
+      const opts = q.kind === 'tf' ? ['True', 'False'] : (q.options || []);
+      return '<li class="b-pv-q" data-pvq><p class="b-pv-q-text">' + esc(q.q || 'Question text coming soon') + '</p>'
+        + '<div class="b-pv-opts">' + opts.map((o, oi) => '<button type="button" class="b-pv-opt" data-pvopt="' + (oi === q.answer ? '1' : '0') + '">'
+          + esc(o || 'Answer option') + '</button>').join('') + '</div>'
+        + '<div class="b-pv-feedback hidden" data-pvfb><strong data-pvverdict></strong>'
+        + (teach && q.explain ? ' ' + esc(q.explain) : '') + '</div></li>';
+    }).join('') + '</ol>';
+  }
+
+  function wirePreviewQuestions() {
+    document.querySelectorAll('#builderRoot [data-pvq]').forEach((qEl) => {
+      qEl.querySelectorAll('[data-pvopt]').forEach((b) => b.addEventListener('click', () => {
+        const right = b.getAttribute('data-pvopt') === '1';
+        qEl.querySelectorAll('[data-pvopt]').forEach((x) => {
+          x.classList.toggle('b-pv-opt-right', x.getAttribute('data-pvopt') === '1');
+          x.classList.toggle('b-pv-opt-wrong', x === b && !right);
+        });
+        const fb = qEl.querySelector('[data-pvfb]');
+        fb.classList.remove('hidden');
+        fb.querySelector('[data-pvverdict]').textContent = right ? 'Correct.' : 'Not quite.';
+      }));
+    });
+  }
+
   function previewSegment(seg) {
     const title = seg.title || (SEG_DEFS[seg.type] || {}).label || seg.type;
     let body = '';
@@ -1602,9 +1670,7 @@
           ? '<details class="b-pv-transcript"><summary>Read transcript</summary><p>' + esc(seg.transcript).replace(/\n/g, '<br>') + '</p></details>'
           : '<p class="hint">No transcript yet.</p>');
     } else if (seg.type === 'text') {
-      body = seg.body
-        ? '<p>' + esc(seg.body).replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>') + '</p>'
-        : '<p class="hint">Text coming soon.</p>';
+      body = seg.body ? S.formatLessonText(seg.body) : '<p class="hint">Text coming soon.</p>';
       if (seg.audioFile && seg.audioFile.id > 0 && onSite()) body += '<div class="b-pv-media">' + mediaTag(seg.audioFile, 'audio') + '</div>';
       else if (seg.narrationScript) body += '<p class="b-kv">🎙 Narrated version available (' + esc((seg.audioFile && seg.audioFile.name) || 'audio to be added') + ').</p>';
     } else if (seg.type === 'photo') {
@@ -1621,8 +1687,7 @@
         + (seg.description ? '<p>' + esc(seg.description) + '</p>' : '<p class="hint">Exercise description coming soon.</p>')
         + '<p class="b-kv">' + (seg.estMin ? 'About ' + seg.estMin + ' min. ' : '') + 'Built from the author\'s description.</p></div>';
     } else if (seg.type === 'quiz') {
-      const n = (seg.questions || []).length;
-      body = '<p><strong>Quiz</strong> — ' + n + ' question' + (n === 1 ? '' : 's') + '.</p>';
+      body = (seg.questions || []).length ? previewQuestions(seg.questions, true) : '<p class="hint">No questions yet.</p>';
     }
     return '<article class="b-pv-lesson"><div class="b-pv-lesson-head"><div><h3>' + esc(title) + '</h3>'
       + '<p>' + (PV_MODE[seg.type] || '') + '</p></div>'
@@ -1659,6 +1724,7 @@
 
     html += '<div class="b-pv-main"><div class="b-pv-content">';
     html += '<div class="b-pv-notice">Preview — this is how the course will look and feel inside the learner module. The finished module is built from the approved content package.</div>';
+    if (data.item) html += changesBox(data.item, true);
 
     if (!chapters.length) {
       html += '<div class="b-pv-await"><div><strong>Content not supplied</strong><p>This course has no chapters yet.</p></div></div>';
@@ -1674,7 +1740,8 @@
       (ch.segments || []).forEach((seg) => { html += previewSegment(seg); });
       if ((ch.quizQuestions || []).length) {
         html += '<div class="b-pv-quiz"><h3>Chapter knowledge check</h3>'
-          + '<p>' + ch.quizQuestions.length + ' question' + (ch.quizQuestions.length === 1 ? '' : 's') + ' before moving on.</p></div>';
+          + '<p>' + ch.quizQuestions.length + ' question' + (ch.quizQuestions.length === 1 ? '' : 's') + ' before moving on.</p>'
+          + previewQuestions(ch.quizQuestions, true) + '</div>';
       }
       html += '</section>';
     });
@@ -1683,7 +1750,9 @@
     if (fq.length) {
       html += '<section class="b-pv-chapter"><h2 class="b-pv-section-label">Final step</h2>';
       html += '<div class="b-pv-quiz"><h3>Final quiz</h3>'
-        + '<p>' + fq.length + ' questions · pass mark <strong>' + (c.passMark || 80) + '%</strong> · ' + (c.maxAttempts || 3) + ' attempt(s).</p></div></section>';
+        + '<p>' + fq.length + ' questions · pass mark <strong>' + (c.passMark || 80) + '%</strong> · ' + (c.maxAttempts || 3) + ' attempt(s).</p>'
+        + previewQuestions(fq, false)
+        + '<p class="b-kv">In the real module, learners only see their score once they finish the quiz.</p></div></section>';
     }
 
     html += '<section><h2 class="b-pv-section-label">Delivery and maintenance plan</h2>'
@@ -1704,6 +1773,7 @@
       ui.preview = null;
       render();
     });
+    wirePreviewQuestions();
     document.querySelectorAll('[data-pvch]').forEach((b) => {
       b.addEventListener('click', () => {
         document.querySelectorAll('[data-pvch]').forEach((x) => x.classList.remove('active'));
@@ -2024,6 +2094,31 @@
   }
   const allInbox = () => (onSite() ? siteInboxItems() : []).concat(inbox);
 
+  // The newest earlier version of the same course the reviewer can see, so
+  // they can check what changed instead of rereading the whole course.
+  function previousVersion(item) {
+    let best = null;
+    allInbox().forEach((x) => {
+      const c = x.payload && x.payload.course;
+      if (x.kind !== 'review' || x.courseId !== item.courseId || !(x.version < item.version) || !c || isNewer(c)) return;
+      if (!best || x.version > best.version) best = { version: x.version, course: c };
+    });
+    return best;
+  }
+
+  function changesBox(item, open) {
+    const c = item.payload && item.payload.course;
+    const prev = item.kind === 'review' && c && !isNewer(c) ? previousVersion(item) : null;
+    if (!prev) return '';
+    const list = S.diffCourses(prev.course, c);
+    if (!list.length) return '<div class="b-diff b-kv">No changes since v' + prev.version + '.</div>';
+    const shown = list.slice(0, 60);
+    return '<details class="b-diff"' + (open ? ' open' : '') + '><summary>What changed since v' + prev.version + ' (' + list.length + ')</summary><ul>'
+      + shown.map((t) => '<li>' + esc(t) + '</li>').join('')
+      + (list.length > shown.length ? '<li>…and ' + (list.length - shown.length) + ' more.</li>' : '')
+      + '</ul></details>';
+  }
+
   function renderInbox() {
     let html = '<div class="b-lib-head" style="margin-top:14px"><span class="b-kv">'
       + (onSite()
@@ -2048,6 +2143,7 @@
         html += '<div class="b-course-meta" style="margin:8px 0"><span>From ' + esc(item.from || 'unknown') + '</span>'
           + '<span>' + esc(item.at ? new Date(item.at).toLocaleString() : '') + '</span></div>';
         if (item.note) html += '<div class="b-review-note"><strong>Note:</strong> ' + esc(item.note) + '</div>';
+        html += changesBox(item, !item.handled);
         html += '<div class="b-course-actions">';
         html += '<button type="button" class="btn btn-secondary btn-small" data-act="inbox-preview" data-id="' + item.id + '">Preview snapshot</button>';
         if (c && isNewer(c)) {
