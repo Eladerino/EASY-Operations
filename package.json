@@ -25,7 +25,7 @@
     "start": "electron-forge start",
     "publish": "electron-forge publish"
   },
-  "version": "1.2.9",
+  "version": "1.3.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Eladerino/EASY-Operations.git"
