@@ -85,11 +85,12 @@ jobs:
           # Card printing runs SumatraPDF, which can't execute from inside app.asar.
           test -f "$res/app.asar.unpacked/SumatraPDF-3.4.6-32.exe"
           test -f "$res/app.asar.unpacked/node_modules/pdf-to-printer/dist/SumatraPDF-3.4.6-32.exe"
-          # The WordPress plugin source and tests stay out of the app.
+          # The WordPress plugin source, the phone app and tests stay out of the app.
           npx asar list "$res/app.asar" > "$RUNNER_TEMP/asar-files.txt"
           grep -qE '^[\\/]main\.js$' "$RUNNER_TEMP/asar-files.txt"
-          if grep -E '^[\\/](site-plugins|test)([\\/]|$)' "$RUNNER_TEMP/asar-files.txt"; then
-            echo "::error::site-plugins/ or test/ ended up in app.asar"; exit 1
+          grep -qE '^[\\/]websignin\.js$' "$RUNNER_TEMP/asar-files.txt"
+          if grep -E '^[\\/](site-plugins|test|mobile)([\\/]|$)' "$RUNNER_TEMP/asar-files.txt"; then
+            echo "::error::site-plugins/, test/ or mobile/ ended up in app.asar"; exit 1
           fi
           # Installed apps reject the update unless RELEASES names the update
           # package with its exact SHA1 and size.

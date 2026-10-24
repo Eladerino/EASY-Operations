@@ -89,3 +89,20 @@ jobs:
               --prerelease \
               --notes "EASY Suite ${VERSION} plugin package. The installed plugin offers this update on the WordPress Plugins screen; the attached zip also installs by hand (Plugins, Add New, Upload, Replace current)."
           fi
+
+      # Keep only the two newest suite releases: the current one, plus the
+      # one before it as a quick rollback (its zip still installs by hand).
+      # Older suite-v* prereleases and their tags are deleted. Desktop
+      # releases (v*) are never touched.
+      - name: Remove older suite releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release list --limit 200 --json tagName --jq '.[].tagName' \
+            | grep -E '^suite-v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sed 's/^suite-v//' | sort -V | sed 's/^/suite-v/' \
+            | head -n -2 \
+            | while read -r tag; do
+                echo "Deleting $tag"
+                gh release delete "$tag" --yes --cleanup-tag
+              done

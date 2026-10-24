@@ -77,3 +77,22 @@ test('nextFreeCertificateNumber: malformed candidate passes through untouched', 
   assert.equal(S.nextFreeCertificateNumber('', []), '');
   assert.equal(S.nextFreeCertificateNumber('NO-DIGITS', ['NO-DIGITS']), 'NO-DIGITS');
 });
+
+test('parseSignInCallback: approval hands back user and password', () => {
+  const url = 'easyops://auth/callback?site_url=https%3A%2F%2Feasysafety.ca&user_login=pevans&password=abcd%20efgh%20ijkl';
+  assert.deepEqual(S.parseSignInCallback(url, 'easyops', 'https://easysafety.ca'), { user: 'pevans', appPassword: 'abcd efgh ijkl' });
+});
+
+test('parseSignInCallback: decline is reported, not treated as success', () => {
+  assert.deepEqual(S.parseSignInCallback('easyops://auth/rejected', 'easyops', 'https://easysafety.ca'), { rejected: true });
+  assert.deepEqual(S.parseSignInCallback('easyops://auth/callback?success=false', 'easyops', 'https://easysafety.ca'), { rejected: true });
+});
+
+test('parseSignInCallback: wrong site, scheme or missing fields are refused', () => {
+  const site = 'https://easysafety.ca';
+  assert.equal(S.parseSignInCallback('easyops://auth/callback?site_url=https%3A%2F%2Fevil.example&user_login=a&password=b', 'easyops', site), null);
+  assert.equal(S.parseSignInCallback('other://auth/callback?site_url=https%3A%2F%2Feasysafety.ca&user_login=a&password=b', 'easyops', site), null);
+  assert.equal(S.parseSignInCallback('easyops://auth/callback?site_url=https%3A%2F%2Feasysafety.ca&user_login=a', 'easyops', site), null);
+  assert.equal(S.parseSignInCallback('easyops://auth/callback?user_login=a&password=b', 'easyops', site), null);
+  assert.equal(S.parseSignInCallback('not a url', 'easyops', site), null);
+});

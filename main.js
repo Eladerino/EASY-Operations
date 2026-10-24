@@ -15,6 +15,7 @@ const crypto = require('crypto');
 const printer = require('pdf-to-printer');
 const { fillCertificatePdf } = require('./pdfgen');
 const shared = require('./shared');
+const { openWebsiteSignIn } = require('./websignin');
 
 // Standard Squirrel.Windows startup handling (install / update / uninstall).
 if (require('electron-squirrel-startup')) app.quit();
@@ -544,6 +545,9 @@ const WHATS_NEW_FILE = () => path.join(app.getPath('userData'), 'whats-new.json'
 // Keep notes short and plain-language: Pam reads these. Nothing
 // business-internal here — instructors see these notes too.
 const WHATS_NEW_NOTES = {
+  '1.3.0': [
+    'Signing in is simpler: choose Sign in with easysafety.ca in Setup and use your normal website login. No more copying application passwords.',
+  ],
   '1.2.9': [
     'Course Builder wording is clearer about who reviews a course.',
   ],
@@ -770,6 +774,14 @@ ipcMain.handle('test-connection', async (_event, args = {}) => {
 ipcMain.handle('open-profile', async () => {
   await shell.openExternal(`${SETUP_SITE_URL}/wp-admin/profile.php`);
   return { ok: true };
+});
+
+// ---- Sign in with the website -------------------------------------------
+// See websignin.js: WordPress creates the application password after the
+// person signs in on the site and approves this computer.
+ipcMain.handle('website-sign-in', async (event) => {
+  const parent = BrowserWindow.fromWebContents(event.sender) || undefined;
+  return openWebsiteSignIn({ siteUrl: SETUP_SITE_URL, parent });
 });
 
 ipcMain.handle('get-printers', async () => {
