@@ -527,9 +527,31 @@ Course chapters:
     return { user, appPassword };
   }
 
+  // Picks out the application password a new sign-in replaces, from
+  // WordPress's introspect answer for the old one. Only a password the
+  // website sign-in made for this app (same app_id) qualifies; one made
+  // by hand on the profile page may be in use on another device too.
+  // appIds is one id or a list. Returns { user, uuid } or null.
+  function revokeCandidate(introspect, user, appIds) {
+    const ids = [].concat(appIds || []).filter(Boolean);
+    if (!introspect || typeof introspect.uuid !== 'string' || !introspect.uuid) return null;
+    if (!ids.length || ids.indexOf(introspect.app_id) === -1) return null;
+    const login = String(user || '').trim();
+    if (!login) return null;
+    return { user: login, uuid: introspect.uuid };
+  }
+
+  // WordPress logins compare without case.
+  function sameLogin(a, b) {
+    const x = String(a || '').trim().toLowerCase();
+    return x !== '' && x === String(b || '').trim().toLowerCase();
+  }
+
   const api = {
     titlesByCategory,
     parseSignInCallback,
+    revokeCandidate,
+    sameLogin,
     WPNL_CATEGORY,
     FORKLIFT_VALUE,
     makeCertificateNumber,

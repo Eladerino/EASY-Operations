@@ -118,4 +118,4 @@ function openWebsiteSignIn({ siteUrl, parent, startUrl }) {
   });
 }
 
-module.exports = { openWebsiteSignIn, authorizeUrl, SCHEME };
+module.exports = { openWebsiteSignIn, authorizeUrl, SCHEME, APP_ID };

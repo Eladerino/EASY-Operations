@@ -100,6 +100,12 @@ publishing.
   the website login is not kept. Each computer shows up by name under
   Application Passwords on the user's WordPress profile, where it can be
   revoked on its own.
+- When a computer signs in again, the password it used before is removed
+  once the new one has passed the connection test and been saved. After
+  Sign out, the old password's id is kept and the next sign-in as the same
+  person removes it. Only passwords the website sign-in made for this app
+  (matching `app_id`) are ever removed; ones made by hand on the profile
+  page are left alone, since they may be in use elsewhere.
 - The window can only load the app's own files. All network calls go
   through the main process.
 - Only known certificate fields are sent. EASY Suite checks them again on

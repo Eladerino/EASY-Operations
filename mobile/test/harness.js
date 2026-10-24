@@ -123,6 +123,17 @@ eq(
 );
 ok('app_id is a UUID', /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(authUrl.searchParams.get('app_id')));
 eq('app name carries device and time', Web.appName(new Date(2026, 9, 24, 9, 5)), 'EASY Manager (web, 2026-10-24 09:05)');
+eq('app name leads with the phone label', Web.appName(new Date(2026, 9, 24, 9, 5), " Office  iPhone "), 'EASY Manager (Office iPhone, web, 2026-10-24 09:05)');
+eq('label loses commas and brackets, max 40', Web.cleanLabel('A, (b)' + 'x'.repeat(60)).length <= 40 && !/[,()]/.test(Web.cleanLabel('A, (b)')), true);
+eq('authorize url carries the label', new URL(Web.authorizeUrl('Pixel')).searchParams.get('app_name').indexOf('EASY Manager (Pixel, web, '), 0);
+const ANDROID_ID = '90f14d1c-d7ef-42a4-97c1-a548861ee1ac';
+eq('revoke: website-made EASY Manager password', Web.revokeCandidate({ uuid: 'u1', app_id: ANDROID_ID }, ' staff1 '), { username: 'staff1', uuid: 'u1' });
+eq('revoke: web app id counts too', Web.revokeCandidate({ uuid: 'u2', app_id: authUrl.searchParams.get('app_id') }, 'staff1'), { username: 'staff1', uuid: 'u2' });
+eq('revoke: hand-made password is never removed', Web.revokeCandidate({ uuid: 'u3', app_id: '' }, 'staff1'), null);
+eq('revoke: another app is never removed', Web.revokeCandidate({ uuid: 'u4', app_id: '5c0f7e8a-3b1d-4e6f-9a2c-7d4b8e1f0a63' }, 'staff1'), null);
+eq('revoke: no answer from the site', Web.revokeCandidate(null, 'staff1'), null);
+eq('sameLogin ignores case', Web.sameLogin('Staff1', 'staff1'), true);
+eq('sameLogin empty never matches', Web.sameLogin('', ''), false);
 
 eq(
   'web hand-back after the hash (WordPress script path)',
@@ -512,6 +523,26 @@ async function main() {
     fetchedUrls[0],
     'https://easysafety.ca/wp-json/easy/v1/activity?page=1&per_page=50&kind=queue'
   );
+
+  // Application passwords: introspect and delete never throw.
+  fetchedUrls.length = 0;
+  fetchImpl = async () => jsonResponse(200, { uuid: 'u1', app_id: ANDROID_ID });
+  eq('introspect returns the record', await Api.introspectAppPassword(), { uuid: 'u1', app_id: ANDROID_ID });
+  eq('introspect URL', fetchedUrls[0], 'https://easysafety.ca/wp-json/wp/v2/users/me/application-passwords/introspect');
+  fetchImpl = async () => jsonResponse(401, { code: 'rest_no_authenticated_app_password' });
+  eq('introspect refused is null', await Api.introspectAppPassword(), null);
+  fetchImpl = async () => { throw new Error('offline'); };
+  eq('introspect offline is null', await Api.introspectAppPassword(), null);
+  fetchedUrls.length = 0;
+  fetchImpl = async () => jsonResponse(200, { deleted: true });
+  eq('delete ok', await Api.deleteAppPassword('u1'), true);
+  eq('delete URL', fetchedUrls[0], 'https://easysafety.ca/wp-json/wp/v2/users/me/application-passwords/u1');
+  fetchImpl = async () => jsonResponse(404, { code: 'rest_application_password_not_found' });
+  eq('delete already gone counts as done', await Api.deleteAppPassword('u1'), true);
+  fetchImpl = async () => jsonResponse(403, {});
+  eq('delete refused is false', await Api.deleteAppPassword('u1'), false);
+  fetchImpl = async () => { throw new Error('offline'); };
+  eq('delete offline is false', await Api.deleteAppPassword('u1'), false);
 
   // Empty body: safe defaults, never a crash.
   fetchImpl = async () => jsonResponse(200, {});

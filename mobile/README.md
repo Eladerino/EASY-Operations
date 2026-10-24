@@ -155,8 +155,17 @@ page: the person signs in with their normal website login, taps Approve,
 and WordPress creates an application password and hands it back
 (`www/js/websignin.js`). Nobody copies a password, and a lost one is
 fixed by signing in again. Each sign-in shows up on the person's
-WordPress profile as "EASY Manager (Android or web, date and time)"
-and can be revoked there.
+WordPress profile as "EASY Manager (phone name, Android or web, date
+and time)" and can be revoked there. The phone name is optional and is
+typed on the sign-in screen; the app remembers it.
+
+Old sign-ins are cleaned up: Sign out notes the password this phone
+used, and the next sign-in as the same person removes it from their
+profile once the new one works (retried on the next launch if the site
+was unreachable). Only passwords the website sign-in made for EASY
+Manager (its Android or web `app_id`) are removed; one made by hand on
+the profile page is left alone, since it may be in use elsewhere. A
+different person signing in leaves the old one for its owner to remove.
 
 - **Android**: the authorize page opens in the phone's browser. Its
   success URL is the web version's `#connect-android` page, which shows

@@ -96,3 +96,25 @@ test('parseSignInCallback: wrong site, scheme or missing fields are refused', ()
   assert.equal(S.parseSignInCallback('easyops://auth/callback?user_login=a&password=b', 'easyops', site), null);
   assert.equal(S.parseSignInCallback('not a url', 'easyops', site), null);
 });
+
+test('revokeCandidate: only a password this app made through the website sign-in', () => {
+  const id = '5c0f7e8a-3b1d-4e6f-9a2c-7d4b8e1f0a63';
+  const mine = { uuid: 'u-1', app_id: id, name: 'EASY Operations (PC, 2026-10-24 09:00)' };
+  assert.deepEqual(S.revokeCandidate(mine, ' staff1 ', id), { user: 'staff1', uuid: 'u-1' });
+  assert.deepEqual(S.revokeCandidate(mine, 'staff1', ['other', id]), { user: 'staff1', uuid: 'u-1' });
+  // Made by hand on the profile page (no app_id), or by another app.
+  assert.equal(S.revokeCandidate({ uuid: 'u-2', app_id: '' }, 'staff1', id), null);
+  assert.equal(S.revokeCandidate({ uuid: 'u-3', app_id: 'someone-else' }, 'staff1', id), null);
+  // Nothing usable from the site, or nothing to compare against.
+  assert.equal(S.revokeCandidate(null, 'staff1', id), null);
+  assert.equal(S.revokeCandidate({ app_id: id }, 'staff1', id), null);
+  assert.equal(S.revokeCandidate(mine, '', id), null);
+  assert.equal(S.revokeCandidate({ uuid: 'u-4', app_id: '' }, 'staff1', ''), null);
+});
+
+test('sameLogin: case and spaces do not matter, empty never matches', () => {
+  assert.equal(S.sameLogin('Staff1', ' staff1'), true);
+  assert.equal(S.sameLogin('staff1', 'staff2'), false);
+  assert.equal(S.sameLogin('', ''), false);
+  assert.equal(S.sameLogin(null, undefined), false);
+});
