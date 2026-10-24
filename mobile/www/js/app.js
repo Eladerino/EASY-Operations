@@ -433,13 +433,51 @@
     await window.EasyStore.setCreds(creds);
     window.EasyApi.setCreds(creds);
     enterApp(user);
+    retirePendingAppPassword(username);
+  }
+
+  // Each website sign-in makes a new application password. Signing out
+  // notes the one this phone used (only if the website sign-in made it
+  // for EASY Manager), and the next sign-in as the same person removes
+  // it from their profile once the new one works. Another person's
+  // sign-in can't remove it, so it is dropped and left for its owner's
+  // profile page. If the site can't be reached it is tried again on the
+  // next launch.
+  const REVOKE_KEY = 'revokePending';
+
+  async function noteAppPasswordForRetiring(username) {
+    // Sign-out waits at most a few seconds for this on a slow connection.
+    const record = await Promise.race([
+      window.EasyApi.introspectAppPassword(),
+      new Promise((resolve) => setTimeout(() => resolve(null), 5000)),
+    ]);
+    const pending = window.EasyWebSignIn.revokeCandidate(record, username);
+    if (pending) await window.EasyStore.set(REVOKE_KEY, pending);
+  }
+
+  async function retirePendingAppPassword(username) {
+    try {
+      const pending = await window.EasyStore.get(REVOKE_KEY, null);
+      if (!pending) return;
+      if (!pending.uuid || !window.EasyWebSignIn.sameLogin(pending.username, username)) {
+        await window.EasyStore.remove(REVOKE_KEY);
+        return;
+      }
+      if (await window.EasyApi.deleteAppPassword(pending.uuid)) {
+        await window.EasyStore.remove(REVOKE_KEY);
+      }
+    } catch (e) {
+      // Best effort: the old password just stays on the profile page.
+    }
   }
 
   async function onWebSignIn() {
     const btn = $('signinWebBtn');
     btn.disabled = true;
     try {
-      await window.EasyWebSignIn.start();
+      const label = window.EasyWebSignIn.cleanLabel($('signinDeviceName').value);
+      await window.EasyStore.set('deviceName', label);
+      await window.EasyWebSignIn.start(label);
     } catch (e) {
       showSignIn(e.message);
     } finally {
@@ -540,6 +578,8 @@
   async function onSignOut() {
     const yes = await confirm('Sign out?', 'The saved sign-in will be removed from this device.', 'Sign out');
     if (!yes) return;
+    const creds = await window.EasyStore.getCreds();
+    if (creds) await noteAppPasswordForRetiring(creds.username);
     await window.EasyStore.clearCreds();
     window.EasyApi.setCreds(null);
     window.EasyRoles.reset();
@@ -556,6 +596,7 @@
     }
     $('signinForm').addEventListener('submit', onSignInSubmit);
     $('signinWebBtn').addEventListener('click', onWebSignIn);
+    $('signinDeviceName').value = await window.EasyStore.get('deviceName', '');
     $('signinManualToggle').addEventListener('click', () => toggleManual());
     $('signOutBtn').addEventListener('click', onSignOut);
     $('updateDismiss').addEventListener('click', () => window.EasyUpdater.dismissCurrent());
@@ -599,6 +640,7 @@
     try {
       const user = await window.EasyApi.fetchMe(creds.username, creds.appPassword);
       enterApp(user);
+      retirePendingAppPassword(creds.username);
     } catch (e) {
       // A network failure should not kick the user out of a saved sign-in;
       // only a clear auth rejection does.

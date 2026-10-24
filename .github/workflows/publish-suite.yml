@@ -23,6 +23,11 @@
 #
 # Re-running is safe: if the suite-v<version> release already exists, its
 # zip asset is replaced instead of the run failing.
+#
+# Rolling back: every suite-v<version> tag stays, even after its release is
+# pruned. Run this workflow with "Use workflow from" set to that tag and it
+# rebuilds the same zip as a release again (WordPress won't offer it as an
+# update because it is older; download the zip and upload it by hand).
 
 name: Publish Suite
 
@@ -106,6 +111,7 @@ jobs:
             gh release edit "$TAG" --title "EASY Suite ${VERSION}" --prerelease
           else
             gh release create "$TAG" "$ASSET" \
+              --target "$GITHUB_SHA" \
               --title "EASY Suite ${VERSION}" \
               --prerelease \
               --notes "EASY Suite ${VERSION} plugin package. The installed plugin offers this update on the WordPress Plugins screen; the attached zip also installs by hand (Plugins, Add New, Upload, Replace current)."
@@ -113,17 +119,22 @@ jobs:
 
       # Keep only the two newest suite releases: the current one, plus the
       # one before it as a quick rollback (its zip still installs by hand).
-      # Older suite-v* prereleases and their tags are deleted. Desktop
-      # releases (v*) are never touched.
-      - name: Remove older suite releases
+      # Older suite-v* releases and their zips are deleted so they don't
+      # crowd the 100 releases the updaters read, but their tags stay, so
+      # any older version can still be rebuilt (see "Rolling back" above).
+      # The release this run just made is never pruned, even when it is a
+      # rebuild of an older version. Desktop releases (v*) are never touched.
+      - name: Remove older suite releases (tags stay)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CURRENT: suite-v${{ steps.version.outputs.version }}
         run: |
           gh release list --limit 200 --json tagName --jq '.[].tagName' \
             | grep -E '^suite-v[0-9]+\.[0-9]+\.[0-9]+$' \
             | sed 's/^suite-v//' | sort -V | sed 's/^/suite-v/' \
             | head -n -2 \
             | while read -r tag; do
-                echo "Deleting $tag"
-                gh release delete "$tag" --yes --cleanup-tag
+                if [ "$tag" = "$CURRENT" ]; then continue; fi
+                echo "Deleting release $tag (tag kept)"
+                gh release delete "$tag" --yes
               done

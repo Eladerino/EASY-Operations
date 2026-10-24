@@ -100,6 +100,12 @@ publishing.
   the website login is not kept. Each computer shows up by name under
   Application Passwords on the user's WordPress profile, where it can be
   revoked on its own.
+- When a computer signs in again, the password it used before is removed
+  once the new one has passed the connection test and been saved. After
+  Sign out, the old password's id is kept and the next sign-in as the same
+  person removes it. Only passwords the website sign-in made for this app
+  (matching `app_id`) are ever removed; ones made by hand on the profile
+  page are left alone, since they may be in use elsewhere.
 - The window can only load the app's own files. All network calls go
   through the main process.
 - Only known certificate fields are sent. EASY Suite checks them again on
@@ -137,5 +143,5 @@ publishing.
 | `mobile/` | The EASY Manager phone app: Android APK, and the web version for iPhones that EASY Suite serves (see `mobile/README.md`) |
 | `.github/workflows/release.yml` | Release build |
 | `.github/workflows/build-apk.yml` | EASY Manager APK build |
-| `.github/workflows/publish-suite.yml` | Packages the Suite zip (with the EASY Manager web version) onto a prerelease for the plugin self-updater, and keeps only the two newest suite releases |
+| `.github/workflows/publish-suite.yml` | Packages the Suite zip (with the EASY Manager web version) onto a prerelease for the plugin self-updater, and keeps only the two newest suite releases (older tags stay for rollback) |
 | `.github/workflows/check-suite.yml` | Syntax-checks the Suite's PHP on pull requests |

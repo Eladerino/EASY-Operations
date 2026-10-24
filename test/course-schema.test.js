@@ -135,7 +135,7 @@ test('sync bookkeeping and unknown fields pass through', () => {
   const [c] = coursesIn(load('v1-local-storage.json'));
   const out = S.upgradeCourse(copy(c));
   assert.equal(out._rev, 14);
-  assert.equal(out._siteBy, 'bglynn');
+  assert.equal(out._siteBy, 'author1');
   const d = S.upgradeCourse(copy(load('v1-damaged.json').data.course));
   assert.deepEqual(d.extraFieldFromSomewhere, { keep: 'me' });
 });
