@@ -17,6 +17,12 @@
     } catch (e) {}
   </script>
   <title>EASY Manager</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="img/apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="EASY Manager" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <link rel="stylesheet" href="css/app.css" />
 </head>
 <body>
@@ -35,16 +41,30 @@
     <div class="signin-card">
       <img class="signin-logo" src="img/logo.png" alt="EASY Safety Training" />
       <h1>EASY Manager</h1>
-      <p class="hint">Sign in with your WordPress username and an application password for easysafety.ca.</p>
-      <p class="hint">Application passwords are created in wp-admin under Users, then your profile, then Application Passwords.</p>
-      <form id="signinForm">
+      <p class="hint">Sign in with the same username and password you use on easysafety.ca.</p>
+      <button id="signinWebBtn" type="button" class="btn btn-primary btn-block">Sign in with easysafety.ca</button>
+      <p id="signinError" class="error-text hidden"></p>
+      <button id="signinManualToggle" type="button" class="btn btn-ghost btn-block">Use an application password instead</button>
+      <form id="signinForm" class="hidden">
+        <p class="hint">Application passwords are created in wp-admin under Users, then your profile, then Application Passwords.</p>
         <label for="signinUser">Username</label>
         <input id="signinUser" type="text" autocomplete="username" autocapitalize="none" />
         <label for="signinPass">Application password</label>
         <input id="signinPass" type="password" autocomplete="current-password" />
-        <p id="signinError" class="error-text hidden"></p>
         <button id="signinBtn" type="submit" class="btn btn-primary btn-block">Sign in</button>
       </form>
+    </div>
+  </section>
+
+  <!-- Android hand-back: the phone's browser lands here after the
+       website sign-in and passes the new sign-in to the installed app. -->
+  <section id="handoffView" class="signin hidden">
+    <div class="signin-card">
+      <img class="signin-logo" src="img/logo.png" alt="EASY Safety Training" />
+      <h1 id="handoffTitle">Almost done</h1>
+      <p id="handoffText" class="hint">Tap the button to finish signing in to EASY Manager on this phone.</p>
+      <a id="handoffLink" class="btn btn-primary btn-block hidden" href="#">Open EASY Manager</a>
+      <p id="handoffAfter" class="hint">You can close this browser tab afterwards.</p>
     </div>
   </section>
 
@@ -75,13 +95,13 @@
           <h3 class="section-title">Classes today</h3>
           <div id="todayClasses"></div>
           <p id="todayClassesNote" class="hint"></p>
-          <h3 class="section-title">Needs attention</h3>
-          <div class="count-grid">
-            <div class="count-box count-link" id="boxCerts"><span id="countCerts" class="count-num">...</span><span class="count-label">Certificate drafts</span></div>
-            <div class="count-box count-link" id="boxClasses"><span id="countClasses" class="count-num">...</span><span class="count-label">Class drafts</span></div>
-            <div class="count-box count-link" id="boxAccounts"><span id="countAccounts" class="count-num">...</span><span class="count-label">Account signups</span></div>
-            <div class="count-box count-link" id="boxQueue"><span id="countQueue" class="count-num">...</span><span class="count-label">Open queue questions</span></div>
-            <div class="count-box"><span id="countReviews" class="count-num">...</span><span class="count-label">Course reviews waiting</span></div>
+          <h3 class="section-title" id="needsAttentionTitle">Needs attention</h3>
+          <div class="count-grid" id="needsAttentionGrid">
+            <div class="count-box count-link" id="boxCerts" data-role="publishCerts"><span id="countCerts" class="count-num">...</span><span class="count-label">Certificate drafts</span></div>
+            <div class="count-box count-link" id="boxClasses" data-role="classDrafts"><span id="countClasses" class="count-num">...</span><span class="count-label">Class drafts</span></div>
+            <div class="count-box count-link" id="boxAccounts" data-role="accounts"><span id="countAccounts" class="count-num">...</span><span class="count-label">Account signups</span></div>
+            <div class="count-box count-link" id="boxQueue" data-role="queue"><span id="countQueue" class="count-num">...</span><span class="count-label">Open queue questions</span></div>
+            <div class="count-box" id="boxReviews" data-role="publishCerts"><span id="countReviews" class="count-num">...</span><span class="count-label">Course reviews waiting</span></div>
           </div>
           <div class="section-head-row">
             <h3 class="section-title">Recent activity</h3>
@@ -90,7 +110,7 @@
           <div id="todayRecent"></div>
           <p id="suiteLine" class="hint"></p>
           <p class="footer-note">
-            <button id="checkUpdatesBtn" type="button" class="btn btn-small btn-ghost">Check for app updates</button>
+            <button id="checkUpdatesBtn" type="button" class="btn btn-small btn-ghost native-only">Check for app updates</button>
           </p>
           <div class="theme-row">
             <span class="theme-label" id="themeLabel">Theme</span>
@@ -117,7 +137,7 @@
           <div class="activity-source">
             <div class="segmented" role="group" aria-label="Activity source">
               <button type="button" class="seg-btn active" id="activitySegPhone">This phone</button>
-              <button type="button" class="seg-btn" id="activitySegSite">Site</button>
+              <button type="button" class="seg-btn" id="activitySegSite" data-role="siteActivity">Site</button>
             </div>
           </div>
           <div id="activityChips" class="filter-chips"></div>
@@ -245,16 +265,22 @@
         <p id="approvalsError" class="error-text hidden"></p>
         <p id="approvalsUpdated" class="hint"></p>
 
-        <h3 class="section-title">Certificates <span id="badgeCerts" class="badge hidden">0</span></h3>
-        <p id="certsNote" class="hint hidden"></p>
-        <div id="queueCerts"></div>
+        <div data-role="publishCerts">
+          <h3 class="section-title">Certificates <span id="badgeCerts" class="badge hidden">0</span></h3>
+          <p id="certsNote" class="hint hidden"></p>
+          <div id="queueCerts"></div>
+        </div>
 
-        <h3 class="section-title">Classes <span id="badgeClasses" class="badge hidden">0</span></h3>
-        <div id="queueClasses"></div>
+        <div data-role="classDrafts">
+          <h3 class="section-title">Classes <span id="badgeClasses" class="badge hidden">0</span></h3>
+          <div id="queueClasses"></div>
+        </div>
 
-        <h3 class="section-title">Account signups <span id="badgeAccounts" class="badge hidden">0</span></h3>
-        <p id="accountsNote" class="hint hidden"></p>
-        <div id="queueAccounts"></div>
+        <div data-role="accounts">
+          <h3 class="section-title">Account signups <span id="badgeAccounts" class="badge hidden">0</span></h3>
+          <p id="accountsNote" class="hint hidden"></p>
+          <div id="queueAccounts"></div>
+        </div>
 
         <h3 class="section-title">Certificate search</h3>
         <p class="hint">Look up any certificate, published or draft, by student name or certificate number.</p>
@@ -344,9 +370,11 @@
             <p class="hint">The website checks certificate expiry dates once a day and emails students a reminder before their certificate runs out. Each certificate gets two reminders: one when it is 30 days from expiring, and another when it is 7 days away. The list below shows the certificates sitting in one of those two windows right now, so these are the students the next daily checks will email. Each reminder goes out only once per certificate: a student who already got the 30 day reminder will not get it again, and will get the 7 day reminder when their certificate reaches that window instead.</p>
             <div id="expiryPreviewBox"></div>
           </div>
-          <h3 class="section-title">Site health</h3>
-          <div id="healthBox"></div>
-          <p id="healthUpdated" class="hint"></p>
+          <div data-role="siteHealth">
+            <h3 class="section-title">Site health</h3>
+            <div id="healthBox"></div>
+            <p id="healthUpdated" class="hint"></p>
+          </div>
         </div>
         <div id="expiringView" class="hidden">
           <div class="page-head">
@@ -362,8 +390,8 @@
     <nav class="tabbar">
       <button type="button" class="tab-btn active" data-tab="today">Today</button>
       <button type="button" class="tab-btn" data-tab="schedule">Schedule</button>
-      <button type="button" class="tab-btn" data-tab="approvals">Approvals <span id="tabApprovalsBadge" class="badge hidden">0</span></button>
-      <button type="button" class="tab-btn" data-tab="queue">Queue</button>
+      <button type="button" class="tab-btn" data-tab="approvals" data-role="approvals">Approvals <span id="tabApprovalsBadge" class="badge hidden">0</span></button>
+      <button type="button" class="tab-btn" data-tab="queue" data-role="queue">Queue</button>
       <button type="button" class="tab-btn" data-tab="alerts">Alerts</button>
     </nav>
   </div>
@@ -386,6 +414,8 @@
   <script src="js/util.js"></script>
   <script src="js/store.js"></script>
   <script src="js/api.js"></script>
+  <script src="js/roles.js"></script>
+  <script src="js/websignin.js"></script>
   <script src="js/updater.js"></script>
   <script src="js/today.js"></script>
   <script src="js/approvals.js"></script>

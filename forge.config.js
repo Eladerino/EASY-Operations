@@ -19,7 +19,7 @@ module.exports = {
     icon: './icon',
     // The WordPress plugin source and tests live in this repo but aren't
     // part of the app, so they stay out of the installer.
-    ignore: [/^\/site-plugins(\/|$)/, /^\/test(\/|$)/],
+    ignore: [/^\/site-plugins(\/|$)/, /^\/test(\/|$)/, /^\/mobile(\/|$)/],
   },
   rebuildConfig: {},
   makers: [

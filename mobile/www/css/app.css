@@ -114,6 +114,8 @@ html, body {
 ::selection { background: var(--accent-ring); }
 
 .hidden { display: none !important; }
+/* Screens and sections this account has no use for (see roles.js). */
+.role-hidden { display: none !important; }
 
 /* App shell: body is a full-height flex column and #appView stacks the
    header, the scrolling pages, and the tab bar in normal flow. The
@@ -205,6 +207,9 @@ h3.section-title {
 .btn-ghost { border-color: transparent; background: transparent; color: var(--accent-dark); }
 .btn-small { min-height: 40px; padding: var(--sp-2) var(--sp-3); font-size: 14px; border-radius: var(--radius-input); }
 .btn-block { display: flex; width: 100%; margin-top: var(--sp-4); }
+a.btn { text-decoration: none; box-sizing: border-box; }
+/* Hidden in the web version, where the site updates the app. */
+.web-mode .native-only { display: none !important; }
 
 .badge {
   display: inline-flex;

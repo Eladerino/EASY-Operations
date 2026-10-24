@@ -59,6 +59,8 @@
   // Returns the pending update, or null. A skipped version counts as
   // handled: it does not re-announce.
   async function check(force) {
+    // The web version is updated by the site (EASY Suite), not by APKs.
+    if (window.EasyWebSignIn && !window.EasyWebSignIn.isNative()) return null;
     const cache = (await window.EasyStore.getUpdateCache()) || {};
     const skipped = await window.EasyStore.getSkippedVersion();
     const now = Date.now();

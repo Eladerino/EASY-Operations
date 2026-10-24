@@ -203,6 +203,8 @@
       $('setupUser').value = '';
     }
     $('setupAppPassword').value = '';
+    $('setupManualFields').classList.add('hidden');
+    $('setupManualToggle').textContent = 'Use an application password instead';
     $('setupBackButton').classList.toggle('hidden', !isRerun);
     // Save starts enabled on re-run (printer-only changes need no test);
     // the click handler enforces a fresh test when sign-in details change.
@@ -258,7 +260,7 @@
       $(id).addEventListener('input', invalidateTest);
     });
 
-    testBtn.addEventListener('click', async () => {
+    const runConnectionTest = async () => {
       const baseUrl = $('setupBaseUrl').value.trim();
       const user = $('setupUser').value.trim();
       const appPassword = $('setupAppPassword').value;
@@ -295,6 +297,40 @@
         testBtn.disabled = false;
         testBtn.textContent = 'Test connection';
       }
+    };
+    testBtn.addEventListener('click', runConnectionTest);
+
+    // Website sign-in: WordPress creates the application password after
+    // the person signs in and approves this computer, and the app fills
+    // it in here, then runs the same connection test as the manual path.
+    const websiteBtn = $('setupWebsiteButton');
+    websiteBtn.addEventListener('click', async () => {
+      websiteBtn.disabled = true;
+      websiteBtn.textContent = 'Waiting for the website\u2026';
+      try {
+        const res = await window.easyCert.websiteSignIn();
+        if (res && res.ok) {
+          $('setupUser').value = res.user;
+          $('setupAppPassword').value = res.appPassword;
+          await runConnectionTest();
+        } else if (res && res.error) {
+          showSetupResult(false, res.error);
+        } else if (res && res.cancelled) {
+          showSetupResult(false, 'Sign-in was cancelled. Nothing was changed.');
+        }
+      } catch (err) {
+        showSetupResult(false, `Could not open the website sign-in: ${err.message}`);
+      } finally {
+        websiteBtn.disabled = false;
+        websiteBtn.textContent = 'Sign in with easysafety.ca';
+      }
+    });
+
+    $('setupManualToggle').addEventListener('click', () => {
+      const fields = $('setupManualFields');
+      const willShow = fields.classList.contains('hidden');
+      fields.classList.toggle('hidden', !willShow);
+      $('setupManualToggle').textContent = willShow ? 'Hide application password sign-in' : 'Use an application password instead';
     });
 
     $('setupProfileButton').addEventListener('click', () => {
@@ -395,7 +431,7 @@
     $('setupSignOutButton').addEventListener('click', async () => {
       const yes = await showModal({
         title: 'Sign out?',
-        body: 'This removes the saved WordPress sign-in from this computer. You will need your username and a new application password to sign back in.',
+        body: 'This removes the saved WordPress sign-in from this computer. To sign back in, use Sign in with easysafety.ca and your website login.',
         okText: 'Sign out',
         cancelText: 'Cancel',
       });

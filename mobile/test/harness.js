@@ -57,6 +57,8 @@ const sandbox = {
   clearTimeout,
   TextEncoder,
   AbortController,
+  URL,
+  URLSearchParams,
   btoa: (s) => Buffer.from(s, 'binary').toString('base64'),
   document: {
     getElementById: () => null,
@@ -74,7 +76,7 @@ sandbox.window = sandbox;
 vm.createContext(sandbox);
 
 const wwwJs = path.join(__dirname, '..', 'www', 'js');
-for (const file of ['config.js', 'util.js', 'api.js', 'today.js', 'schedule.js']) {
+for (const file of ['config.js', 'util.js', 'api.js', 'roles.js', 'websignin.js', 'today.js', 'schedule.js']) {
   const code = fs.readFileSync(path.join(wwwJs, file), 'utf8');
   vm.runInContext(code, sandbox, { filename: file });
 }
@@ -87,6 +89,74 @@ const Sched = sandbox.EasySchedule;
 function jsonResponse(status, body) {
   return { status, headers: {}, json: async () => body };
 }
+
+/* ---------------- roles ---------------- */
+
+const Roles = sandbox.EasyRoles;
+eq('roles unknown shows everything', Roles.can('queue'), true);
+Roles.set({ edit_posts: true, edit_tribe_events: true, read: true }, false);
+eq('instructor: no queue', Roles.can('queue'), false);
+eq('instructor: no approvals tab', Roles.can('approvals'), false);
+eq('instructor: no rosters', Roles.can('rosters'), false);
+Roles.set({ edit_posts: true }, true);
+eq('proxy poster: publishes certs', Roles.can('publishCerts'), true);
+eq('proxy poster: sees rosters', Roles.can('rosters'), true);
+eq('proxy poster: approvals tab', Roles.can('approvals'), true);
+eq('proxy poster: no accounts', Roles.can('accounts'), false);
+Roles.set({ manage_options: true, promote_users: true }, false);
+eq('admin: queue', Roles.can('queue'), true);
+eq('admin: accounts', Roles.can('accounts'), true);
+Roles.set({}, false);
+eq('empty caps count as unknown', Roles.can('queue'), true);
+Roles.reset();
+
+/* ---------------- website sign-in ---------------- */
+
+const Web = sandbox.EasyWebSignIn;
+sandbox.location = { origin: 'https://easysafety.ca', pathname: '/wp-content/plugins/easy-suite/app/index.html' };
+const authUrl = new URL(Web.authorizeUrl());
+eq('authorize page', authUrl.origin + authUrl.pathname, 'https://easysafety.ca/wp-admin/authorize-application.php');
+eq(
+  'web success url returns to this page',
+  authUrl.searchParams.get('success_url'),
+  'https://easysafety.ca/wp-content/plugins/easy-suite/app/index.html#connect'
+);
+ok('app_id is a UUID', /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(authUrl.searchParams.get('app_id')));
+eq('app name carries device and time', Web.appName(new Date(2026, 9, 24, 9, 5)), 'EASY Manager (web, 2026-10-24 09:05)');
+
+eq(
+  'web hand-back after the hash (WordPress script path)',
+  Web.parseLocation({
+    hash: '#connect?site_url=https%3A%2F%2Feasysafety.ca&user_login=pam&password=abcd%20efgh',
+    search: '',
+  }),
+  { mode: 'web', creds: { user: 'pam', appPassword: 'abcd efgh' } }
+);
+eq(
+  'web hand-back in the query (no-script path)',
+  Web.parseLocation({ hash: '#connect', search: '?site_url=https://easysafety.ca/&user_login=pam&password=x' }),
+  { mode: 'web', creds: { user: 'pam', appPassword: 'x' } }
+);
+eq(
+  'hand-back for another site is ignored',
+  Web.parseLocation({ hash: '#connect?site_url=https://evil.example&user_login=pam&password=x', search: '' }),
+  { mode: 'web', creds: null }
+);
+eq('android hand-back', Web.parseLocation({ hash: '#connect-android?site_url=https://easysafety.ca&user_login=sg&password=p', search: '' }).mode, 'android');
+eq('rejected', Web.parseLocation({ hash: '#connect-android-rejected', search: '' }), { mode: 'android', rejected: true });
+eq('web rejected', Web.parseLocation({ hash: '#connect-rejected', search: '' }), { mode: 'web', rejected: true });
+eq('other hashes ignored', Web.parseLocation({ hash: '#tab', search: '' }), null);
+
+const link = Web.androidHandoffLink({ user: 'sg', appPassword: 'ab cd' });
+ok('intent link targets the app package', link.endsWith('#Intent;scheme=easymanager;package=ca.easysafety.opsmobile;end'));
+eq(
+  'intent link round-trips through the app parser',
+  Web.parseAppUrl(link.replace(/^intent:/, 'easymanager:').replace(/#Intent;.*$/, '')),
+  { user: 'sg', appPassword: 'ab cd' }
+);
+eq('app parser wants auth/callback', Web.parseAppUrl('easymanager://other/callback?site_url=https://easysafety.ca&user_login=a&password=b'), null);
+eq('app parser wants this site', Web.parseAppUrl('easymanager://auth/callback?site_url=https://x.example&user_login=a&password=b'), null);
+eq('app parser rejects junk', Web.parseAppUrl('not a url'), null);
 
 /* ---------------- util ---------------- */
 

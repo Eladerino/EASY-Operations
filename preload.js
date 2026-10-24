@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('easyCert', {
   openPdfExternal: () => ipcRenderer.invoke('open-pdf-external'),
   testConnection: (args) => ipcRenderer.invoke('test-connection', args),
   openProfile: () => ipcRenderer.invoke('open-profile'),
+  websiteSignIn: () => ipcRenderer.invoke('website-sign-in'),
   getPrinters: () => ipcRenderer.invoke('get-printers'),
   setPrinter: (name) => ipcRenderer.invoke('set-printer', name),
   saveSetup: (setup) => ipcRenderer.invoke('save-setup', setup),

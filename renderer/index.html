@@ -16,7 +16,7 @@
     <div class="setup-card">
       <img src="icon.png" alt="EASY Safety Training" class="setup-logo" width="72" height="72">
       <h2 id="setupHeading">Set up EASY Operations</h2>
-      <p class="setup-sub" id="setupSub">Sign in with your WordPress account. Your instructor name and email are taken from your profile and locked to your login.</p>
+      <p class="setup-sub" id="setupSub">Sign in with your easysafety.ca account. Your instructor name and email are taken from your profile and locked to your login.</p>
 
       <section class="card setup-section" aria-label="WordPress sign-in">
         <h3>WordPress sign-in</h3>
@@ -29,24 +29,33 @@
         </div>
         <div id="signInForm">
           <div class="field">
-            <label for="setupBaseUrl">WordPress site URL</label>
-            <input type="url" id="setupBaseUrl" value="https://easysafety.ca" inputmode="url" readonly class="locked">
-            <div class="hint">Fixed: instructors always connect to easysafety.ca.</div>
-          </div>
-          <div class="field">
-            <label for="setupUser">WordPress username</label>
-            <input type="text" id="setupUser" autocomplete="username" placeholder="e.g. jdoe">
-          </div>
-          <div class="field">
-            <label for="setupAppPassword">Application password</label>
-            <input type="password" id="setupAppPassword" autocomplete="new-password" placeholder="xxxx xxxx xxxx xxxx xxxx xxxx">
-            <div class="hint">Create one on your WordPress profile under &ldquo;Application Passwords&rdquo; (name it &ldquo;EASY Operations&rdquo;), then paste it here.</div>
-            <div class="setup-actions">
-              <button type="button" id="setupProfileButton" class="btn btn-secondary">Open my WordPress profile</button>
-            </div>
+            <button type="button" id="setupWebsiteButton" class="btn btn-primary">Sign in with easysafety.ca</button>
+            <div class="hint">Use the same username and password you use on the website. A window opens to sign in and approve this computer.</div>
           </div>
           <div class="setup-actions">
-            <button type="button" id="setupTestButton" class="btn btn-secondary">Test connection</button>
+            <button type="button" id="setupManualToggle" class="btn btn-secondary btn-small">Use an application password instead</button>
+          </div>
+          <div id="setupManualFields" class="hidden">
+            <div class="field">
+              <label for="setupBaseUrl">WordPress site URL</label>
+              <input type="url" id="setupBaseUrl" value="https://easysafety.ca" inputmode="url" readonly class="locked">
+              <div class="hint">Fixed: instructors always connect to easysafety.ca.</div>
+            </div>
+            <div class="field">
+              <label for="setupUser">WordPress username</label>
+              <input type="text" id="setupUser" autocomplete="username" placeholder="e.g. jdoe">
+            </div>
+            <div class="field">
+              <label for="setupAppPassword">Application password</label>
+              <input type="password" id="setupAppPassword" autocomplete="new-password" placeholder="xxxx xxxx xxxx xxxx xxxx xxxx">
+              <div class="hint">Create one on your WordPress profile under &ldquo;Application Passwords&rdquo; (name it &ldquo;EASY Operations&rdquo;), then paste it here.</div>
+              <div class="setup-actions">
+                <button type="button" id="setupProfileButton" class="btn btn-secondary">Open my WordPress profile</button>
+              </div>
+            </div>
+            <div class="setup-actions">
+              <button type="button" id="setupTestButton" class="btn btn-secondary">Test connection</button>
+            </div>
           </div>
           <div id="setupTestResult" class="setup-result hidden" role="status"></div>
           <div class="field hidden" id="setupEmailField">
