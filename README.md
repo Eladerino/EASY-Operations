@@ -137,5 +137,5 @@ publishing.
 | `mobile/` | The EASY Manager phone app: Android APK, and the web version for iPhones that EASY Suite serves (see `mobile/README.md`) |
 | `.github/workflows/release.yml` | Release build |
 | `.github/workflows/build-apk.yml` | EASY Manager APK build |
-| `.github/workflows/publish-suite.yml` | Packages the Suite zip (with the EASY Manager web version) onto a prerelease for the plugin self-updater, and keeps only the two newest suite releases |
+| `.github/workflows/publish-suite.yml` | Packages the Suite zip (with the EASY Manager web version) onto a prerelease for the plugin self-updater, and keeps only the two newest suite releases (older tags stay for rollback) |
 | `.github/workflows/check-suite.yml` | Syntax-checks the Suite's PHP on pull requests |
