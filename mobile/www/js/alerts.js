@@ -236,8 +236,8 @@
   }
 
   function runText(label, pair) {
-    const last = pair && pair.last_run ? pair.last_run : 'never';
-    const next = pair && pair.next_run ? pair.next_run : 'not scheduled';
+    const last = pair && pair.last_run ? U.fmtDateTime(pair.last_run) : 'never';
+    const next = pair && pair.next_run ? U.fmtDateTime(pair.next_run) : 'not scheduled';
     return label + ': last ran ' + last + '; next ' + next + '.';
   }
 
@@ -321,7 +321,7 @@
     if (summary) {
       const nextRun =
         lastHealth && lastHealth.expiry_check && lastHealth.expiry_check.next_run
-          ? lastHealth.expiry_check.next_run
+          ? U.fmtDateTime(lastHealth.expiry_check.next_run)
           : null;
       summary.textContent =
         (rows.length

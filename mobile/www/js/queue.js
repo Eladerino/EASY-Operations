@@ -37,7 +37,7 @@
     if (decided) {
       if (Array.isArray(q.options) && q.options.length) {
         const chips = U.el('div', 'chips');
-        for (const opt of q.options) chips.appendChild(U.el('span', 'chip', opt));
+        for (const opt of q.options) chips.appendChild(U.el('span', opt === q.answer ? 'chip chip-chosen' : 'chip', opt));
         card.appendChild(chips);
       }
       if (q.answer) card.appendChild(U.el('div', 'card-answer', q.answer));
@@ -70,7 +70,7 @@
     card.appendChild(U.el('div', 'card-title', item.label));
     if (Array.isArray(item.options) && item.options.length) {
       const chips = U.el('div', 'chips');
-      for (const opt of item.options) chips.appendChild(U.el('span', 'chip', opt));
+      for (const opt of item.options) chips.appendChild(U.el('span', opt === item.answer ? 'chip chip-chosen' : 'chip', opt));
       card.appendChild(chips);
     }
     if (item.answer) card.appendChild(U.el('div', 'card-answer', item.answer));
