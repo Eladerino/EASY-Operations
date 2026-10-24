@@ -901,7 +901,7 @@ function easy_licenses_email(array $rows, $to = '') {
 
     $headers = [
         'Content-Type: text/html; charset=UTF-8',
-        'From: EASY Safety <pam@easysafety.ca>',
+        'From: EASY Safety Training <notifications@easysafety.ca>',
         'Reply-To: ' . $contact,
     ];
     $alt = function ($phpmailer) use ($plain) {

@@ -37,11 +37,11 @@ class Easy_Safety_Cert_Notifications {
     const LOGO_URL        = 'https://easysafety.ca/wp-content/login-logo.png';
     const CONTACT_EMAIL   = 'pam@easysafety.ca';
     const CONTACT_PHONE   = '(709) 221-7233';
-    const FROM_NAME       = 'EASY Safety';
-    // When FluentSMTP (or any SMTP) is in use, this MUST match the mailbox
-    // it authenticates as — providers reject mail when From and the login
-    // don't match. Via plain PHP mail() there is no such check.
-    const FROM_EMAIL      = 'pam@easysafety.ca';
+    const FROM_NAME       = 'EASY Safety Training';
+    // Sent via Resend (FluentSMTP, user 'resend'); the From domain must be
+    // the Resend-verified easysafety.ca sending domain. Reply-To stays
+    // CONTACT_EMAIL (pam@) so student replies still land with Pam.
+    const FROM_EMAIL      = 'notifications@easysafety.ca';
 
     // Import-suppression mode (v2.4, for the legacy-certificate bulk migration).
     // While suppression is engaged, NOTHING is sent on any path: new-cert
