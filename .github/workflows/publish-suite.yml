@@ -30,7 +30,7 @@ permissions:
 
 jobs:
   publish-suite:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
 
@@ -44,6 +44,27 @@ jobs:
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "EASY Suite version: $VERSION"
+
+      # Never publish a zip WordPress can't parse: one syntax error takes the
+      # whole site down, and the Plugins screen would offer it as a normal
+      # one-click update. The runner's PHP is 8.3, the same as the live site.
+      - name: php -l every plugin file
+        run: |
+          php -v | head -1
+          fail=0
+          count=0
+          while IFS= read -r -d '' f; do
+            count=$((count + 1))
+            if ! out="$(php -l "$f" 2>&1)"; then
+              echo "::error file=$f::$out"
+              fail=1
+            fi
+          done < <(find site-plugins/easy-suite -name '*.php' -print0)
+          echo "Checked $count PHP files."
+          if [ "$count" -eq 0 ]; then
+            echo "::error::No PHP files found in site-plugins/easy-suite."; exit 1
+          fi
+          exit $fail
 
       - name: Zip the plugin
         run: |

@@ -248,13 +248,13 @@ function easy_roster_rest_put($request) {
     }
     // Optimistic concurrency: reject the save when the roster changed
     // since the app loaded it (e.g. a seat sold online meanwhile).
-    // Older clients that send no revision keep the old behavior.
+    // Older clients that send no revision are handled below.
     $sent_revision = (is_array($params) && isset($params['revision'])) ? (int) $params['revision'] : null;
     $current_revision = easy_roster_revision($event_id);
     if ($sent_revision !== null && $sent_revision !== $current_revision) {
         return new WP_Error(
             'easy_roster_conflict',
-            'The student list changed since you opened it (for example, a seat was sold online). The latest version is included below — please check it and try again.',
+            'The student list changed since you opened it (for example, a seat was sold online). The latest version is included below. Please check it and try again.',
             array(
                 'status'   => 409,
                 'roster'   => easy_roster_get($event_id),
@@ -269,6 +269,17 @@ function easy_roster_rest_put($request) {
         if (is_array($rec) && isset($rec['source']) && $rec['source'] === 'checkout' && !empty($rec['id'])) {
             $old_checkout_ids[(string) $rec['id']] = true;
         }
+    }
+    // A save with no revision comes from an app older than 1.2.4, which
+    // can't tell that a seat sold online after it loaded the list. Once
+    // the list holds online buyers, refuse it rather than risk writing
+    // over them; updating the app fixes it.
+    if ($sent_revision === null && !empty($old_checkout_ids)) {
+        return new WP_Error(
+            'easy_roster_update_app',
+            'This class has students who paid online, and this version of the app can\'t save their list safely. Update EASY Operations (restart it to install the update), then try again.',
+            array('status' => 403)
+        );
     }
     if (!empty($old_checkout_ids)) {
         $new_ids = array();
