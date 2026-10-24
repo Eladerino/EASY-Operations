@@ -78,7 +78,10 @@
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      return await fetch(url, { ...opts, signal: controller.signal });
+      // Cookies are never sent. In the web version the site's login
+      // cookie would otherwise override the application password and
+      // WordPress would treat every request as signed out.
+      return await fetch(url, { credentials: 'omit', ...opts, signal: controller.signal });
     } catch (e) {
       if (e && e.name === 'AbortError') {
         const err = new Error('The site did not answer in time. It may be down, or the connection is weak.');

@@ -17,6 +17,12 @@
     } catch (e) {}
   </script>
   <title>EASY Manager</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="img/apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="EASY Manager" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <link rel="stylesheet" href="css/app.css" />
 </head>
 <body>
@@ -35,16 +41,30 @@
     <div class="signin-card">
       <img class="signin-logo" src="img/logo.png" alt="EASY Safety Training" />
       <h1>EASY Manager</h1>
-      <p class="hint">Sign in with your WordPress username and an application password for easysafety.ca.</p>
-      <p class="hint">Application passwords are created in wp-admin under Users, then your profile, then Application Passwords.</p>
-      <form id="signinForm">
+      <p class="hint">Sign in with the same username and password you use on easysafety.ca.</p>
+      <button id="signinWebBtn" type="button" class="btn btn-primary btn-block">Sign in with easysafety.ca</button>
+      <p id="signinError" class="error-text hidden"></p>
+      <button id="signinManualToggle" type="button" class="btn btn-ghost btn-block">Use an application password instead</button>
+      <form id="signinForm" class="hidden">
+        <p class="hint">Application passwords are created in wp-admin under Users, then your profile, then Application Passwords.</p>
         <label for="signinUser">Username</label>
         <input id="signinUser" type="text" autocomplete="username" autocapitalize="none" />
         <label for="signinPass">Application password</label>
         <input id="signinPass" type="password" autocomplete="current-password" />
-        <p id="signinError" class="error-text hidden"></p>
         <button id="signinBtn" type="submit" class="btn btn-primary btn-block">Sign in</button>
       </form>
+    </div>
+  </section>
+
+  <!-- Android hand-back: the phone's browser lands here after the
+       website sign-in and passes the new sign-in to the installed app. -->
+  <section id="handoffView" class="signin hidden">
+    <div class="signin-card">
+      <img class="signin-logo" src="img/logo.png" alt="EASY Safety Training" />
+      <h1 id="handoffTitle">Almost done</h1>
+      <p id="handoffText" class="hint">Tap the button to finish signing in to EASY Manager on this phone.</p>
+      <a id="handoffLink" class="btn btn-primary btn-block hidden" href="#">Open EASY Manager</a>
+      <p id="handoffAfter" class="hint">You can close this browser tab afterwards.</p>
     </div>
   </section>
 
@@ -90,7 +110,7 @@
           <div id="todayRecent"></div>
           <p id="suiteLine" class="hint"></p>
           <p class="footer-note">
-            <button id="checkUpdatesBtn" type="button" class="btn btn-small btn-ghost">Check for app updates</button>
+            <button id="checkUpdatesBtn" type="button" class="btn btn-small btn-ghost native-only">Check for app updates</button>
           </p>
           <div class="theme-row">
             <span class="theme-label" id="themeLabel">Theme</span>
@@ -395,6 +415,7 @@
   <script src="js/store.js"></script>
   <script src="js/api.js"></script>
   <script src="js/roles.js"></script>
+  <script src="js/websignin.js"></script>
   <script src="js/updater.js"></script>
   <script src="js/today.js"></script>
   <script src="js/approvals.js"></script>

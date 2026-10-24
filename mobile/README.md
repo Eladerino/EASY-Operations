@@ -1,13 +1,18 @@
 # EASY Manager (mobile)
 
-A personal Android companion app for EASY Safety Training. It puts the
-management work that normally needs the desktop app or wp-admin into a
-phone-sized management tool: today's classes, the class schedule, the
-three approval queues, and the management queue.
+A phone app for EASY Safety Training: today's classes, the class
+schedule, the three approval queues, and the management queue.
 
-This app is for Brandon only. It is sideloaded (installed from an APK
-file), never published to an app store, and it is not part of the EASY
-Operations desktop app that Pam and the instructors use.
+It ships two ways from the same `www/` folder:
+
+- **Android**: an APK (Capacitor), sideloaded, never in an app store.
+- **Web version** (for iPhones): EASY Suite serves the same files at
+  `/easy-app/`. Open it in Safari, then Share, Add to Home Screen. See
+  "Web version" below.
+
+Screens follow the signed-in account's rights. Management accounts see
+everything; instructors and other everyday staff see Today, Schedule
+and Alerts. See "Who sees what".
 
 No personal data, email addresses, tokens, or passwords live in this
 code. The app signs in to https://easysafety.ca with the user's own
@@ -125,14 +130,50 @@ Alerts loads; the widget never talks to the network. The launcher
 icon and splash screens carry the current EASY logo, the same artwork
 the website uses.
 
+## Who sees what
+
+`www/js/roles.js` decides which screens show, from the capabilities the
+sign-in check returns plus `proxyPoster` from the Suite's app-config.
+The site still enforces every permission; this only hides what an
+account cannot use.
+
+| Screen or action | Shown when |
+|---|---|
+| Queue tab, site health, Site activity log | `manage_options` |
+| Account signups | `promote_users` |
+| Certificate drafts, course reviews count | `manage_options`, `publish_posts` or proxy poster |
+| Class drafts | `manage_options` or `publish_tribe_events` |
+| Class rosters | `manage_options` or proxy poster |
+| Approvals tab | any of its three queues |
+
+If the capabilities are unknown, everything shows.
+
 ## Sign-in and credential storage
 
-Sign-in uses a WordPress Application Password (HTTP Basic over HTTPS),
-validated against `GET /wp-json/wp/v2/users/me?context=edit`. Create one
-in wp-admin under Users, your profile, Application Passwords. If the
-signed-in account is missing key permissions (reviewing signups,
-managing the queue, publishing), the app says so once in plain language
-instead of letting screens fail quietly.
+**Sign in with easysafety.ca** uses WordPress's own Authorize Application
+page: the person signs in with their normal website login, taps Approve,
+and WordPress creates an application password and hands it back
+(`www/js/websignin.js`). Nobody copies a password, and a lost one is
+fixed by signing in again. Each sign-in shows up on the person's
+WordPress profile as "EASY Manager (Android or web, date and time)"
+and can be revoked there.
+
+- **Android**: the authorize page opens in the phone's browser. Its
+  success URL is the web version's `#connect-android` page, which shows
+  one Open EASY Manager button: an `intent://` link that opens this app
+  by package name with the new password
+  (`easymanager://auth/callback`, received through the App plugin).
+  This needs the web version on the site (EASY Suite 2.2.43 or newer);
+  the app checks first and says so if it is missing.
+- **Web version**: the success URL is the app page itself with
+  `#connect`. The page reads the password and clears it from the
+  address bar straight away.
+
+The application password form is still there under "Use an application
+password instead". Either way the app checks the sign-in with
+`GET /wp-json/wp/v2/users/me?context=edit`. Requests never send cookies,
+so a website login in the same browser does not interfere with the
+application password.
 
 Credentials are stored with Capacitor's Preferences API in the app's
 private Android storage. Private means no other app can read it, but it
@@ -142,8 +183,29 @@ or a shared device. Signing out wipes the stored credentials.
 
 Android backup is turned off for this app (`allowBackup="false"`), so
 the saved sign-in does not travel inside phone backups or device
-transfers. The trade: after a phone change, sign in again with the
-application password. Nothing else the app stores would be missed.
+transfers. The trade: after a phone change, sign in again. Nothing
+else the app stores would be missed.
+
+The web version keeps the sign-in in the browser's storage for the
+site (on iPhone, the home-screen app has its own, separate from
+Safari). Same trade: private to that browser, not encrypted.
+
+## Web version
+
+Publish Suite copies `mobile/www` into the plugin's `app/` folder, so
+the zip carries the app and the site serves it as plain files at
+`/wp-content/plugins/easy-suite/app/` (short address `/easy-app/`, from
+the Suite's phone-app module). A phone app change reaches iPhones on
+the next Publish Suite; Android still needs Build APK.
+
+- `manifest.webmanifest` and the `img/icon-*` files make Add to Home
+  Screen open it full screen with the EASY icon.
+- `sw.js` fetches the app's own files fresh every time (so a Suite
+  update shows on the next open) and keeps the last copy for opening
+  with no signal. It never touches site data.
+- Differences from Android: no self-update (the site updates it), no
+  home-screen widget, and certificate PDFs open in a browser tab after
+  one extra tap on Open.
 
 ## How it is built (CI)
 
@@ -292,6 +354,11 @@ Every route mirrors the desktop app and the EASY Suite plugin:
 | Course reviews count | `GET /wp-json/easy/v1/course-builder/me` | plugin `module-courses.php` |
 
 ## Known gaps (honest list)
+
+- **Website sign-in has not been tried on a real phone yet.** The
+  pieces are tested with mocks; the Ultimate Member login page and the
+  Turnstile check sending the person back to the Approve page is the
+  part only a real run proves.
 
 - **No money glance and no new-order alerts.** Nothing in the desktop app
   or the plugin reads WooCommerce orders, so there is no existing route

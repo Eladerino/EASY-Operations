@@ -17,11 +17,15 @@ const CALLBACK = `${SCHEME}://auth/callback`;
 const REJECTED = `${SCHEME}://auth/rejected`;
 const PARTITION = 'easy-website-sign-in';
 
-// The name shown on the person's WordPress profile, one per computer, so
-// a lost laptop can be revoked without touching their other devices.
-function appName() {
+// The name shown on the person's WordPress profile: computer plus the
+// sign-in time, so a lost laptop can be revoked without touching other
+// devices. WordPress refuses a second password with the same name, so
+// the time also lets the same computer sign in again later.
+function appName(now = new Date()) {
   const host = String(os.hostname() || '').trim().slice(0, 40);
-  return host ? `EASY Operations (${host})` : 'EASY Operations';
+  const pad = (n) => String(n).padStart(2, '0');
+  const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  return host ? `EASY Operations (${host}, ${stamp})` : `EASY Operations (${stamp})`;
 }
 
 function authorizeUrl(siteUrl) {

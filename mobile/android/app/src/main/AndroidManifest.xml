@@ -23,6 +23,16 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- "Sign in with easysafety.ca": the website hands the new
+                 sign-in back as easymanager://auth/callback (see
+                 www/js/websignin.js). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="easymanager" android:host="auth" />
+            </intent-filter>
+
         </activity>
 
         <!-- Home-screen widget: shows the waiting counts the app last
