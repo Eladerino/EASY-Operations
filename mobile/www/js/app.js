@@ -439,7 +439,6 @@
       await window.EasyWebSignIn.start();
     } catch (e) {
       showSignIn(e.message);
-      if (e.notReady) toggleManual(true);
     } finally {
       // In the Android app the browser opens on top; the button comes
       // back for whenever the person returns without finishing.
