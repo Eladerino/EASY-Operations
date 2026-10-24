@@ -131,8 +131,8 @@ publishing.
 | `forge.config.js` | Packaging and installer settings |
 | `test/` | Unit tests |
 | `site-plugins/easy-suite/` | The WordPress plugin (not part of the app) |
-| `mobile/` | The EASY Manager Android app (see `mobile/README.md`) |
+| `mobile/` | The EASY Manager phone app: Android APK, and the web version for iPhones that EASY Suite serves (see `mobile/README.md`) |
 | `.github/workflows/release.yml` | Release build |
 | `.github/workflows/build-apk.yml` | EASY Manager APK build |
-| `.github/workflows/publish-suite.yml` | Packages the Suite zip onto a prerelease for the plugin self-updater |
+| `.github/workflows/publish-suite.yml` | Packages the Suite zip (with the EASY Manager web version) onto a prerelease for the plugin self-updater, and keeps only the two newest suite releases |
 | `.github/workflows/check-suite.yml` | Syntax-checks the Suite's PHP on pull requests |

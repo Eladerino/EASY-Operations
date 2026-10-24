@@ -379,6 +379,10 @@
     try {
       window.EasyUi.toast('Fetching the certificate PDF...');
       const base64 = await window.EasyApi.certPdf(number);
+      if (window.EasyWebSignIn && !window.EasyWebSignIn.isNative()) {
+        await openPdfInBrowser(base64, number);
+        return;
+      }
       if (!Plugins.Filesystem || !Plugins.ApkInstaller || !Plugins.ApkInstaller.openFile) {
         throw new Error('PDF viewing works in the installed app, not in this preview.');
       }
@@ -402,6 +406,25 @@
     } finally {
       if (btn) btn.disabled = false;
     }
+  }
+
+  // Web version: show the PDF in a new browser tab. Browsers only open
+  // a tab straight from a tap, and the download in between uses that
+  // tap up, so one more tap on Open does it.
+  async function openPdfInBrowser(base64, number) {
+    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+    const yes = await window.EasyUi.confirm('Certificate ready', 'Certificate ' + number + ' is ready to view.', 'Open');
+    if (yes) {
+      const link = document.createElement('a');
+      link.href = url;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
   }
 
   /* ---------------- recent activity (read only) ---------------- */

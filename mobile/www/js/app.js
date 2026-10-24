@@ -7,6 +7,9 @@
   const $ = (id) => document.getElementById(id);
   let currentTab = 'today';
   let signedInUser = null;
+  // Website sign-in result read from the address at boot (web version).
+  let pendingWebCreds = null;
+  let pendingWebMessage = '';
 
   /* ---------------- toast ---------------- */
 
@@ -335,14 +338,11 @@
   const RESUME_REFRESH_MS = 5 * 60 * 1000;
 
   function setupResume() {
-    const cap = window.Capacitor;
-    const App = cap && cap.Plugins && cap.Plugins.App;
-    if (!App || typeof App.addListener !== 'function') return;
     let pausedAt = null;
-    App.addListener('pause', () => {
+    const onPause = () => {
       pausedAt = Date.now();
-    });
-    App.addListener('resume', () => {
+    };
+    const onResume = () => {
       const away = pausedAt === null ? 0 : Date.now() - pausedAt;
       pausedAt = null;
       if (away < RESUME_REFRESH_MS) return;
@@ -350,6 +350,19 @@
       window.EasyUpdater.check(false);
       if (isModalOpen() || subviewClose) return;
       Promise.resolve(refreshActiveTab()).catch(() => {});
+    };
+    const cap = window.Capacitor;
+    const App = cap && cap.Plugins && cap.Plugins.App;
+    if (App && typeof App.addListener === 'function') {
+      App.addListener('pause', onPause);
+      App.addListener('resume', onResume);
+      return;
+    }
+    // Web version: the page being hidden and shown again is the same
+    // thing as the app going to the background and coming back.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') onPause();
+      else onResume();
     });
   }
 
@@ -409,6 +422,97 @@
     window.EasyUpdater.check(false);
   }
 
+  // Checks a username + application password against the site, saves
+  // them on this device and opens the app. Throws with a plain message.
+  async function completeSignIn(username, appPassword) {
+    const user = await window.EasyApi.fetchMe(username, appPassword);
+    const creds = { username, appPassword };
+    await window.EasyStore.setCreds(creds);
+    window.EasyApi.setCreds(creds);
+    enterApp(user);
+  }
+
+  async function onWebSignIn() {
+    const btn = $('signinWebBtn');
+    btn.disabled = true;
+    try {
+      await window.EasyWebSignIn.start();
+    } catch (e) {
+      showSignIn(e.message);
+      if (e.notReady) toggleManual(true);
+    } finally {
+      // In the Android app the browser opens on top; the button comes
+      // back for whenever the person returns without finishing.
+      setTimeout(() => {
+        btn.disabled = false;
+      }, 1500);
+    }
+  }
+
+  function toggleManual(open) {
+    const form = $('signinForm');
+    const show = open === undefined ? form.classList.contains('hidden') : open;
+    form.classList.toggle('hidden', !show);
+    $('signinManualToggle').classList.toggle('hidden', show);
+  }
+
+  // The website sign-in came back with a new application password.
+  async function finishWebSignIn(creds) {
+    if (signedInUser) return;
+    showSignIn('');
+    const btn = $('signinWebBtn');
+    btn.disabled = true;
+    btn.textContent = 'Signing in...';
+    try {
+      await completeSignIn(creds.user, creds.appPassword);
+    } catch (e) {
+      showSignIn(e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Sign in with easysafety.ca';
+    }
+  }
+
+  // Web version only: the website sign-in sends the browser back to
+  // this page with the result in the address. Returns true when the
+  // page is the Android hand-back screen and the app should not start.
+  function handleReturnFromWebsite() {
+    const result = window.EasyWebSignIn.parseLocation(window.location);
+    if (!result) return false;
+    // The address carries the password: take it out of the address bar
+    // and history straight away.
+    try {
+      window.history.replaceState(null, '', window.location.pathname);
+    } catch (e) {
+      // Older browsers: the hash stays, nothing else breaks.
+    }
+    if (result.mode === 'android') {
+      $('signinView').classList.add('hidden');
+      $('appView').classList.add('hidden');
+      $('handoffView').classList.remove('hidden');
+      if (result.rejected) {
+        $('handoffTitle').textContent = 'Sign-in cancelled';
+        $('handoffText').textContent = 'Nothing was changed. Go back to EASY Manager to try again.';
+      } else if (!result.creds) {
+        $('handoffTitle').textContent = 'Something went wrong';
+        $('handoffText').textContent = 'The website did not send a sign-in back. Go back to EASY Manager and try again.';
+      } else {
+        const link = $('handoffLink');
+        link.href = window.EasyWebSignIn.androidHandoffLink(result.creds);
+        link.classList.remove('hidden');
+      }
+      return true;
+    }
+    if (result.rejected) {
+      pendingWebMessage = 'Sign-in was cancelled on the website. Nothing was changed.';
+    } else if (result.creds) {
+      pendingWebCreds = result.creds;
+    } else {
+      pendingWebMessage = 'The website did not send a sign-in back. Try again.';
+    }
+    return false;
+  }
+
   async function onSignInSubmit(ev) {
     ev.preventDefault();
     const username = $('signinUser').value.trim();
@@ -421,12 +525,8 @@
     btn.disabled = true;
     btn.textContent = 'Signing in...';
     try {
-      const user = await window.EasyApi.fetchMe(username, appPassword);
-      const creds = { username, appPassword };
-      await window.EasyStore.setCreds(creds);
-      window.EasyApi.setCreds(creds);
+      await completeSignIn(username, appPassword);
       $('signinPass').value = '';
-      enterApp(user);
     } catch (e) {
       showSignIn(e.message);
     } finally {
@@ -446,7 +546,15 @@
   }
 
   async function boot() {
+    const native = window.EasyWebSignIn.isNative();
+    document.documentElement.classList.toggle('web-mode', !native);
+    if (handleReturnFromWebsite()) return;
+    if (!native && 'serviceWorker' in navigator && window.location.protocol === 'https:') {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
     $('signinForm').addEventListener('submit', onSignInSubmit);
+    $('signinWebBtn').addEventListener('click', onWebSignIn);
+    $('signinManualToggle').addEventListener('click', () => toggleManual());
     $('signOutBtn').addEventListener('click', onSignOut);
     $('updateDismiss').addEventListener('click', () => window.EasyUpdater.dismissCurrent());
     $('checkUpdatesBtn').addEventListener('click', async () => {
@@ -465,10 +573,20 @@
     setupBackButton();
     setupResume();
     await initTheme();
+    window.EasyWebSignIn.listen(finishWebSignIn);
 
+    if (pendingWebCreds) {
+      // Back from the website sign-in (web version): a new sign-in
+      // replaces whatever was saved before.
+      const fresh = pendingWebCreds;
+      pendingWebCreds = null;
+      await finishWebSignIn(fresh);
+      return;
+    }
     const creds = await window.EasyStore.getCreds();
     if (!creds) {
-      showSignIn('');
+      showSignIn(pendingWebMessage || '');
+      pendingWebMessage = '';
       return;
     }
     window.EasyApi.setCreds(creds);
@@ -481,7 +599,7 @@
       if (e.status === 401) {
         await window.EasyStore.clearCreds();
         window.EasyApi.setCreds(null);
-        showSignIn('The saved sign-in no longer works. Sign in again with a fresh application password.');
+        showSignIn('The saved sign-in no longer works. Sign in again.');
       } else {
         enterApp({ name: creds.username });
         toast('Could not reach the site to verify the sign-in. Showing saved session.', 'error', 7000);

@@ -17,6 +17,10 @@
 #   invisible to both. Only the Suite updater reads them, matching the
 #   easy-suite-<version>.zip asset name.
 #
+# The zip also carries the EASY Manager web version (mobile/www, copied to
+# the plugin's app/ folder), so running this is how iPhones get a phone
+# app change.
+#
 # Re-running is safe: if the suite-v<version> release already exists, its
 # zip asset is replaced instead of the run failing.
 
@@ -65,6 +69,23 @@ jobs:
             echo "::error::No PHP files found in site-plugins/easy-suite."; exit 1
           fi
           exit $fail
+
+      # The EASY Manager web version (used on iPhones) is the phone app's
+      # own www folder, served from the plugin's app/ folder. Copying it
+      # here keeps one copy of the app in the repo; a phone app change
+      # reaches iPhones on the next Suite publish (Android still needs
+      # Build APK). config.js carries the version the app shows.
+      - name: Add the EASY Manager web version
+        run: |
+          rm -rf site-plugins/easy-suite/app
+          cp -r mobile/www site-plugins/easy-suite/app
+          for f in index.html manifest.webmanifest sw.js js/websignin.js js/config.js; do
+            test -f "site-plugins/easy-suite/app/$f" || { echo "::error::app/$f is missing from the web version."; exit 1; }
+          done
+          if find site-plugins/easy-suite/app -name '*.php' | grep -q .; then
+            echo "::error::The web version must not contain PHP files."; exit 1
+          fi
+          grep -o "APP_VERSION: '[0-9.]*'" site-plugins/easy-suite/app/js/config.js
 
       - name: Zip the plugin
         run: |
