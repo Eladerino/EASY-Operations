@@ -1,0 +1,30 @@
+{
+  "_about": "One entry from GET easy/v1/course-builder/courses on EASY Suite 2.1-2.2.42 (stored without schemaVersion).",
+  "source": "site",
+  "data": {
+    "course": {
+      "id": "c_mgv6cccc0003",
+      "title": "Forklift Theory",
+      "description": "Before your practical on the counterbalance.",
+      "passMark": 80,
+      "maxAttempts": 3,
+      "onFail": "retry",
+      "createdAt": "2026-10-16T13:00:00.000Z",
+      "updatedAt": "2026-10-16T13:45:00.000Z",
+      "chapters": [
+        { "id": "ch_mgv6d1", "title": "The stability triangle", "status": "draft",
+          "segments": [ { "id": "seg_mgv6e1", "type": "photo", "title": "Load centre", "fileName": "load-centre.jpg", "caption": "Measuring the load centre", "alt": "Tape measure along a pallet on the forks" } ],
+          "quizQuestions": [ { "id": "q_mgv6f1", "q": "Raising the load makes the truck more stable.", "kind": "tf", "options": ["True", "False"], "answer": 1 } ] }
+      ],
+      "finalQuiz": { "questions": [] },
+      "status": "draft",
+      "reviewVersion": 0,
+      "approvedVersion": 0,
+      "liveEditedSinceReview": false,
+      "reviewNote": ""
+    },
+    "rev": 6,
+    "updatedBy": "bglynn",
+    "modified": "2026-10-16T13:45:00+00:00"
+  }
+}

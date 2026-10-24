@@ -1,0 +1,30 @@
+{
+  "_about": "A hand-edited or partly corrupted v1 course: missing fields, wrong types, duplicate and unsafe ids, an answer out of range.",
+  "source": "file",
+  "data": {
+    "package": "easy-course-backup",
+    "format": 1,
+    "kind": "backup",
+    "course": {
+      "id": "c_mgv7dddd0004",
+      "title": "Damaged draft",
+      "passMark": "eighty",
+      "chapters": [
+        { "id": "ch_dup", "title": "First chapter",
+          "segments": [
+            { "id": "seg_a", "type": "video", "title": "Clip one" },
+            { "id": "seg_a", "type": "mystery", "title": "Unknown block type", "body": "Keep this text." },
+            { "id": "\"><img src=x>", "type": "interactive", "title": "Bad id", "description": "Sort the gear.", "estMin": 99 },
+            null
+          ],
+          "quizQuestions": [
+            { "q": "Question with no id", "kind": "mc", "options": ["Only one option"], "answer": 5 },
+            { "id": "q_tf", "q": "True/false with stray options", "kind": "tf", "options": ["Yes", "No", "Maybe"], "answer": 2 }
+          ] },
+        { "id": "ch_dup", "title": "Second chapter, same id" }
+      ],
+      "finalQuiz": null,
+      "extraFieldFromSomewhere": { "keep": "me" }
+    }
+  }
+}
