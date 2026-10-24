@@ -404,6 +404,9 @@
   /* ---------------- sign-in / app views ---------------- */
 
   function showSignIn(message) {
+    // Same throttled check the app runs on entry; the banner shows above
+    // the sign-in screen too.
+    Promise.resolve(window.EasyUpdater.check(false)).catch(() => {});
     $('signinView').classList.remove('hidden');
     $('appView').classList.add('hidden');
     const err = $('signinError');
@@ -556,10 +559,14 @@
     $('signinManualToggle').addEventListener('click', () => toggleManual());
     $('signOutBtn').addEventListener('click', onSignOut);
     $('updateDismiss').addEventListener('click', () => window.EasyUpdater.dismissCurrent());
-    $('checkUpdatesBtn').addEventListener('click', async () => {
+    // Updates come from public GitHub releases, so checking works signed
+    // out too (a sign-in fix can then reach a phone that cannot sign in).
+    const checkNow = async () => {
       const pending = await window.EasyUpdater.check(true);
       if (!pending) toast('You are on the latest version (' + window.EasyConfig.APP_VERSION + ').', 'success');
-    });
+    };
+    $('checkUpdatesBtn').addEventListener('click', checkNow);
+    $('signinUpdatesBtn').addEventListener('click', checkNow);
     for (const btn of document.querySelectorAll('.tab-btn')) {
       btn.addEventListener('click', () => showTab(btn.dataset.tab));
     }

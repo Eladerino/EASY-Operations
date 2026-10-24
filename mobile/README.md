@@ -240,7 +240,7 @@ phone offers it as an update (or sideload the workflow artifact).
 
 ## Self-update
 
-On launch and when the app comes back to the front (at most once every
+On launch, on the sign-in screen, and when the app comes back to the front (at most once every
 6 hours, ETag-cached) the app asks GitHub for this repo's newest 100
 releases and scans them newest first, because
 most releases here are desktop app releases and the APK rides along as
@@ -254,7 +254,9 @@ always shows its own install confirmation; silent installs are
 impossible and are not attempted. The first time, Android asks to allow
 installs from this app; the app opens the right settings page and
 explains. If the in-app install path fails, the app says how to install
-manually from the GitHub releases page instead.
+manually from the GitHub releases page instead. Releases are public, so
+this works signed out: the sign-in screen has its own "Check for app
+updates" button, and a sign-in fix can reach a phone that cannot sign in.
 
 ## The keystore warning (read this)
 
