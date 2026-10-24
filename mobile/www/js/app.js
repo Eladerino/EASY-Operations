@@ -322,6 +322,35 @@
     });
   }
 
+  /* ---------------- coming back to the app ---------------- */
+
+  // The activity is singleTask, so Android brings back the same page
+  // instead of relaunching it, and the boot-time update check and tab
+  // load never run again. When the app returns after a while away,
+  // reload the open tab and re-run the (throttled) update check. A
+  // subview or dialog in progress is left alone so an edit is never
+  // wiped by a reload.
+  const RESUME_REFRESH_MS = 5 * 60 * 1000;
+
+  function setupResume() {
+    const cap = window.Capacitor;
+    const App = cap && cap.Plugins && cap.Plugins.App;
+    if (!App || typeof App.addListener !== 'function') return;
+    let pausedAt = null;
+    App.addListener('pause', () => {
+      pausedAt = Date.now();
+    });
+    App.addListener('resume', () => {
+      const away = pausedAt === null ? 0 : Date.now() - pausedAt;
+      pausedAt = null;
+      if (away < RESUME_REFRESH_MS) return;
+      if ($('appView').classList.contains('hidden')) return;
+      window.EasyUpdater.check(false);
+      if (isModalOpen() || subviewClose) return;
+      Promise.resolve(refreshActiveTab()).catch(() => {});
+    });
+  }
+
   /* ---------------- capability heads-up ---------------- */
 
   // Sign-in accepts any account whose application password works, but
@@ -421,6 +450,7 @@
     window.EasySchedule.init();
     window.EasyApprovals.init();
     setupBackButton();
+    setupResume();
     await initTheme();
 
     const creds = await window.EasyStore.getCreds();
