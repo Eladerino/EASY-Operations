@@ -261,6 +261,13 @@ function easy_suite_health_rows() {
         $rows[] = ['Online course keys', 'off', 'Switched off. Keys can\'t be issued or redeemed, and EASY Suite → Online courses is hidden. Keys and enrollments already saved are kept.'];
     }
 
+    // Practicals.
+    if (!empty($on['practicals']) && function_exists('easy_practicals_health')) {
+        $rows[] = easy_practicals_health();
+    } else {
+        $rows[] = ['Practicals', 'off', 'Switched off. Practical times can\'t be posted or booked. Times, bookings and results already saved are kept.'];
+    }
+
     // Notifications.
     if ($on['notifications'] && class_exists('Easy_Safety_Cert_Notifications', false)) {
         $daily = easy_suite_next_run('easy_safety_daily_expiry_check');
@@ -525,6 +532,30 @@ function easy_suite_settings_page() {
             update_option('easy_license_access_days', max(0, min(3650, (int) $_POST['easy_license_access_days'])), false);
         }
 
+        if (function_exists('easy_practical_course_settings') && isset($_POST['easy_practical_form'])) {
+            update_option('easy_practical_auto_publish', !empty($_POST['easy_practical_auto_publish']) ? 1 : 0, false);
+            update_option('easy_practical_require_theory', !empty($_POST['easy_practical_require_theory']) ? 1 : 0, false);
+            $cert_courses = easy_practical_cert_courses();
+            $practical = [];
+            foreach (easy_licenses_courses() as $cid => $course) {
+                $row = isset($_POST['easy_practical'][$cid]) && is_array($_POST['easy_practical'][$cid]) ? wp_unslash($_POST['easy_practical'][$cid]) : [];
+                $names = [];
+                foreach (preg_split('/[\s,]+/', (string) ($row['evaluators'] ?? '')) as $u) {
+                    $u = sanitize_user($u, true);
+                    if ($u !== '') {
+                        $names[] = $u;
+                    }
+                }
+                $cert = sanitize_key((string) ($row['cert_title'] ?? ''));
+                $practical[$cid] = [
+                    'required'   => !empty($row['required']),
+                    'evaluators' => array_values(array_unique($names)),
+                    'cert_title' => isset($cert_courses[$cert]) ? $cert : '',
+                ];
+            }
+            update_option('easy_practical_courses', $practical, false);
+        }
+
         echo '<div class="notice notice-success is-dismissible"><p><strong>Settings saved.</strong></p></div>';
     }
 
@@ -613,6 +644,41 @@ function easy_suite_settings_page() {
             . '<td><input type="number" id="easy_license_access_days" name="easy_license_access_days" value="' . esc_attr(easy_licenses_access_days()) . '" min="0" max="3650" class="small-text"> days'
             . '<p class="description">0 means no time limit. Applies to keys used from now on; a finished course and its certificate stay available either way.</p></td></tr>';
         echo '</tbody></table>';
+        $easy_section_end();
+    }
+
+    if (function_exists('easy_practical_course_settings')) {
+        $easy_section('Practicals', 'dashicons-groups');
+        echo '<input type="hidden" name="easy_practical_form" value="1">';
+        echo '<table class="form-table"><tbody>';
+        echo '<tr><th scope="row">When a practical is passed</th><td>'
+            . '<label><input type="checkbox" name="easy_practical_auto_publish" value="1"' . checked(easy_practical_auto_publish(), true, false) . '> Publish the certificate right away</label>'
+            . '<p class="description">Off: the pass makes a certificate draft, and the office reviews it, makes the PDF in the desktop app and publishes it. On: the certificate is published at once and the student is emailed, with no PDF until the office adds one.</p></td></tr>';
+        echo '<tr><th scope="row">Online part first</th><td>'
+            . '<label><input type="checkbox" name="easy_practical_require_theory" value="1"' . checked(easy_practical_require_theory(), true, false) . '> A practical can only be passed once the online part is finished</label>'
+            . '<p class="description">Leave this on. Switch it off only for testing before the online course player exists.</p></td></tr>';
+        echo '</tbody></table>';
+        $courses = function_exists('easy_licenses_courses') ? easy_licenses_courses() : [];
+        if (!$courses) {
+            echo '<p class="description">No Course Builder courses on the site yet. Each course gets its own practical settings here once it exists.</p>';
+        } else {
+            $cert_courses = easy_practical_cert_courses();
+            echo '<table class="widefat striped" style="margin-top:8px;"><thead><tr><th>Course</th><th>Has a practical</th><th>Certificate it issues</th><th>Who can evaluate</th></tr></thead><tbody>';
+            foreach ($courses as $cid => $course) {
+                $cfg = easy_practical_course_settings($cid);
+                $name = 'easy_practical[' . esc_attr($cid) . ']';
+                echo '<tr><td>' . esc_html($course['title']) . '</td>'
+                    . '<td><input type="checkbox" name="' . $name . '[required]" value="1"' . checked($cfg['required'], true, false) . ' aria-label="Has a practical"></td>'
+                    . '<td><select name="' . $name . '[cert_title]"><option value="">Not set</option>';
+                foreach ($cert_courses as $value => $info) {
+                    echo '<option value="' . esc_attr($value) . '"' . selected($cfg['cert_title'], $value, false) . '>' . esc_html($info['label']) . '</option>';
+                }
+                echo '</select></td>'
+                    . '<td><textarea name="' . $name . '[evaluators]" rows="2" class="regular-text code" placeholder="Anyone who can sign certificates">' . esc_textarea(implode("\n", $cfg['evaluators'])) . '</textarea></td></tr>';
+            }
+            echo '</tbody></table>';
+            echo '<p class="description">Who can evaluate: WordPress usernames, one per line. Leave it empty to let anyone who can sign certificates run that course\'s practicals. Learner questions also go to this list when no evaluator is booked.</p>';
+        }
         $easy_section_end();
     }
 

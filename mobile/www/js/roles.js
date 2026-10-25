@@ -32,6 +32,9 @@
     classDrafts: () => has('manage_options') || has('publish_tribe_events'),
     // Full class rosters carry student contact details: office only.
     rosters: () => has('manage_options') || proxyPoster,
+    // Practical evaluations for online courses: anyone who signs
+    // certificates. The Suite narrows instructors to their own times.
+    practicals: () => has('manage_options') || has('edit_posts') || proxyPoster,
     // The Approvals tab, when any of its queues applies.
     approvals: () => RULES.publishCerts() || RULES.accounts() || RULES.classDrafts(),
   };
