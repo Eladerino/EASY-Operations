@@ -144,13 +144,16 @@
 
   /* ---------------- tabs ---------------- */
 
-  // Practicals sits under the Schedule tab and the management questions
-  // under Approvals, each reached by the switch at the top of the page.
+  // The management questions sit under the Approvals tab, reached by the
+  // switch at the top of the page. Alerts has no tab: the bell in the
+  // header opens it, and its Back button returns to the page before.
   // currentTab names the page showing, which may be one of these.
-  const PARENT = { practicals: 'schedule', queue: 'approvals' };
+  const PARENT = { queue: 'approvals' };
   const lastPage = {};
+  let beforeAlerts = 'today';
 
   function pageAllowed(name) {
+    if (name === 'alerts') return true;
     const btn = document.querySelector('.tab-btn[data-tab="' + (PARENT[name] || name) + '"]');
     if (btn && btn.classList.contains('role-hidden')) return false;
     if (!PARENT[name]) return true;
@@ -161,7 +164,11 @@
   function showTab(name) {
     if (!pageAllowed(name)) name = PARENT[name] && pageAllowed(PARENT[name]) ? PARENT[name] : 'today';
     const tab = PARENT[name] || name;
-    lastPage[tab] = name;
+    if (name === 'alerts') {
+      if (currentTab !== 'alerts') beforeAlerts = currentTab;
+    } else {
+      lastPage[tab] = name;
+    }
     closeSubview();
     currentTab = name;
     for (const page of document.querySelectorAll('.tab-page')) {
@@ -173,6 +180,7 @@
     for (const seg of document.querySelectorAll('.page-switch .seg-btn')) {
       seg.classList.toggle('active', seg.dataset.page === name);
     }
+    $('bellBtn').classList.toggle('active', name === 'alerts');
     if (name === 'today') window.EasyToday.show();
     else if (name === 'schedule') window.EasySchedule.show();
     else if (name === 'practicals') window.EasyPracticals.show();
@@ -181,10 +189,10 @@
     else if (name === 'alerts') window.EasyAlerts.show();
   }
 
-  // Counts for the tab and switch badges. The Approvals tab carries
-  // drafts and signups plus open questions; Schedule carries practical
-  // results still to record.
-  const counts = { approvals: 0, queue: 0, practicals: 0 };
+  // Counts for the tab, switch and bell badges. The Approvals tab carries
+  // drafts and signups plus open questions; Practicals carries results
+  // still to record; the bell carries what only Alerts shows.
+  const counts = { approvals: 0, queue: 0, practicals: 0, alerts: 0 };
 
   function paintBadge(badge, n) {
     if (!badge) return;
@@ -195,7 +203,9 @@
   function setCount(key, n) {
     counts[key] = Number(n) || 0;
     for (const badge of document.querySelectorAll('.page-switch [data-count="' + key + '"]')) paintBadge(badge, counts[key]);
-    paintBadge($('tabScheduleBadge'), window.EasyRoles.can('practicals') ? counts.practicals : 0);
+    paintBadge($('tabPracticalsBadge'), window.EasyRoles.can('practicals') ? counts.practicals : 0);
+    paintBadge($('bellBadge'), counts.alerts);
+    $('bellBtn').setAttribute('aria-label', counts.alerts > 0 ? 'Alerts, ' + counts.alerts + ' to look at' : 'Alerts');
     paintBadge($('tabApprovalsBadge'), counts.approvals + (window.EasyRoles.can('queue') ? counts.queue : 0));
   }
 
@@ -353,6 +363,10 @@
           return;
         }
         if (closeSubview()) return;
+        if (currentTab === 'alerts') {
+          showTab(beforeAlerts);
+          return;
+        }
         if (currentTab !== 'today') {
           showTab('today');
           return;
@@ -452,7 +466,7 @@
     signedInUser = user;
     $('signinView').classList.add('hidden');
     $('appView').classList.remove('hidden');
-    $('signedInAs').textContent = user && user.name ? 'Signed in as ' + user.name : '';
+    $('signedInAs').textContent = user && user.name ? user.name : '';
     loadRoles(user);
     showTab('today');
     // Self-update check on launch (throttled inside the updater).
@@ -649,6 +663,8 @@
     for (const seg of document.querySelectorAll('.page-switch .seg-btn')) {
       seg.addEventListener('click', () => showTab(seg.dataset.page));
     }
+    $('bellBtn').addEventListener('click', () => showTab(currentTab === 'alerts' ? beforeAlerts : 'alerts'));
+    $('alertsClose').addEventListener('click', () => showTab(beforeAlerts));
     setupPullToRefresh();
     window.EasyQueue.init();
     window.EasyToday.init();
