@@ -260,6 +260,120 @@
         </div>
       </section>
 
+      <!-- Practicals -->
+      <section id="tab-practicals" class="tab-page hidden">
+        <div id="practicalsMain">
+          <div class="page-head">
+            <h2>Practicals</h2>
+            <button id="prNewBtn" type="button" class="btn btn-small btn-primary hidden">New time</button>
+          </div>
+          <p id="prError" class="error-text hidden"></p>
+          <p id="prIntro" class="hint"></p>
+          <div id="prNeedsBox" class="hidden">
+            <h3 class="section-title">Needs a result <span id="prNeedsBadge" class="badge hidden">0</span></h3>
+            <div id="prNeeds"></div>
+          </div>
+          <div id="prWaitingBox" class="hidden">
+            <h3 class="section-title">Waiting to book <span id="prWaitingBadge" class="badge hidden">0</span></h3>
+            <p class="hint">Learners in a course with a practical who have not booked one yet.</p>
+            <div id="prWaiting"></div>
+          </div>
+          <h3 class="section-title">Upcoming</h3>
+          <div id="prUpcoming"></div>
+          <button type="button" id="prPastToggle" class="collapse-head" aria-expanded="false">
+            <span class="collapse-title">Last 30 days</span>
+            <span class="collapse-chevron" aria-hidden="true">&#8250;</span>
+          </button>
+          <div id="prPastBody" class="hidden">
+            <div id="prPast"></div>
+          </div>
+          <p id="prUpdated" class="hint"></p>
+        </div>
+        <div id="prSlotView" class="hidden">
+          <div class="page-head">
+            <h2>New practical time</h2>
+            <button id="prSlotBack" type="button" class="btn btn-small btn-secondary">Back</button>
+          </div>
+          <form id="prSlotForm" class="class-form">
+            <label for="prCourse">Course</label>
+            <select id="prCourse"></select>
+            <div id="prEvaluatorWrap" class="hidden">
+              <label for="prEvaluator">Evaluator</label>
+              <select id="prEvaluator"></select>
+            </div>
+            <label for="prDate">Date</label>
+            <input id="prDate" type="date" />
+            <div class="form-grid2">
+              <label for="prStart">Start time
+                <input id="prStart" type="time" value="09:00" />
+              </label>
+              <label for="prEnd">End time
+                <input id="prEnd" type="time" value="12:00" />
+              </label>
+            </div>
+            <label for="prLocation">Location</label>
+            <input id="prLocation" type="text" maxlength="190" placeholder="Where the learner should go" />
+            <label for="prCapacity">Learners at this time</label>
+            <input id="prCapacity" type="number" min="1" max="20" step="1" value="1" />
+            <label for="prNote">Note for staff (optional)</label>
+            <textarea id="prNote" rows="3"></textarea>
+            <p class="hint">Times are Newfoundland time. Learners see the date, time, location and evaluator, and can book up to 24 hours before.</p>
+            <p id="prSlotError" class="error-text hidden"></p>
+            <button id="prSlotSave" type="submit" class="btn btn-primary btn-block">Post this time</button>
+          </form>
+        </div>
+        <div id="prResultView" class="hidden">
+          <div class="page-head">
+            <h2>Record result</h2>
+            <button id="prResultBack" type="button" class="btn btn-small btn-secondary">Back</button>
+          </div>
+          <h3 id="prResultWho" class="section-title"></h3>
+          <p id="prResultWhen" class="hint"></p>
+          <p id="prResultTheory" class="error-text hidden"></p>
+          <form id="prResultForm" class="class-form">
+            <span class="form-label">Result</span>
+            <div class="status-options">
+              <label class="status-opt" for="prResPassed">
+                <input id="prResPassed" type="radio" name="prResult" value="passed" />
+                <span><strong>Passed</strong><br />Showed they can operate safely</span>
+              </label>
+              <label class="status-opt" for="prResFailed">
+                <input id="prResFailed" type="radio" name="prResult" value="failed" />
+                <span><strong>Not passed</strong><br />Needs more practice; can book again</span>
+              </label>
+              <label class="status-opt" for="prResNoShow">
+                <input id="prResNoShow" type="radio" name="prResult" value="no_show" />
+                <span><strong>Did not show up</strong><br />Can book again</span>
+              </label>
+            </div>
+            <div id="prClassesWrap" class="hidden">
+              <span class="form-label">Forklift classes evaluated</span>
+              <div id="prClasses" class="check-grid"></div>
+            </div>
+            <label for="prResultNote">Note (optional)</label>
+            <textarea id="prResultNote" rows="3"></textarea>
+            <p id="prResultExplain" class="hint"></p>
+            <p id="prResultError" class="error-text hidden"></p>
+            <button id="prResultSave" type="submit" class="btn btn-primary btn-block">Save result</button>
+          </form>
+        </div>
+        <div id="prBookView" class="hidden">
+          <div class="page-head">
+            <h2>Book a practical</h2>
+            <button id="prBookBack" type="button" class="btn btn-small btn-secondary">Back</button>
+          </div>
+          <h3 id="prBookWho" class="section-title"></h3>
+          <p id="prBookCourse" class="hint"></p>
+          <form id="prBookForm" class="class-form">
+            <label for="prBookSlot">Time</label>
+            <select id="prBookSlot"></select>
+            <p class="hint">The learner gets a confirmation email, and the evaluator is told.</p>
+            <p id="prBookError" class="error-text hidden"></p>
+            <button id="prBookSave" type="submit" class="btn btn-primary btn-block">Book this time</button>
+          </form>
+        </div>
+      </section>
+
       <!-- Approvals -->
       <section id="tab-approvals" class="tab-page hidden">
         <div class="page-head">
@@ -393,6 +507,7 @@
     <nav class="tabbar">
       <button type="button" class="tab-btn active" data-tab="today">Today</button>
       <button type="button" class="tab-btn" data-tab="schedule">Schedule</button>
+      <button type="button" class="tab-btn" data-tab="practicals" data-role="practicals">Practicals <span id="tabPracticalsBadge" class="badge hidden">0</span></button>
       <button type="button" class="tab-btn" data-tab="approvals" data-role="approvals">Approvals <span id="tabApprovalsBadge" class="badge hidden">0</span></button>
       <button type="button" class="tab-btn" data-tab="queue" data-role="queue">Queue</button>
       <button type="button" class="tab-btn" data-tab="alerts">Alerts</button>
@@ -426,6 +541,7 @@
   <script src="js/alerts.js"></script>
   <script src="js/course-presets.js"></script>
   <script src="js/schedule.js"></script>
+  <script src="js/practicals.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

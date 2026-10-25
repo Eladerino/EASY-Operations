@@ -76,7 +76,7 @@ sandbox.window = sandbox;
 vm.createContext(sandbox);
 
 const wwwJs = path.join(__dirname, '..', 'www', 'js');
-for (const file of ['config.js', 'util.js', 'api.js', 'roles.js', 'websignin.js', 'today.js', 'schedule.js']) {
+for (const file of ['config.js', 'util.js', 'api.js', 'roles.js', 'websignin.js', 'today.js', 'schedule.js', 'practicals.js']) {
   const code = fs.readFileSync(path.join(wwwJs, file), 'utf8');
   vm.runInContext(code, sandbox, { filename: file });
 }
@@ -98,6 +98,7 @@ Roles.set({ edit_posts: true, edit_tribe_events: true, read: true }, false);
 eq('instructor: no queue', Roles.can('queue'), false);
 eq('instructor: no approvals tab', Roles.can('approvals'), false);
 eq('instructor: no rosters', Roles.can('rosters'), false);
+eq('instructor: practicals', Roles.can('practicals'), true);
 Roles.set({ edit_posts: true }, true);
 eq('proxy poster: publishes certs', Roles.can('publishCerts'), true);
 eq('proxy poster: sees rosters', Roles.can('rosters'), true);
@@ -332,6 +333,35 @@ eq(
 );
 eq('groupActivity null input', Today.groupActivity(null, 'all', NOW), []);
 eq('groupActivity unknown filter', Today.groupActivity(hist, 'bogus', NOW), []);
+
+/* ---------------- practicals: list split ---------------- */
+
+{
+  const P = sandbox.EasyPracticals;
+  const slot = (id, started, ended, statuses, status) => ({
+    id, started, ended, status: status || 'open', bookings: statuses.map((st) => ({ status: st })),
+  });
+  const parts = P.splitSlots([
+    slot(1, true, true, ['booked']), // old time still waiting for a result
+    slot(2, true, true, ['passed']),
+    slot(3, true, false, ['booked', 'no_show']),
+    slot(4, false, false, []),
+    slot(5, false, false, ['booked'], 'cancelled'),
+    slot(6, true, true, []),
+  ]);
+  eq('practicals needs a result', parts.needs.map((s) => s.id), [1, 3]);
+  eq('practicals upcoming', parts.upcoming.map((s) => s.id), [4]);
+  eq('practicals past newest first', parts.past.map((s) => s.id), [6, 5, 2]);
+}
+
+{
+  const err = new Error('x');
+  err.status = 404;
+  err.code = 'rest_no_route';
+  eq('practicals old suite detected', Api.practicalsNeedNewerSuite(err), true);
+  err.code = 'easy_practical_missing';
+  eq('practicals real 404 is not old suite', Api.practicalsNeedNewerSuite(err), false);
+}
 
 /* ---------------- today: site entry shaping ---------------- */
 

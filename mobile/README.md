@@ -11,8 +11,8 @@ It ships two ways from the same `www/` folder:
   "Web version" below.
 
 Screens follow the signed-in account's rights. Management accounts see
-everything; instructors and other everyday staff see Today, Schedule
-and Alerts. See "Who sees what".
+everything; instructors and other everyday staff see Today, Schedule,
+Practicals and Alerts. See "Who sees what".
 
 No personal data, email addresses, tokens, or passwords live in this
 code. The app signs in to https://easysafety.ca with the user's own
@@ -38,6 +38,16 @@ WordPress credentials at runtime.
   on the site, which doubles as a "did the site answer" check. The last
   good class list is kept on the device, so the screen paints straight
   away and says when it is showing a saved copy instead of fresh data.
+- **Practicals** (EASY Suite 2.2.45 or newer): practical evaluations for
+  online courses. Instructors post practical times and see their own;
+  the office sees everyone's, posts times for any evaluator, and books
+  learners listed under Waiting to book. Times that have started and
+  still have a learner without a result are listed first. Record result
+  takes passed, not passed or did not show up (with the forklift classes
+  evaluated on a pass); a pass makes the certificate, a draft for the
+  office's Approvals queue unless the site is set to publish right away.
+  Bookings and whole times can be cancelled before they start; the
+  learner is emailed.
 - **Schedule**: a month calendar of classes (dots mark days with
   classes; a hollow dot means one of them is still a draft). Tapping a
   day lists its classes; tapping a class opens the editor: course
@@ -320,7 +330,7 @@ origins, so the first install is also the test of whether the site's
 REST responses are readable from that setup:
 
 1. Install the APK and sign in.
-2. Open all five tabs (Today, Schedule, Approvals, Queue, Alerts) and
+2. Open every tab (Today, Schedule, Practicals, Approvals, Queue, Alerts) and
    let each finish loading.
 3. Publish nothing and decide nothing during this pass.
 4. Check that counts and lists appear on every tab.
