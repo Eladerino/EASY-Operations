@@ -225,7 +225,9 @@
     const parts = splitSlots(data.slots || []);
     $('prNeedsBox').classList.toggle('hidden', !parts.needs.length);
     setBadge('prNeedsBadge', parts.needs.length);
-    setBadge('tabPracticalsBadge', parts.needs.reduce((n, s) => n + s.bookings.filter((b) => b.status === 'booked').length, 0));
+    if (window.EasyUi) {
+      window.EasyUi.setCount('practicals', parts.needs.reduce((n, s) => n + s.bookings.filter((b) => b.status === 'booked').length, 0));
+    }
     fillList('prNeeds', parts.needs, '');
     fillList('prUpcoming', parts.upcoming, 'No practical times coming up.');
     fillList('prPast', parts.past, 'Nothing in the last 30 days.');

@@ -36,7 +36,7 @@
     card.appendChild(U.el('div', 'card-title', ev.title));
     const meta = [
       ev.organizerName ? 'Instructor: ' + ev.organizerName : '',
-      ev.allDay ? 'All day' : ev.startTime + ' to ' + ev.endTime,
+      U.fmtTimeRange(ev),
       ev.venueName || '',
     ]
       .filter(Boolean)
@@ -214,21 +214,20 @@
         .then((q) => {
           const open = (q.counts && q.counts.open) || 0;
           set('countQueue', String(open));
+          window.EasyUi.setCount('queue', open);
         })
         .catch(() => set('countQueue', 'n/a'));
     }
-    // Course reviews: a real count only when the account is a reviewer
-    // and the site answers. Anything else is n/a, never a broken screen.
+    // Course reviews: shown only when the account is a Course Builder
+    // reviewer and the site answers, instead of an "n/a" box for everyone else.
     if (R.can('publishCerts')) {
+      const reviews = (n) => {
+        $('boxReviews').classList.toggle('hidden', n === null);
+        if (n !== null) set('countReviews', String(n));
+      };
       window.EasyApi.courseBuilderMe()
-        .then((me) => {
-          if (me && me.isReviewer && typeof me.pendingReviews === 'number') {
-            set('countReviews', String(me.pendingReviews));
-          } else {
-            set('countReviews', 'n/a');
-          }
-        })
-        .catch(() => set('countReviews', 'n/a'));
+        .then((me) => reviews(me && me.isReviewer && typeof me.pendingReviews === 'number' ? me.pendingReviews : null))
+        .catch(() => reviews(null));
     }
     // Suite version line: also the "is the site even answering" check.
     window.EasyApi.appConfig()

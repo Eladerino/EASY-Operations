@@ -144,16 +144,34 @@
 
   /* ---------------- tabs ---------------- */
 
+  // Practicals sits under the Schedule tab and the management questions
+  // under Approvals, each reached by the switch at the top of the page.
+  // currentTab names the page showing, which may be one of these.
+  const PARENT = { practicals: 'schedule', queue: 'approvals' };
+  const lastPage = {};
+
+  function pageAllowed(name) {
+    const btn = document.querySelector('.tab-btn[data-tab="' + (PARENT[name] || name) + '"]');
+    if (btn && btn.classList.contains('role-hidden')) return false;
+    if (!PARENT[name]) return true;
+    const seg = document.querySelector('.page-switch [data-page="' + name + '"]');
+    return !(seg && seg.closest('.page-switch').classList.contains('role-hidden'));
+  }
+
   function showTab(name) {
-    const btn = document.querySelector('.tab-btn[data-tab="' + name + '"]');
-    if (btn && btn.classList.contains('role-hidden')) name = 'today';
+    if (!pageAllowed(name)) name = PARENT[name] && pageAllowed(PARENT[name]) ? PARENT[name] : 'today';
+    const tab = PARENT[name] || name;
+    lastPage[tab] = name;
     closeSubview();
     currentTab = name;
     for (const page of document.querySelectorAll('.tab-page')) {
       page.classList.toggle('hidden', page.id !== 'tab-' + name);
     }
     for (const btn of document.querySelectorAll('.tab-btn')) {
-      btn.classList.toggle('active', btn.dataset.tab === name);
+      btn.classList.toggle('active', btn.dataset.tab === tab);
+    }
+    for (const seg of document.querySelectorAll('.page-switch .seg-btn')) {
+      seg.classList.toggle('active', seg.dataset.page === name);
     }
     if (name === 'today') window.EasyToday.show();
     else if (name === 'schedule') window.EasySchedule.show();
@@ -163,11 +181,26 @@
     else if (name === 'alerts') window.EasyAlerts.show();
   }
 
-  function setApprovalsBadge(n) {
-    const badge = $('tabApprovalsBadge');
+  // Counts for the tab and switch badges. The Approvals tab carries
+  // drafts and signups plus open questions; Schedule carries practical
+  // results still to record.
+  const counts = { approvals: 0, queue: 0, practicals: 0 };
+
+  function paintBadge(badge, n) {
     if (!badge) return;
     badge.textContent = String(n);
     badge.classList.toggle('hidden', n <= 0);
+  }
+
+  function setCount(key, n) {
+    counts[key] = Number(n) || 0;
+    for (const badge of document.querySelectorAll('.page-switch [data-count="' + key + '"]')) paintBadge(badge, counts[key]);
+    paintBadge($('tabScheduleBadge'), window.EasyRoles.can('practicals') ? counts.practicals : 0);
+    paintBadge($('tabApprovalsBadge'), counts.approvals + (window.EasyRoles.can('queue') ? counts.queue : 0));
+  }
+
+  function setApprovalsBadge(n) {
+    setCount('approvals', n);
   }
 
   /* ---------------- pull to refresh ---------------- */
@@ -380,10 +413,7 @@
     const anyBox = grid && grid.querySelector('[data-role]:not(.role-hidden)');
     if ($('needsAttentionTitle')) $('needsAttentionTitle').classList.toggle('role-hidden', Boolean(grid) && !anyBox);
     if (grid) grid.classList.toggle('role-hidden', !anyBox);
-    const tabbar = document.querySelector('.tabbar');
-    if (tabbar) tabbar.classList.toggle('tabbar-tight', tabbar.querySelectorAll('.tab-btn:not(.role-hidden)').length >= 6);
-    const active = document.querySelector('.tab-btn[data-tab="' + currentTab + '"]');
-    if (active && active.classList.contains('role-hidden')) showTab('today');
+    if (!pageAllowed(currentTab)) showTab('today');
   }
 
   async function loadRoles(user) {
@@ -612,8 +642,12 @@
     };
     $('checkUpdatesBtn').addEventListener('click', checkNow);
     $('signinUpdatesBtn').addEventListener('click', checkNow);
+    // A tab goes back to the page last open under it.
     for (const btn of document.querySelectorAll('.tab-btn')) {
-      btn.addEventListener('click', () => showTab(btn.dataset.tab));
+      btn.addEventListener('click', () => showTab(lastPage[btn.dataset.tab] || btn.dataset.tab));
+    }
+    for (const seg of document.querySelectorAll('.page-switch .seg-btn')) {
+      seg.addEventListener('click', () => showTab(seg.dataset.page));
     }
     setupPullToRefresh();
     window.EasyQueue.init();
@@ -665,6 +699,7 @@
     confirm,
     showTab,
     setApprovalsBadge,
+    setCount,
     showUpdateBanner,
     hideUpdateBanner,
     isModalOpen,

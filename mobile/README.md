@@ -10,9 +10,12 @@ It ships two ways from the same `www/` folder:
   `/easy-app/`. Open it in Safari, then Share, Add to Home Screen. See
   "Web version" below.
 
-Screens follow the signed-in account's rights. Management accounts see
-everything; instructors and other everyday staff see Today, Schedule,
-Practicals and Alerts. See "Who sees what".
+The bottom bar has four tabs: Today, Schedule, Approvals and Alerts.
+Schedule holds two pages, Classes and Practicals, and Approvals holds To
+approve and Questions (the management queue), switched at the top of the
+page. A tab reopens whichever of its pages was last open. Screens follow
+the signed-in account's rights: instructors and other everyday staff see
+Today, Schedule (with Practicals) and Alerts. See "Who sees what".
 
 No personal data, email addresses, tokens, or passwords live in this
 code. The app signs in to https://easysafety.ca with the user's own
@@ -38,7 +41,7 @@ WordPress credentials at runtime.
   on the site, which doubles as a "did the site answer" check. The last
   good class list is kept on the device, so the screen paints straight
   away and says when it is showing a saved copy instead of fresh data.
-- **Practicals** (EASY Suite 2.2.45 or newer): practical evaluations for
+- **Practicals** (under Schedule; EASY Suite 2.2.45 or newer): practical evaluations for
   online courses. Instructors post practical times and see their own;
   the office sees everyone's, posts times for any evaluator, and books
   learners listed under Waiting to book. Times that have started and
@@ -92,7 +95,7 @@ WordPress credentials at runtime.
   the certificate has a number: it downloads the stored PDF from the
   Suite into the app cache and opens it in the phone's PDF viewer.
   A certificate with no PDF on file yet says exactly that.
-- **Queue**: the management queue feed. Open questions are answered
+- **Questions** (under Approvals): the management queue feed. Open questions are answered
   right in the app: tap a choice (or type a free-text answer), confirm,
   and the answer saves through the Suite with the same validation and
   notification email as the website queue form. Decided questions show
@@ -101,7 +104,7 @@ WordPress credentials at runtime.
   and Mark resolved files it in the collapsed Archive section once the
   decision has been acted on; archived questions keep their answer,
   who decided it, and who resolved it, and can be un-resolved back to
-  Decided. An "Ask the queue" form adds a new question
+  Decided. An "Ask a question" form adds a new question
   for Colleen and Scott. Multiple choice questions need at least two
   choices before the form will post. The last good feed is kept on the
   device, like Today.
@@ -149,7 +152,7 @@ account cannot use.
 
 | Screen or action | Shown when |
 |---|---|
-| Queue tab, site health, Site activity log | `manage_options` |
+| Questions page, site health, Site activity log | `manage_options` |
 | Account signups | `promote_users` |
 | Certificate drafts, course reviews count | `manage_options`, `publish_posts` or proxy poster |
 | Class drafts | `manage_options` or `publish_tribe_events` |
@@ -330,7 +333,8 @@ origins, so the first install is also the test of whether the site's
 REST responses are readable from that setup:
 
 1. Install the APK and sign in.
-2. Open every tab (Today, Schedule, Practicals, Approvals, Queue, Alerts) and
+2. Open every tab and page (Today, Schedule with Classes and Practicals,
+   Approvals with To approve and Questions, Alerts) and
    let each finish loading.
 3. Publish nothing and decide nothing during this pass.
 4. Check that counts and lists appear on every tab.
