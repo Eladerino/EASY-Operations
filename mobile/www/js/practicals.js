@@ -88,6 +88,15 @@
     return { needs, upcoming, past };
   }
 
+  // Learners in started times still waiting for a result: the badge
+  // count on the Practicals tab and the box on Today.
+  function resultsToRecord(data) {
+    return splitSlots((data && data.slots) || []).needs.reduce(
+      (n, s) => n + s.bookings.filter((b) => b.status === 'booked').length,
+      0
+    );
+  }
+
   /* ---------------- rendering ---------------- */
 
   function renderBooking(slot, b, card) {
@@ -225,9 +234,7 @@
     const parts = splitSlots(data.slots || []);
     $('prNeedsBox').classList.toggle('hidden', !parts.needs.length);
     setBadge('prNeedsBadge', parts.needs.length);
-    if (window.EasyUi) {
-      window.EasyUi.setCount('practicals', parts.needs.reduce((n, s) => n + s.bookings.filter((b) => b.status === 'booked').length, 0));
-    }
+    if (window.EasyUi) window.EasyUi.setCount('practicals', resultsToRecord(data));
     fillList('prNeeds', parts.needs, '');
     fillList('prUpcoming', parts.upcoming, 'No practical times coming up.');
     fillList('prPast', parts.past, 'Nothing in the last 30 days.');
@@ -533,5 +540,5 @@
     });
   }
 
-  window.EasyPracticals = { show, init, splitSlots };
+  window.EasyPracticals = { show, init, splitSlots, resultsToRecord };
 })();

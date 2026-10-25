@@ -431,7 +431,7 @@
 
   async function renderRecent() {
     const box = $('approvalsRecent');
-    if (!box) return;
+    if (!box) return; // Recent activity now lives on Today only.
     box.innerHTML = '';
     const history = await window.EasyStore.getHistory();
     const recent = history.slice(0, 8);
