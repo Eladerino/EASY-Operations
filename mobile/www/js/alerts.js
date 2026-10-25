@@ -96,7 +96,7 @@
         if (n > 0) {
           items.push({
             key: 'queue',
-            text: n + (n === 1 ? ' question' : ' questions') + ' open in the management queue',
+            text: n + (n === 1 ? ' question' : ' questions') + ' waiting for an answer',
             tab: 'queue',
           });
         }

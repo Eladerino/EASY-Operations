@@ -313,6 +313,7 @@
     if (!Array.isArray(data.decided)) data.decided = [];
     if (!Array.isArray(data.resolved)) data.resolved = [];
     const counts = data.counts || { open: 0, decided: 0, resolved: 0, total: 0 };
+    if (window.EasyUi) window.EasyUi.setCount('queue', data.open.length);
     $('queueCounts').textContent =
       counts.open + ' open · ' + counts.decided + ' decided of ' + counts.total +
       (counts.resolved ? ' · ' + counts.resolved + ' resolved' : '');

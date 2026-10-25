@@ -24,12 +24,25 @@
     return fmtYmd(d);
   }
 
-  // "2026-10-19 09:00" style stamps and ISO strings, shown plainly.
+  // Site-time "16:30" as "4:30 p.m.". Done by hand rather than through
+  // Date so the phone's own time zone never shifts a class time.
+  function fmtTime(hm) {
+    const m = String(hm || '').match(/^(\d{1,2}):(\d{2})/);
+    if (!m) return String(hm || '');
+    const h = Number(m[1]);
+    return (h % 12 || 12) + ':' + m[2] + (h < 12 ? ' a.m.' : ' p.m.');
+  }
+
+  function fmtTimeRange(ev) {
+    return ev.allDay ? 'All day' : fmtTime(ev.startTime) + ' to ' + fmtTime(ev.endTime);
+  }
+
+  // A class's dates and times, shown plainly ("Oct 30, 2026, 8:00 a.m. to 4:00 p.m.").
   function fmtWhen(ev) {
-    const when = ev.allDay ? 'All day' : ev.startTime + ' to ' + ev.endTime;
+    const when = fmtTimeRange(ev);
     return ev.startDate === ev.endDate
-      ? ev.startDate + ', ' + when
-      : ev.startDate + ' to ' + ev.endDate + ', ' + when;
+      ? fmtDateLoose(ev.startDate) + ', ' + when
+      : fmtDateLoose(ev.startDate) + ' to ' + fmtDateLoose(ev.endDate) + ', ' + when;
   }
 
   function fmtDateTime(iso) {
@@ -65,7 +78,8 @@
   function fmtDateLoose(raw) {
     const d = parseDateLoose(raw);
     if (!d) return String(raw || '');
-    return d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+    // Non-breaking spaces keep "Oct 24, 2026" on one line in a card.
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }).replace(/ /g, '\u00a0');
   }
 
   function daysUntil(raw) {
@@ -110,5 +124,5 @@
     return node;
   }
 
-  window.EasyUtil = { fmtYmd, todayYmd, addDays, addMonths, fmtWhen, fmtDateTime, timeAgo, el, parseDateLoose, fmtDateLoose, daysUntil, expiryBand, fmtClock, endPeriod };
+  window.EasyUtil = { fmtYmd, todayYmd, addDays, addMonths, fmtTime, fmtTimeRange, fmtWhen, fmtDateTime, timeAgo, el, parseDateLoose, fmtDateLoose, daysUntil, expiryBand, fmtClock, endPeriod };
 })();

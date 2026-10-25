@@ -403,19 +403,20 @@ a.btn { text-decoration: none; box-sizing: border-box; }
   border: none;
   background: none;
   font-family: inherit;
-  font-size: 13.5px;
+  font-size: 15px;
   color: var(--muted);
   cursor: pointer;
   padding: var(--sp-2) 2px;
   min-height: 48px;
 }
 .tab-btn.active { color: var(--accent-dark); font-weight: 700; }
-/* The count sits on the tab's top corner instead of under its label,
-   so every label stays on the same line. */
+/* The count hangs off the label's top corner, clear of the active
+   marker, so the label itself stays centred. */
+.tab-label { position: relative; }
 .tab-btn .badge {
   position: absolute;
-  top: 3px;
-  right: 4px;
+  top: -14px;
+  left: calc(100% - 2px);
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
@@ -740,6 +741,13 @@ textarea.answer-input { line-height: 1.45; }
   transition: background 0.15s, color 0.15s;
 }
 .seg-btn.active { background: var(--accent); color: var(--on-accent); font-weight: 700; }
+/* The switch between pages that share a tab (Classes | Practicals,
+   To approve | Questions): full width, with room for a count. */
+.page-switch { display: flex; margin-bottom: var(--sp-3); }
+.page-switch .seg-btn { flex: 1; font-size: 15px; min-height: 44px; }
+.page-switch .badge { min-width: 20px; height: 20px; padding: 0 6px; font-size: 11.5px; margin-left: 4px; }
+.page-switch .seg-btn.active .badge { background: var(--on-accent); color: var(--accent-dark); }
+
 .seg-btn:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px var(--accent-ring);
@@ -913,7 +921,5 @@ textarea.answer-input { line-height: 1.45; }
 .learner-row { border-top: 1px solid var(--line); margin-top: var(--sp-3); padding-top: var(--sp-3); }
 .learner-row:first-of-type { border-top: none; margin-top: var(--sp-2); padding-top: 0; }
 .card-meta a { color: var(--accent-dark); }
-/* Six tabs (managers, with Practicals) need a smaller label to fit a phone. */
-.tabbar.tabbar-tight .tab-btn { font-size: 12px; padding-left: 0; padding-right: 0; }
 .chip-pass { border-color: var(--accent); color: var(--accent-dark); }
 .chip-fail { border-color: var(--error); color: var(--error); }
