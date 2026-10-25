@@ -130,7 +130,7 @@
       if (ev.status !== 'publish') head.appendChild(U.el('span', 'chip chip-draft', 'Draft'));
       card.appendChild(head);
       const meta = [
-        ev.allDay ? 'All day' : ev.startTime + ' to ' + ev.endTime,
+        U.fmtTimeRange(ev),
         ev.venueName ? 'at ' + ev.venueName : '',
         ev.organizerName || '',
         ev.seats !== '' && ev.seats !== null && ev.seats !== undefined ? ev.seats + ' seats' : '',
@@ -139,7 +139,7 @@
         .join(' · ');
       if (meta) card.appendChild(U.el('div', 'card-meta', meta));
       if (ev.startDate !== ev.endDate) {
-        card.appendChild(U.el('div', 'card-meta', 'Runs ' + ev.startDate + ' to ' + ev.endDate));
+        card.appendChild(U.el('div', 'card-meta', 'Runs ' + U.fmtDateLoose(ev.startDate) + ' to ' + U.fmtDateLoose(ev.endDate)));
       }
       card.addEventListener('click', () => openEditor(ev));
       box.appendChild(card);
@@ -836,7 +836,7 @@
     if (!ev) return;
     const yes = await window.EasyUi.confirm(
       'Delete this class?',
-      '"' + ev.title + '" on ' + ev.startDate + ' will be moved to the trash on the ' +
+      '"' + ev.title + '" on ' + U.fmtDateLoose(ev.startDate) + ' will be moved to the trash on the ' +
         'website. It will disappear from the public calendar right away, and the roster ' +
         'and seat setup attached to it go with it. You cannot undo this from the app; ' +
         'an admin can restore it from the trash in wp-admin. ' +

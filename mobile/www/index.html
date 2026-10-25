@@ -81,7 +81,13 @@
           <span id="signedInAs" class="signed-in-as"></span>
         </span>
       </div>
-      <button id="signOutBtn" type="button" class="btn btn-small btn-ghost">Sign out</button>
+      <div class="header-actions">
+        <button id="bellBtn" type="button" class="bell-btn" aria-label="Alerts">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg>
+          <span id="bellBadge" class="badge hidden">0</span>
+        </button>
+        <button id="signOutBtn" type="button" class="btn btn-small btn-ghost">Sign out</button>
+      </div>
     </header>
 
     <main class="pages">
@@ -95,17 +101,18 @@
           <div class="page-head">
             <h2>Today</h2>
           </div>
-          <h3 class="section-title">Classes today</h3>
-          <div id="todayClasses"></div>
-          <p id="todayClassesNote" class="hint"></p>
           <h3 class="section-title" id="needsAttentionTitle">Needs attention</h3>
           <div class="count-grid" id="needsAttentionGrid">
             <div class="count-box count-link" id="boxCerts" data-role="publishCerts"><span id="countCerts" class="count-num">...</span><span class="count-label">Certificate drafts</span></div>
             <div class="count-box count-link" id="boxClasses" data-role="classDrafts"><span id="countClasses" class="count-num">...</span><span class="count-label">Class drafts</span></div>
             <div class="count-box count-link" id="boxAccounts" data-role="accounts"><span id="countAccounts" class="count-num">...</span><span class="count-label">Account signups</span></div>
-            <div class="count-box count-link" id="boxQueue" data-role="queue"><span id="countQueue" class="count-num">...</span><span class="count-label">Open queue questions</span></div>
-            <div class="count-box" id="boxReviews" data-role="publishCerts"><span id="countReviews" class="count-num">...</span><span class="count-label">Course reviews waiting</span></div>
+            <div class="count-box count-link" id="boxPracticals" data-role="practicals"><span id="countPracticals" class="count-num">...</span><span class="count-label">Practical results due</span></div>
+            <div class="count-box count-link" id="boxQueue" data-role="queue"><span id="countQueue" class="count-num">...</span><span class="count-label">Open questions</span></div>
+            <div class="count-box hidden" id="boxReviews" data-role="publishCerts"><span id="countReviews" class="count-num">...</span><span class="count-label">Course reviews waiting</span></div>
           </div>
+          <h3 class="section-title">Classes today</h3>
+          <div id="todayClasses"></div>
+          <p id="todayClassesNote" class="hint"></p>
           <div class="section-head-row">
             <h3 class="section-title">Recent activity</h3>
             <button id="todayActivityBtn" type="button" class="btn btn-small btn-ghost">View all</button>
@@ -269,6 +276,7 @@
           </div>
           <p id="prError" class="error-text hidden"></p>
           <p id="prIntro" class="hint"></p>
+          <p id="prUpdated" class="hint"></p>
           <div id="prNeedsBox" class="hidden">
             <h3 class="section-title">Needs a result <span id="prNeedsBadge" class="badge hidden">0</span></h3>
             <div id="prNeeds"></div>
@@ -287,7 +295,6 @@
           <div id="prPastBody" class="hidden">
             <div id="prPast"></div>
           </div>
-          <p id="prUpdated" class="hint"></p>
         </div>
         <div id="prSlotView" class="hidden">
           <div class="page-head">
@@ -379,8 +386,20 @@
         <div class="page-head">
           <h2>Approvals</h2>
         </div>
+        <div class="segmented page-switch" role="group" aria-label="Approvals view" data-role="queue">
+          <button type="button" class="seg-btn active" data-page="approvals">To approve</button>
+          <button type="button" class="seg-btn" data-page="queue">Questions <span class="badge hidden" data-count="queue">0</span></button>
+        </div>
         <p id="approvalsError" class="error-text hidden"></p>
         <p id="approvalsUpdated" class="hint"></p>
+        <form id="certSearchForm" class="ask-form">
+          <label for="certSearchInput">Find a certificate by name or number</label>
+          <div class="search-row">
+            <input id="certSearchInput" type="search" placeholder="e.g. Jane Smith" />
+            <button id="certSearchBtn" type="submit" class="btn btn-primary">Search</button>
+          </div>
+        </form>
+        <div id="certSearchResults"></div>
 
         <div data-role="publishCerts">
           <h3 class="section-title">Certificates <span id="badgeCerts" class="badge hidden">0</span></h3>
@@ -399,25 +418,17 @@
           <div id="queueAccounts"></div>
         </div>
 
-        <h3 class="section-title">Certificate search</h3>
-        <p class="hint">Look up any certificate, published or draft, by student name or certificate number.</p>
-        <form id="certSearchForm" class="ask-form">
-          <label for="certSearchInput">Name or certificate number</label>
-          <div class="search-row">
-            <input id="certSearchInput" type="search" placeholder="e.g. Jane Smith or 251015FORK03" />
-            <button id="certSearchBtn" type="submit" class="btn btn-primary">Search</button>
-          </div>
-        </form>
-        <div id="certSearchResults"></div>
 
-        <h3 class="section-title">Recent activity</h3>
-        <div id="approvalsRecent"></div>
       </section>
 
-      <!-- Management queue -->
+      <!-- Management queue (under the Approvals tab) -->
       <section id="tab-queue" class="tab-page hidden">
         <div class="page-head">
-          <h2>Management queue</h2>
+          <h2>Approvals</h2>
+        </div>
+        <div class="segmented page-switch" role="group" aria-label="Approvals view" data-role="queue">
+          <button type="button" class="seg-btn" data-page="approvals">To approve</button>
+          <button type="button" class="seg-btn active" data-page="queue">Questions <span class="badge hidden" data-count="queue">0</span></button>
         </div>
         <p id="queueCounts" class="hint"></p>
         <p id="queueActivity" class="hint"></p>
@@ -425,24 +436,8 @@
         <button type="button" id="queueNotifyBtn" class="btn btn-secondary btn-block hidden">Send notification emails now</button>
         <p id="queueError" class="error-text hidden"></p>
         <p id="queueUpdated" class="hint"></p>
-
-        <h3 class="section-title">Open questions</h3>
-        <div id="queueOpen"></div>
-
-        <h3 class="section-title">Decided</h3>
-        <div id="queueDecided"></div>
-
-        <button type="button" id="queueArchiveToggle" class="collapse-head" aria-expanded="false">
-          <span class="collapse-title">Archive</span>
-          <span class="collapse-chevron" aria-hidden="true">&#8250;</span>
-        </button>
-        <div id="queueArchiveBody" class="hidden">
-          <p class="hint">Questions that were decided and then marked resolved. The answer stays on record here; Un-resolve moves a question back to Decided.</p>
-          <div id="queueArchive"></div>
-        </div>
-
-        <h3 class="section-title">Ask the queue</h3>
-        <form id="askForm" class="ask-form">
+        <button type="button" id="askToggle" class="btn btn-secondary btn-block" aria-expanded="false">Ask a question</button>
+        <form id="askForm" class="ask-form hidden">
           <label for="askSection">Section heading (optional)</label>
           <input id="askSection" type="text" placeholder="Additional questions" />
           <label for="askLabel">Question</label>
@@ -467,6 +462,22 @@
           </label>
           <button id="askSubmit" type="submit" class="btn btn-primary btn-block">Add question</button>
         </form>
+
+        <h3 class="section-title">Open questions</h3>
+        <div id="queueOpen"></div>
+
+        <h3 class="section-title">Decided</h3>
+        <div id="queueDecided"></div>
+
+        <button type="button" id="queueArchiveToggle" class="collapse-head" aria-expanded="false">
+          <span class="collapse-title">Archive</span>
+          <span class="collapse-chevron" aria-hidden="true">&#8250;</span>
+        </button>
+        <div id="queueArchiveBody" class="hidden">
+          <p class="hint">Questions that were decided and then marked resolved. The answer stays on record here; Un-resolve moves a question back to Decided.</p>
+          <div id="queueArchive"></div>
+        </div>
+
       </section>
 
       <!-- Alerts -->
@@ -474,6 +485,7 @@
         <div id="alertsMain">
           <div class="page-head">
             <h2>Alerts</h2>
+            <button id="alertsClose" type="button" class="btn btn-small btn-secondary">Back</button>
           </div>
           <div id="alertsList"></div>
           <p id="alertsUpdated" class="hint"></p>
@@ -505,12 +517,10 @@
     </main>
 
     <nav class="tabbar">
-      <button type="button" class="tab-btn active" data-tab="today">Today</button>
-      <button type="button" class="tab-btn" data-tab="schedule">Schedule</button>
-      <button type="button" class="tab-btn" data-tab="practicals" data-role="practicals">Practicals <span id="tabPracticalsBadge" class="badge hidden">0</span></button>
-      <button type="button" class="tab-btn" data-tab="approvals" data-role="approvals">Approvals <span id="tabApprovalsBadge" class="badge hidden">0</span></button>
-      <button type="button" class="tab-btn" data-tab="queue" data-role="queue">Queue</button>
-      <button type="button" class="tab-btn" data-tab="alerts">Alerts</button>
+      <button type="button" class="tab-btn active" data-tab="today"><span class="tab-label">Today</span></button>
+      <button type="button" class="tab-btn" data-tab="schedule"><span class="tab-label">Schedule</span></button>
+      <button type="button" class="tab-btn" data-tab="practicals" data-role="practicals"><span class="tab-label">Practicals <span id="tabPracticalsBadge" class="badge hidden">0</span></span></button>
+      <button type="button" class="tab-btn" data-tab="approvals" data-role="approvals"><span class="tab-label">Approvals <span id="tabApprovalsBadge" class="badge hidden">0</span></span></button>
     </nav>
   </div>
 

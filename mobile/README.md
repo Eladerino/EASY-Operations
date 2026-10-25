@@ -10,9 +10,15 @@ It ships two ways from the same `www/` folder:
   `/easy-app/`. Open it in Safari, then Share, Add to Home Screen. See
   "Web version" below.
 
-Screens follow the signed-in account's rights. Management accounts see
-everything; instructors and other everyday staff see Today, Schedule,
-Practicals and Alerts. See "Who sees what".
+The bottom bar has four tabs: Today, Schedule, Practicals and Approvals.
+Approvals holds two pages, To approve and Questions (the management
+queue), switched at the top of the page, and reopens whichever was last
+open. Alerts opens from the bell in the header; its count is what only
+Alerts shows (certificates expiring in 30 days, site health needing a
+look). Today's Needs attention boxes and the tab badges load at launch,
+so nothing has to be opened to see what is waiting. Screens follow the
+signed-in account's rights: instructors and other everyday staff see
+Today, Schedule and Practicals. See "Who sees what".
 
 No personal data, email addresses, tokens, or passwords live in this
 code. The app signs in to https://easysafety.ca with the user's own
@@ -92,7 +98,7 @@ WordPress credentials at runtime.
   the certificate has a number: it downloads the stored PDF from the
   Suite into the app cache and opens it in the phone's PDF viewer.
   A certificate with no PDF on file yet says exactly that.
-- **Queue**: the management queue feed. Open questions are answered
+- **Questions** (under Approvals): the management queue feed. Open questions are answered
   right in the app: tap a choice (or type a free-text answer), confirm,
   and the answer saves through the Suite with the same validation and
   notification email as the website queue form. Decided questions show
@@ -101,7 +107,7 @@ WordPress credentials at runtime.
   and Mark resolved files it in the collapsed Archive section once the
   decision has been acted on; archived questions keep their answer,
   who decided it, and who resolved it, and can be un-resolved back to
-  Decided. An "Ask the queue" form adds a new question
+  Decided. The "Ask a question" button at the top opens a form that adds a new question
   for Colleen and Scott. Multiple choice questions need at least two
   choices before the form will post. The last good feed is kept on the
   device, like Today.
@@ -149,7 +155,7 @@ account cannot use.
 
 | Screen or action | Shown when |
 |---|---|
-| Queue tab, site health, Site activity log | `manage_options` |
+| Questions page, site health, Site activity log | `manage_options` |
 | Account signups | `promote_users` |
 | Certificate drafts, course reviews count | `manage_options`, `publish_posts` or proxy poster |
 | Class drafts | `manage_options` or `publish_tribe_events` |
@@ -330,7 +336,8 @@ origins, so the first install is also the test of whether the site's
 REST responses are readable from that setup:
 
 1. Install the APK and sign in.
-2. Open every tab (Today, Schedule, Practicals, Approvals, Queue, Alerts) and
+2. Open every tab and page (Today, Schedule, Practicals, Approvals with
+   To approve and Questions, and Alerts from the bell) and
    let each finish loading.
 3. Publish nothing and decide nothing during this pass.
 4. Check that counts and lists appear on every tab.

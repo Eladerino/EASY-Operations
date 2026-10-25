@@ -313,6 +313,7 @@
     if (!Array.isArray(data.decided)) data.decided = [];
     if (!Array.isArray(data.resolved)) data.resolved = [];
     const counts = data.counts || { open: 0, decided: 0, resolved: 0, total: 0 };
+    if (window.EasyUi) window.EasyUi.setCount('queue', data.open.length);
     $('queueCounts').textContent =
       counts.open + ' open · ' + counts.decided + ' decided of ' + counts.total +
       (counts.resolved ? ' · ' + counts.resolved + ' resolved' : '');
@@ -445,10 +446,13 @@
       });
       $('askForm').reset();
       if ($('askNotify')) $('askNotify').checked = true;
+      $('askForm').classList.add('hidden');
+      $('askToggle').setAttribute('aria-expanded', 'false');
+      $('askToggle').textContent = 'Ask a question';
       window.EasyUi.toast(
         res && res.notification_queued
           ? 'Question added. Its notification is queued to send as a batch.'
-          : 'Question added to the queue.',
+          : 'Question added.',
         'success'
       );
       await show();
@@ -487,6 +491,15 @@
 
   function init() {
     $('askForm').addEventListener('submit', submitQuestion);
+    // The ask form stays folded under its button until wanted, so the
+    // open questions come first.
+    const askToggle = $('askToggle');
+    askToggle.addEventListener('click', () => {
+      const nowHidden = $('askForm').classList.toggle('hidden');
+      askToggle.setAttribute('aria-expanded', nowHidden ? 'false' : 'true');
+      askToggle.textContent = nowHidden ? 'Ask a question' : 'Close the question form';
+      if (!nowHidden) $('askLabel').focus();
+    });
     const notifyBtn = $('queueNotifyBtn');
     if (notifyBtn) {
       notifyBtn.addEventListener('click', () => sendNotifications(notifyBtn));

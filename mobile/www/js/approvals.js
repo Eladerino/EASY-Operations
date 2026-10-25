@@ -65,13 +65,13 @@
     for (const c of state.certs) {
       const card = U.el('div', 'card decision-card');
       card.appendChild(U.el('div', 'card-title', c.student));
-      const meta1 = [c.course, c.completionDate ? 'completed ' + String(c.completionDate).slice(0, 10) : '']
+      const meta1 = [c.course, c.completionDate ? 'completed ' + U.fmtDateLoose(c.completionDate) : '']
         .filter(Boolean)
         .join(' · ');
       if (meta1) card.appendChild(U.el('div', 'card-meta', meta1));
       const meta2 = [
         c.instructor ? 'Instructor ' + c.instructor : '',
-        c.date ? 'submitted ' + String(c.date).slice(0, 10) : '',
+        c.date ? 'submitted ' + U.fmtDateLoose(c.date) : '',
       ]
         .filter(Boolean)
         .join(' · ');
@@ -180,7 +180,7 @@
   async function publishClass(ev, btn) {
     const yes = await window.EasyUi.confirm(
       'Publish this class?',
-      '"' + ev.title + '" on ' + ev.startDate + ' will become visible on the site.',
+      '"' + ev.title + '" on ' + U.fmtDateLoose(ev.startDate) + ' will become visible on the site.',
       'Publish'
     );
     if (!yes) return;
@@ -212,7 +212,7 @@
     for (const u of state.accounts) {
       const card = U.el('div', 'card decision-card');
       card.appendChild(U.el('div', 'card-title', u.name || '(no name)'));
-      const meta = [u.email || '', u.registered ? 'signed up ' + String(u.registered).slice(0, 10) : '']
+      const meta = [u.email || '', u.registered ? 'signed up ' + U.fmtDateLoose(u.registered) : '']
         .filter(Boolean)
         .join(' · ');
       if (meta) card.appendChild(U.el('div', 'card-meta', meta));
@@ -431,7 +431,7 @@
 
   async function renderRecent() {
     const box = $('approvalsRecent');
-    if (!box) return;
+    if (!box) return; // Recent activity now lives on Today only.
     box.innerHTML = '';
     const history = await window.EasyStore.getHistory();
     const recent = history.slice(0, 8);

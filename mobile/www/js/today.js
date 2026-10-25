@@ -36,7 +36,7 @@
     card.appendChild(U.el('div', 'card-title', ev.title));
     const meta = [
       ev.organizerName ? 'Instructor: ' + ev.organizerName : '',
-      ev.allDay ? 'All day' : ev.startTime + ' to ' + ev.endTime,
+      U.fmtTimeRange(ev),
       ev.venueName || '',
     ]
       .filter(Boolean)
@@ -182,53 +182,97 @@
 
   /* ---------------- counts ---------------- */
 
+  // An odd box out at the end of Needs attention takes the full width.
+  function balanceGrid() {
+    const boxes = Array.from(document.querySelectorAll('#needsAttentionGrid > .count-box'));
+    const shown = boxes.filter((b) => !b.classList.contains('hidden') && !b.classList.contains('role-hidden'));
+    boxes.forEach((b) => b.classList.remove('span-full'));
+    if (shown.length % 2) shown[shown.length - 1].classList.add('span-full');
+  }
+
   async function loadCounts() {
     const set = (id, value) => {
       const node = $(id);
-      if (node) node.textContent = value;
+      if (!node) return;
+      node.textContent = value;
+      // Zero counts are dimmed so the boxes that need something stand out.
+      node.closest('.count-box').classList.toggle('is-zero', value === '0');
     };
+    balanceGrid();
     const today = U.todayYmd();
     const R = window.EasyRoles;
+    // The same counts fill the tab badges, so they show from launch
+    // instead of only after each tab has been opened.
+    const approvals = {};
+    const approvalsBadge = (key, n) => {
+      approvals[key] = n;
+      window.EasyUi.setCount('approvals', Object.values(approvals).reduce((a, b) => a + b, 0));
+    };
 
     // Only the counts this account can act on are asked for (the boxes
     // for the rest are hidden by roles.js).
     if (R.can('publishCerts')) {
       window.EasyApi.draftCertCount()
-        .then((n) => set('countCerts', String(n)))
+        .then((n) => {
+          set('countCerts', String(n));
+          approvalsBadge('certs', n);
+        })
         .catch(() => set('countCerts', 'n/a'));
     }
     if (R.can('accounts')) {
       window.EasyApi.pendingUsers()
-        .then((list) => set('countAccounts', String(list.length)))
+        .then((list) => {
+          set('countAccounts', String(list.length));
+          approvalsBadge('accounts', list.length);
+        })
         .catch(() => set('countAccounts', 'n/a'));
     }
     if (R.can('classDrafts')) {
       window.EasyApi.eventsInRange(today, U.addMonths(today, 12))
         .then((events) => {
-          set('countClasses', String(events.filter((ev) => window.EasyApi.isWaitingClass(ev)).length));
+          const n = events.filter((ev) => window.EasyApi.isWaitingClass(ev)).length;
+          set('countClasses', String(n));
+          approvalsBadge('classes', n);
         })
         .catch(() => set('countClasses', 'n/a'));
     }
+    if (R.can('practicals')) {
+      window.EasyApi.practicals()
+        .then((data) => {
+          const n = window.EasyPracticals.resultsToRecord(data);
+          set('countPracticals', String(n));
+          window.EasyUi.setCount('practicals', n);
+        })
+        .catch((e) => {
+          // A site without practicals yet (Suite before 2.2.45) has nothing to count.
+          if (window.EasyApi.practicalsNeedNewerSuite(e)) {
+            $('boxPracticals').classList.add('hidden');
+            balanceGrid();
+          }
+          else set('countPracticals', 'n/a');
+        });
+    }
+    window.EasyAlerts.refreshBadge();
     if (R.can('queue')) {
       window.EasyApi.mgmtQueue()
         .then((q) => {
           const open = (q.counts && q.counts.open) || 0;
           set('countQueue', String(open));
+          window.EasyUi.setCount('queue', open);
         })
         .catch(() => set('countQueue', 'n/a'));
     }
-    // Course reviews: a real count only when the account is a reviewer
-    // and the site answers. Anything else is n/a, never a broken screen.
+    // Course reviews: shown only when the account is a Course Builder
+    // reviewer and the site answers, instead of an "n/a" box for everyone else.
     if (R.can('publishCerts')) {
+      const reviews = (n) => {
+        $('boxReviews').classList.toggle('hidden', n === null);
+        balanceGrid();
+        if (n !== null) set('countReviews', String(n));
+      };
       window.EasyApi.courseBuilderMe()
-        .then((me) => {
-          if (me && me.isReviewer && typeof me.pendingReviews === 'number') {
-            set('countReviews', String(me.pendingReviews));
-          } else {
-            set('countReviews', 'n/a');
-          }
-        })
-        .catch(() => set('countReviews', 'n/a'));
+        .then((me) => reviews(me && me.isReviewer && typeof me.pendingReviews === 'number' ? me.pendingReviews : null))
+        .catch(() => reviews(null));
     }
     // Suite version line: also the "is the site even answering" check.
     window.EasyApi.appConfig()
@@ -610,6 +654,7 @@
       ['boxCerts', 'approvals'],
       ['boxClasses', 'approvals'],
       ['boxAccounts', 'approvals'],
+      ['boxPracticals', 'practicals'],
       ['boxQueue', 'queue'],
     ];
     for (const [id, tab] of tapThrough) {

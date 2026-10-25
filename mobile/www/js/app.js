@@ -144,17 +144,43 @@
 
   /* ---------------- tabs ---------------- */
 
+  // The management questions sit under the Approvals tab, reached by the
+  // switch at the top of the page. Alerts has no tab: the bell in the
+  // header opens it, and its Back button returns to the page before.
+  // currentTab names the page showing, which may be one of these.
+  const PARENT = { queue: 'approvals' };
+  const lastPage = {};
+  let beforeAlerts = 'today';
+
+  function pageAllowed(name) {
+    if (name === 'alerts') return true;
+    const btn = document.querySelector('.tab-btn[data-tab="' + (PARENT[name] || name) + '"]');
+    if (btn && btn.classList.contains('role-hidden')) return false;
+    if (!PARENT[name]) return true;
+    const seg = document.querySelector('.page-switch [data-page="' + name + '"]');
+    return !(seg && seg.closest('.page-switch').classList.contains('role-hidden'));
+  }
+
   function showTab(name) {
-    const btn = document.querySelector('.tab-btn[data-tab="' + name + '"]');
-    if (btn && btn.classList.contains('role-hidden')) name = 'today';
+    if (!pageAllowed(name)) name = PARENT[name] && pageAllowed(PARENT[name]) ? PARENT[name] : 'today';
+    const tab = PARENT[name] || name;
+    if (name === 'alerts') {
+      if (currentTab !== 'alerts') beforeAlerts = currentTab;
+    } else {
+      lastPage[tab] = name;
+    }
     closeSubview();
     currentTab = name;
     for (const page of document.querySelectorAll('.tab-page')) {
       page.classList.toggle('hidden', page.id !== 'tab-' + name);
     }
     for (const btn of document.querySelectorAll('.tab-btn')) {
-      btn.classList.toggle('active', btn.dataset.tab === name);
+      btn.classList.toggle('active', btn.dataset.tab === tab);
     }
+    for (const seg of document.querySelectorAll('.page-switch .seg-btn')) {
+      seg.classList.toggle('active', seg.dataset.page === name);
+    }
+    $('bellBtn').classList.toggle('active', name === 'alerts');
     if (name === 'today') window.EasyToday.show();
     else if (name === 'schedule') window.EasySchedule.show();
     else if (name === 'practicals') window.EasyPracticals.show();
@@ -163,11 +189,28 @@
     else if (name === 'alerts') window.EasyAlerts.show();
   }
 
-  function setApprovalsBadge(n) {
-    const badge = $('tabApprovalsBadge');
+  // Counts for the tab, switch and bell badges. The Approvals tab carries
+  // drafts and signups plus open questions; Practicals carries results
+  // still to record; the bell carries what only Alerts shows.
+  const counts = { approvals: 0, queue: 0, practicals: 0, alerts: 0 };
+
+  function paintBadge(badge, n) {
     if (!badge) return;
     badge.textContent = String(n);
     badge.classList.toggle('hidden', n <= 0);
+  }
+
+  function setCount(key, n) {
+    counts[key] = Number(n) || 0;
+    for (const badge of document.querySelectorAll('.page-switch [data-count="' + key + '"]')) paintBadge(badge, counts[key]);
+    paintBadge($('tabPracticalsBadge'), window.EasyRoles.can('practicals') ? counts.practicals : 0);
+    paintBadge($('bellBadge'), counts.alerts);
+    $('bellBtn').setAttribute('aria-label', counts.alerts > 0 ? 'Alerts, ' + counts.alerts + ' to look at' : 'Alerts');
+    paintBadge($('tabApprovalsBadge'), counts.approvals + (window.EasyRoles.can('queue') ? counts.queue : 0));
+  }
+
+  function setApprovalsBadge(n) {
+    setCount('approvals', n);
   }
 
   /* ---------------- pull to refresh ---------------- */
@@ -320,6 +363,10 @@
           return;
         }
         if (closeSubview()) return;
+        if (currentTab === 'alerts') {
+          showTab(beforeAlerts);
+          return;
+        }
         if (currentTab !== 'today') {
           showTab('today');
           return;
@@ -380,10 +427,7 @@
     const anyBox = grid && grid.querySelector('[data-role]:not(.role-hidden)');
     if ($('needsAttentionTitle')) $('needsAttentionTitle').classList.toggle('role-hidden', Boolean(grid) && !anyBox);
     if (grid) grid.classList.toggle('role-hidden', !anyBox);
-    const tabbar = document.querySelector('.tabbar');
-    if (tabbar) tabbar.classList.toggle('tabbar-tight', tabbar.querySelectorAll('.tab-btn:not(.role-hidden)').length >= 6);
-    const active = document.querySelector('.tab-btn[data-tab="' + currentTab + '"]');
-    if (active && active.classList.contains('role-hidden')) showTab('today');
+    if (!pageAllowed(currentTab)) showTab('today');
   }
 
   async function loadRoles(user) {
@@ -422,7 +466,7 @@
     signedInUser = user;
     $('signinView').classList.add('hidden');
     $('appView').classList.remove('hidden');
-    $('signedInAs').textContent = user && user.name ? 'Signed in as ' + user.name : '';
+    $('signedInAs').textContent = user && user.name ? user.name : '';
     loadRoles(user);
     showTab('today');
     // Self-update check on launch (throttled inside the updater).
@@ -612,9 +656,15 @@
     };
     $('checkUpdatesBtn').addEventListener('click', checkNow);
     $('signinUpdatesBtn').addEventListener('click', checkNow);
+    // A tab goes back to the page last open under it.
     for (const btn of document.querySelectorAll('.tab-btn')) {
-      btn.addEventListener('click', () => showTab(btn.dataset.tab));
+      btn.addEventListener('click', () => showTab(lastPage[btn.dataset.tab] || btn.dataset.tab));
     }
+    for (const seg of document.querySelectorAll('.page-switch .seg-btn')) {
+      seg.addEventListener('click', () => showTab(seg.dataset.page));
+    }
+    $('bellBtn').addEventListener('click', () => showTab(currentTab === 'alerts' ? beforeAlerts : 'alerts'));
+    $('alertsClose').addEventListener('click', () => showTab(beforeAlerts));
     setupPullToRefresh();
     window.EasyQueue.init();
     window.EasyToday.init();
@@ -665,6 +715,7 @@
     confirm,
     showTab,
     setApprovalsBadge,
+    setCount,
     showUpdateBanner,
     hideUpdateBanner,
     isModalOpen,

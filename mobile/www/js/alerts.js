@@ -96,7 +96,7 @@
         if (n > 0) {
           items.push({
             key: 'queue',
-            text: n + (n === 1 ? ' question' : ' questions') + ' open in the management queue',
+            text: n + (n === 1 ? ' question' : ' questions') + ' waiting for an answer',
             tab: 'queue',
           });
         }
@@ -225,6 +225,33 @@
     }
     await loadHealth();
     await loadExpiryPreview();
+    refreshBadge();
+  }
+
+  /* ---------------- bell badge ---------------- */
+  // The header bell counts what only this screen shows: certificates
+  // expiring in the next 30 days, plus site health rows needing a look
+  // (administrators). Drafts, signups and questions already have the
+  // Approvals badge, so they are not counted twice. A failed check
+  // leaves its part out rather than guessing.
+
+  async function refreshBadge() {
+    if (!window.EasyUi) return;
+    let n = 0;
+    try {
+      n += (await window.EasyApi.expiringCerts(30)).length;
+    } catch (e) {
+      // Counted on the next check.
+    }
+    if (window.EasyRoles.can('siteHealth')) {
+      try {
+        const h = await window.EasyApi.siteHealth();
+        n += (Array.isArray(h.health) ? h.health : []).filter((r) => r.state === 'warn' || r.state === 'error').length;
+      } catch (e) {
+        // Counted on the next check.
+      }
+    }
+    window.EasyUi.setCount('alerts', n);
   }
 
   /* ---------------- site health ---------------- */
@@ -408,5 +435,5 @@
     }
   }
 
-  window.EasyAlerts = { show, init, closeExpiring };
+  window.EasyAlerts = { show, init, closeExpiring, refreshBadge };
 })();
