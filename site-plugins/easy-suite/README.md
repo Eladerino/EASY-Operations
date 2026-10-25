@@ -43,7 +43,10 @@ exactly like a wordpress.org plugin update.
   - who can use "List a Product";
   - who can post certificates for other instructors;
   - Course Builder authors and extra reviewers;
-  - how long online course keys and course access last.
+  - how long online course keys and course access last;
+  - practicals: whether a pass publishes the certificate or makes a draft,
+    and per course whether it has a practical, which certificate it issues
+    and who can evaluate it.
 - **Online courses**
   - **Keys**: issue keys for a course approved in the app's Course Builder,
     then look them up, revoke, restore or resend them.
@@ -66,6 +69,7 @@ always stay on.
 | App bridge: Course Builder sync | Stores Course Builder courses, reviews and their photo/audio/video files on the site (files in a private folder, readable only by course authors and reviewers) |
 | EASY Manager web version | `/easy-app/` opens the phone app's web version (for iPhones), which the Publish Suite workflow copies into the plugin's `app/` folder. It is plain files; this module only adds the short address |
 | Online courses: license keys | Single-use course keys and enrollments (needs Course Builder sync) |
+| Online courses: practical booking | Practical times posted by instructors, booked by learners or the office, results recorded by the evaluator; a pass completes the course and makes the certificate (needs license keys) |
 | Certificate emails | Student email on publish, expiry reminders, twice-daily employer digest. Email footers give the city only (St. John's, NL) and link the Privacy Policy, as does the branded wrapper around other outgoing mail |
 | Instructor calendar feed | Private calendar feed per instructor at `/instructor-calendar/<token>.ics` (tokened URLs; instructors re-subscribe once) |
 | Class rosters | Per-class student lists (manual enrollment in the app; online buyers added automatically) |
@@ -89,6 +93,23 @@ always stay on.
   no learner page for it yet.
 - Key emails stay off until a page is published at `/student-portal/courses/`.
 
+## Practicals
+
+- An instructor posts practical times in the EASY Manager app (course, date,
+  time, location, how many learners). The office can post for any evaluator.
+- Learners book on any page carrying `[easy_practical_booking]`, up to 24
+  hours ahead, and can cancel online until then. The office can book for
+  them from the app until the time ends. The practical comes with the course
+  seat; booking never asks for payment.
+- Once the time starts, the evaluator records passed, not passed or no show.
+  Not passed and no show let the learner book again.
+- A pass needs the online part finished (switchable for testing), completes
+  the enrollment and creates the certificate with the evaluator as
+  instructor and the same number, title and 3-year expiry the desktop app
+  uses. It is a draft for the office to review and finish in the desktop
+  app unless Settings says to publish right away.
+- Learners and evaluators get short emails for bookings and cancellations.
+
 ## REST routes
 
 All routes are under `/wp-json/easy/v1/`.
@@ -108,9 +129,11 @@ All routes are under `/wp-json/easy/v1/`.
 | `app-config`, `me`, `course-builder/me`, `learn/…` | Any signed-in user |
 | `course-builder/…` | Course authors and reviewers |
 | `licenses…`, `enrollments…` | Admins, certificate publishers and Course Builder reviewers |
+| `practicals`, `practical-bookings…` | Accounts that can edit certificates (instructors see and act on their own times only) |
+| `practicals/waiting`, `practicals/<id>/book` | Office: admins, certificate publishers, Course Builder reviewers and proxy posters |
 
-The full route list is at the top of `module-courses.php` and
-`module-licenses.php`.
+The full route list is at the top of `module-courses.php`,
+`module-licenses.php` and `module-practicals.php`.
 
 ## Development
 

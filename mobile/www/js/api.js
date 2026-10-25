@@ -34,6 +34,11 @@
 //   Cert PDF        GET  /wp-json/easy/v1/cert-pdf/<number> (Suite 2.2.31)
 //   Calendar links  GET  /wp-json/easy/v1/instructor-feeds (Suite 2.2.28)
 //   Site activity   GET  /wp-json/easy/v1/activity (Suite 2.2.36)
+//   Practicals      GET  /wp-json/easy/v1/practicals (Suite 2.2.45)
+//                   POST /wp-json/easy/v1/practicals (new time)
+//                   POST /wp-json/easy/v1/practicals/<id>/cancel|book
+//                   GET  /wp-json/easy/v1/practicals/waiting (office)
+//                   POST /wp-json/easy/v1/practical-bookings/<id>/result|cancel
 //
 // Auth is a WordPress Application Password sent as HTTP Basic over HTTPS.
 //
@@ -994,6 +999,52 @@
     return r.json || {};
   }
 
+  /* ---------------- practicals (Suite 2.2.45) ---------------- */
+
+  // Older Suites answer the practicals routes with rest_no_route.
+  function practicalsNeedNewerSuite(err) {
+    return Boolean(err && err.status === 404 && err.code === 'rest_no_route');
+  }
+
+  async function practicals() {
+    const r = await request('/easy/v1/practicals');
+    return r.json || { slots: [], courses: [] };
+  }
+
+  async function practicalsWaiting() {
+    const r = await request('/easy/v1/practicals/waiting');
+    return r.json || { learners: [], openSlots: {} };
+  }
+
+  async function createPracticalSlot(fields) {
+    const r = await request('/easy/v1/practicals', { method: 'POST', body: fields });
+    return r.json;
+  }
+
+  async function cancelPracticalSlot(id, reason) {
+    const r = await request('/easy/v1/practicals/' + id + '/cancel', { method: 'POST', body: { reason: reason || '' } });
+    return r.json;
+  }
+
+  async function bookPractical(slotId, enrollmentId) {
+    const r = await request('/easy/v1/practicals/' + slotId + '/book', { method: 'POST', body: { enrollment: enrollmentId } });
+    return r.json;
+  }
+
+  async function practicalResult(bookingId, result, note, classes) {
+    const r = await request('/easy/v1/practical-bookings/' + bookingId + '/result', {
+      method: 'POST',
+      body: { result, note: note || '', classes: classes || [] },
+    });
+    invalidateCache(); // A pass adds a certificate draft.
+    return r.json;
+  }
+
+  async function cancelPracticalBooking(bookingId) {
+    const r = await request('/easy/v1/practical-bookings/' + bookingId + '/cancel', { method: 'POST', body: {} });
+    return r.json;
+  }
+
   window.EasyApi = {
     setCreds,
     fetchMe,
@@ -1051,5 +1102,13 @@
     siteHealth,
     appConfig,
     courseBuilderMe,
+    practicals,
+    practicalsWaiting,
+    practicalsNeedNewerSuite,
+    createPracticalSlot,
+    cancelPracticalSlot,
+    bookPractical,
+    practicalResult,
+    cancelPracticalBooking,
   };
 })();
