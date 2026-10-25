@@ -49,6 +49,12 @@ function easy_suite_module_registry() {
             'default'     => true,
             'locked'      => false,
         ],
+        'practicals' => [
+            'label'       => 'Online courses: practical booking',
+            'description' => 'The hands-on practical for online courses (required for forklift under NL OHS Regulations s.252). Instructors post practical times from EASY Manager, learners book one on any page with the [easy_practical_booking] shortcode (or the office books it for them), and the evaluator records the result. A pass completes the course and creates the certificate with the evaluator as instructor: a draft for review, or published right away (Settings). Creates two database tables the first time it runs. Needs the license keys module.',
+            'default'     => true,
+            'locked'      => false,
+        ],
         'notifications' => [
             'label'       => 'Certificate emails',
             'description' => 'Student email on publish, 30/7-day and expired reminders, and the twice-daily employer digest with certificate PDFs.',

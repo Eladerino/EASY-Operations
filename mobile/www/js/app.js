@@ -157,6 +157,7 @@
     }
     if (name === 'today') window.EasyToday.show();
     else if (name === 'schedule') window.EasySchedule.show();
+    else if (name === 'practicals') window.EasyPracticals.show();
     else if (name === 'approvals') window.EasyApprovals.show();
     else if (name === 'queue') window.EasyQueue.show();
     else if (name === 'alerts') window.EasyAlerts.show();
@@ -188,6 +189,7 @@
   function refreshActiveTab() {
     if (currentTab === 'today') return window.EasyToday.refresh();
     if (currentTab === 'schedule') return window.EasySchedule.show();
+    if (currentTab === 'practicals') return window.EasyPracticals.show();
     if (currentTab === 'approvals') return window.EasyApprovals.refresh();
     if (currentTab === 'queue') return window.EasyQueue.show();
     if (currentTab === 'alerts') return window.EasyAlerts.show();
@@ -378,6 +380,8 @@
     const anyBox = grid && grid.querySelector('[data-role]:not(.role-hidden)');
     if ($('needsAttentionTitle')) $('needsAttentionTitle').classList.toggle('role-hidden', Boolean(grid) && !anyBox);
     if (grid) grid.classList.toggle('role-hidden', !anyBox);
+    const tabbar = document.querySelector('.tabbar');
+    if (tabbar) tabbar.classList.toggle('tabbar-tight', tabbar.querySelectorAll('.tab-btn:not(.role-hidden)').length >= 6);
     const active = document.querySelector('.tab-btn[data-tab="' + currentTab + '"]');
     if (active && active.classList.contains('role-hidden')) showTab('today');
   }
@@ -616,6 +620,7 @@
     window.EasyToday.init();
     window.EasyAlerts.init();
     window.EasySchedule.init();
+    window.EasyPracticals.init();
     window.EasyApprovals.init();
     setupBackButton();
     setupResume();
