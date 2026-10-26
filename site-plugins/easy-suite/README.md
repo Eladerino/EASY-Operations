@@ -63,7 +63,7 @@ always stay on.
 
 | Module | Does |
 |---|---|
-| Certificate data & privacy (locked) | Checks the certificate fields the app sends, enforces the instructor identity, refuses duplicate numbers, and keeps certificate details private |
+| Certificate data & privacy (locked) | Checks the certificate fields the app sends, enforces the instructor identity, refuses duplicate numbers, keeps certificate details private, and requires a signed-in account for the core user directory |
 | Certificate PDF gatekeeper (locked) | Keeps PDFs in a private folder, served at `/cert-pdf/<number>/` only to the owner and staff |
 | App bridge: approvals & expiring certs | Feeds the app's Accounts queue and Expiring soon list |
 | App bridge: Course Builder sync | Stores Course Builder courses, reviews and their photo/audio/video files on the site (files in a private folder, readable only by course authors and reviewers) |

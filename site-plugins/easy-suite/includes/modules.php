@@ -15,7 +15,7 @@ function easy_suite_module_registry() {
     return [
         'cert-rest' => [
             'label'       => 'Certificate data & privacy',
-            'description' => 'ACF fields on the cert REST endpoint (allowlisted and validated), the REST/search/media/feed privacy gates, instructor identity enforcement, and server-side cleanup of replaced certificate PDFs. The EASY Operations app depends on this.',
+            'description' => 'ACF fields on the cert REST endpoint (allowlisted and validated), the REST/search/media/feed privacy gates, the signed-in-only core user directory, instructor identity enforcement, and server-side cleanup of replaced certificate PDFs. The EASY Operations app depends on this.',
             'default'     => true,
             'locked'      => true,
         ],

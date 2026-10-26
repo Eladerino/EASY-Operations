@@ -174,6 +174,44 @@ add_filter('rest_pre_dispatch', function ($result, $server, $request) {
 }, 10, 3);
 
 /* ==========================================================================
+ * Module 2c: Core user directory requires a signed-in account
+ * --------------------------------------------------------------------------
+ * /wp/v2/users (the list) and /wp/v2/users/<id> hand any anonymous visitor
+ * the site's accounts: names and login slugs for the staff accounts. Nothing
+ * public reads them: front-end pages render server-side, Ultimate Member
+ * runs on its own routes, and the desktop app and EASY Manager only ever
+ * call /wp/v2/users/me with the signed-in user's own credentials. Anonymous
+ * requests therefore get 401. Any signed-in account keeps access, and
+ * /users/me is never matched here (the route check below only matches the
+ * list route and numeric single-user routes), so app sign-in checks and
+ * student accounts are unaffected.
+ * ========================================================================== */
+
+add_filter('rest_pre_dispatch', function ($result, $server, $request) {
+    $route = $request->get_route();
+    $is_user_directory = ($route === '/wp/v2/users')
+        || preg_match('#^/wp/v2/users/\d+$#', $route);
+    if (!$is_user_directory) {
+        return $result;
+    }
+    // CORS preflight (OPTIONS) requests never carry credentials, and their
+    // responses contain only CORS headers, no data. Let them through so
+    // browser based clients (the EASY Manager app WebView) can complete the
+    // preflight; the check below still guards every real request method.
+    if ($request->get_method() === 'OPTIONS') {
+        return $result;
+    }
+    if (!is_user_logged_in()) {
+        return new WP_Error(
+            'easy_user_directory_forbidden',
+            'Authentication is required to access user records.',
+            ['status' => 401]
+        );
+    }
+    return $result;
+}, 10, 3);
+
+/* ==========================================================================
  * Module 11: Server-side instructor identity enforcement
  * --------------------------------------------------------------------------
  * The EASY Operations desktop app stamps the signed-in instructor's identity
