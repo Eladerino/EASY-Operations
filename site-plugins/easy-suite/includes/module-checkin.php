@@ -323,11 +323,14 @@ function easy_checkin_signature_url($ref) {
  * /check-in-signature/<file> staff-only signature viewer
  * ========================================================================== */
 
-add_action('init', function () {
+function easy_checkin_register_rewrites()
+{
     add_rewrite_rule('^check-in/([a-f0-9]{64})/?$', 'index.php?easy_checkin=1&easy_checkin_token=$matches[1]', 'top');
     add_rewrite_rule('^c/([A-Za-z0-9]{6})/?$', 'index.php?easy_checkin=1&easy_checkin_code=$matches[1]', 'top');
     add_rewrite_rule('^check-in-signature/([a-zA-Z0-9._-]+)/?$', 'index.php?easy_checkin_sig=$matches[1]', 'top');
-});
+}
+
+add_action('init', 'easy_checkin_register_rewrites');
 
 add_filter('query_vars', function ($vars) {
     $vars[] = 'easy_checkin';

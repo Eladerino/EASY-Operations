@@ -73,7 +73,7 @@ function easy_suite_module_registry() {
             'default'     => true,
             'locked'      => false,
         ],
-        'check-in' => [
+        'checkin' => [
             'label'       => 'Class check-in (QR)',
             'description' => 'Per-class QR check-in: the Suite makes a check-in link for a class (button on the class edit screen), students scan it to confirm their certificate name, add an emergency contact and sign the waiver on their phone, and they land on the class roster as checked in. The token is stored hashed, signatures are kept private, and the page stays closed until a waiver text is saved under EASY Suite > Class check-in.',
             'default'     => true,

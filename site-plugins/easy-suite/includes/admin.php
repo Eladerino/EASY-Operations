@@ -295,6 +295,23 @@ function easy_suite_health_rows() {
         $rows[] = ['Instructor calendar feed', 'off', 'Switched off. Instructor calendar subscriptions stop updating.'];
     }
 
+    // Class check-in: proves the module actually loaded (the loader builds
+    // its file name from the registry key and skips it silently when the
+    // file is not readable), plus its routes.
+    if (!empty($on['checkin'])) {
+        $loaded = function_exists('easy_checkin_record');
+        $rule = easy_suite_rewrite_rule_exists('^check-in/([a-f0-9]{64})/?$');
+        $rows[] = [
+            'Class check-in (QR)',
+            $loaded && $rule ? 'ok' : 'error',
+            $loaded
+                ? ($rule ? 'Module loaded and /check-in/<token>/ is registered.' : 'Module loaded, but the /check-in/ rule is missing. Re-saving Settings → Permalinks restores it.')
+                : 'Switched on but the module did not load. The loader looks for includes/module-checkin.php under the registry key "checkin".',
+        ];
+    } else {
+        $rows[] = ['Class check-in (QR)', 'off', 'Switched off. Class check-in links stop working.'];
+    }
+
     // Shop.
     if ($on['shop'] && defined('EASY_INSTRUCTOR_CAT_SLUG')) {
         $term = get_term_by('slug', EASY_INSTRUCTOR_CAT_SLUG, 'product_cat');
