@@ -152,17 +152,25 @@ function easy_checkin_default_expiry($event_id) {
     return $base + DAY_IN_SECONDS;
 }
 
-/** Events that have a check-in record at all (candidate set for lookups). */
+/** Events that have a check-in record at all (candidate set for lookups).
+ * Deliberately NOT a WP_Query: The Events Calendar rewrites event queries
+ * on the front end (date and status conditions), which silently dropped
+ * classes whose start time had passed — a live class mid-session stopped
+ * matching its own check-in link (found in the Oct 26 dummy-class test).
+ * Only events carrying a record can match, so read postmeta directly. */
 function easy_checkin_candidate_events() {
-    return get_posts(array(
-        'post_type'      => 'tribe_events',
-        'post_status'    => 'publish',
-        'numberposts'    => 500,
-        'fields'         => 'ids',
-        'no_found_rows'  => true,
-        'meta_key'       => EASY_CHECKIN_META,
-        'meta_compare'   => 'EXISTS',
+    global $wpdb;
+    if (!isset($wpdb) || !is_object($wpdb)) {
+        return array();
+    }
+    $ids = $wpdb->get_col($wpdb->prepare(
+        "SELECT DISTINCT pm.post_id FROM {$wpdb->postmeta} pm"
+        . " INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id"
+        . " WHERE pm.meta_key = %s AND p.post_type = 'tribe_events' AND p.post_status = 'publish'"
+        . " ORDER BY pm.post_id DESC LIMIT 500",
+        EASY_CHECKIN_META
     ));
+    return array_map('intval', is_array($ids) ? $ids : array());
 }
 
 /** Find the event a plaintext token belongs to (timing-safe compare). */
