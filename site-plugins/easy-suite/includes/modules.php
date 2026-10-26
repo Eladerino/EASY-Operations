@@ -73,6 +73,12 @@ function easy_suite_module_registry() {
             'default'     => true,
             'locked'      => false,
         ],
+        'check-in' => [
+            'label'       => 'Class check-in (QR)',
+            'description' => 'Per-class QR check-in: the Suite makes a check-in link for a class (button on the class edit screen), students scan it to confirm their certificate name, add an emergency contact and sign the waiver on their phone, and they land on the class roster as checked in. The token is stored hashed, signatures are kept private, and the page stays closed until a waiver text is saved under EASY Suite > Class check-in.',
+            'default'     => true,
+            'locked'      => false,
+        ],
         'seat-sales' => [
             'label'       => 'Seat sales (WooCommerce)',
             'description' => 'Sells class seats as WooCommerce products: event page shows seats remaining with add-to-cart, checkout collects per-seat certificate details into the class roster, and manual enrollments adjust product stock.',
