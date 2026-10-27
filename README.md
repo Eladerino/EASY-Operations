@@ -21,7 +21,10 @@ against easysafety.ca and needs the site's **EASY Suite** plugin
   - **Accounts**: new site accounts, with Approve and Reject.
 - **Schedule**: post classes to the site's event calendar. Each class
   has a student roster: phone and walk-in students are enrolled here,
-  and the list stays in step with online seat sales.
+  and the list stays in step with online seat sales. The roster window
+  also holds the class's check-in panel: make or replace the QR
+  sign-in link, close sign-in, show the QR full screen, save it as a
+  PNG, or copy the link, the same options EASY Manager has.
 - **Online Learning**: preview only, with sample data.
 - **Course Builder**: authors build online courses, and reviewers approve
   them or send them back with a note. Courses are saved to the site, so every

@@ -521,6 +521,15 @@
     saleLine.classList.add('hidden');
     saleLine.textContent = '';
     if (ev) loadSaleLine(ev.id);
+    // Check-in for this class lives under its edit page (Brandon,
+    // Oct 27): a saved class can get its QR sign-in link made ahead
+    // of time here, not only from the Today tab on the day. Same
+    // rosters permission as the Today card's Check-in QR button.
+    const ciBox = $('evCheckinBox');
+    if (ciBox) {
+      ciBox.classList.toggle('hidden',
+        !(ev && ev.id && window.EasyRoles && window.EasyRoles.can('rosters')));
+    }
   }
 
   // One line under the seats field: is this class selling online, and
@@ -979,6 +988,15 @@
     });
     $('evForm').addEventListener('submit', onSave);
     $('evDeleteBtn').addEventListener('click', onDelete);
+    $('evCheckinBtn').addEventListener('click', () => {
+      const ev = state.editing;
+      if (!ev || !ev.id || !window.EasyCheckin) return;
+      // The check-in screen lives on the Today tab. Switching tabs
+      // closes this editor first (showTab closes the open subview),
+      // which is why the box above tells the user to save first.
+      if (window.EasyUi) window.EasyUi.showTab('today');
+      window.EasyCheckin.open({ id: ev.id, title: ev.title });
+    });
     $('evCourse').addEventListener('change', onCourseChange);
     $('evAllDay').addEventListener('change', setTimeWraps);
     $('evVenue').addEventListener('change', () => {

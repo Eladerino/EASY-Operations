@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('easyCert', {
   showWhatsNew: () => ipcRenderer.invoke('show-whats-new'),
   printPdf: () => ipcRenderer.invoke('print-pdf-dialog'),
   savePdfCopy: () => ipcRenderer.invoke('save-pdf-copy'),
+  savePngCopy: (dataUrl, defaultName) => ipcRenderer.invoke('save-png-copy', { dataUrl, defaultName }),
   openPdfExternal: () => ipcRenderer.invoke('open-pdf-external'),
   testConnection: (args) => ipcRenderer.invoke('test-connection', args),
   openProfile: () => ipcRenderer.invoke('open-profile'),
@@ -34,6 +35,8 @@ contextBridge.exposeInMainWorld('easyCert', {
     getRoster: (eventId) => ipcRenderer.invoke('schedule-get-roster', eventId),
     saveRoster: (eventId, roster, revision) => ipcRenderer.invoke('schedule-save-roster', { eventId, roster, revision }),
     getSaleState: (eventId) => ipcRenderer.invoke('schedule-get-sale-state', eventId),
+    getCheckin: (eventId) => ipcRenderer.invoke('schedule-get-checkin', eventId),
+    checkinAction: (eventId, action) => ipcRenderer.invoke('schedule-checkin-action', { eventId, action }),
   },
   approvals: {
     probe: () => ipcRenderer.invoke('approvals-probe'),

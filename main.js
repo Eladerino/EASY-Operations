@@ -1257,6 +1257,28 @@ ipcMain.handle('save-pdf-copy', async () => {
   }
 });
 
+// Save a PNG image the renderer made (the class check-in QR) anywhere
+// the user picks. The image arrives as a data URL; only PNG is taken.
+ipcMain.handle('save-png-copy', async (_event, { dataUrl, defaultName } = {}) => {
+  const prefix = 'data:image/png;base64,';
+  if (typeof dataUrl !== 'string' || !dataUrl.startsWith(prefix)) {
+    return { ok: false, error: 'That image was not a PNG.' };
+  }
+  const safeName = String(defaultName || 'image.png').replace(/[\\/:*?"<>|]/g, '-');
+  const { canceled, filePath } = await dialog.showSaveDialog({
+    title: 'Save QR image',
+    defaultPath: safeName.endsWith('.png') ? safeName : `${safeName}.png`,
+    filters: [{ name: 'PNG images', extensions: ['png'] }],
+  });
+  if (canceled || !filePath) return { ok: false, canceled: true };
+  try {
+    await fs.promises.writeFile(filePath, Buffer.from(dataUrl.slice(prefix.length), 'base64'));
+    return { ok: true, path: filePath };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
 // Open the most recently generated certificate in the system's default
 // PDF viewer (Edge/Adobe on Windows) — guaranteed preview + print path
 // even if the in-app preview ever misbehaves.
@@ -1782,6 +1804,56 @@ ipcMain.handle('schedule-get-sale-state', async (_event, id) => {
     return { ok: true, state: r.json || {} };
   } catch (err) {
     return { ok: false, error: `Could not load the sale status: ${err.message}` };
+  }
+});
+
+// Class check-in links (EASY Suite check-in module, Suite 2.2.51+).
+// The desktop counterpart of EASY Manager's check-in screen, on the
+// same routes, so a link can be made from either app:
+//   GET  /easy/v1/checkin/<id>             -> link state + counts
+//   POST /easy/v1/checkin/<id>/create      -> mint a link
+//   POST /easy/v1/checkin/<id>/regenerate  -> replace the link
+//   POST /easy/v1/checkin/<id>/close       -> close sign-in
+ipcMain.handle('schedule-get-checkin', async (_event, id) => {
+  const config = getConfig();
+  if (!config.ok) return { ok: false, error: config.error };
+  const eventId = validRosterEventId(id);
+  if (!eventId) return { ok: false, error: 'No class was selected.' };
+  try {
+    const r = await easyRequest(config, 'GET', `/checkin/${eventId}`, { timeoutMs: 30000 });
+    if (r.status === 404) {
+      return { ok: false, error: 'The site does not have check-in links yet. It needs EASY Suite 2.2.51 or newer.' };
+    }
+    if (r.status !== 200) {
+      return { ok: false, error: friendlyWriteError(r, 'load the check-in link') };
+    }
+    return { ok: true, state: r.json || {} };
+  } catch (err) {
+    return { ok: false, error: `Could not load the check-in link: ${err.message}` };
+  }
+});
+
+ipcMain.handle('schedule-checkin-action', async (_event, { eventId, action } = {}) => {
+  const config = getConfig();
+  if (!config.ok) return { ok: false, error: config.error };
+  const id = validRosterEventId(eventId);
+  if (!id) return { ok: false, error: 'No class was selected.' };
+  if (!['create', 'regenerate', 'close'].includes(action)) {
+    return { ok: false, error: 'That check-in action is not available.' };
+  }
+  const verb = action === 'create' ? 'create the check-in link'
+    : action === 'regenerate' ? 'make a new check-in link' : 'close sign-in';
+  try {
+    const r = await easyRequest(config, 'POST', `/checkin/${id}/${action}`, { body: {}, timeoutMs: 30000 });
+    if (r.status === 404) {
+      return { ok: false, error: 'The site does not have check-in links yet. It needs EASY Suite 2.2.51 or newer.' };
+    }
+    if (r.status !== 200) {
+      return { ok: false, error: friendlyWriteError(r, verb) };
+    }
+    return { ok: true, state: r.json || {} };
+  } catch (err) {
+    return { ok: false, error: `Could not ${verb}: ${err.message}` };
   }
 });
 

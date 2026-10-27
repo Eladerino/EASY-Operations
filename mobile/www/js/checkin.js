@@ -1,5 +1,7 @@
-// checkin.js: the class check-in screen for one of today's classes:
-// the state of its QR sign-in link on the Suite check-in routes, the
+// checkin.js: the class check-in screen for one class: opened from
+// a Today card on the day, or from the class editor in Schedule when
+// the link is made ahead of time. It shows the state of the class's
+// QR sign-in link on the Suite check-in routes, the
 // QR itself drawn in the app (bundled qrcode-generator, the same
 // library the Suite admin box uses), a full-screen show mode for
 // holding the phone up in the classroom, the QR as a shareable PNG,

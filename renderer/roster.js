@@ -89,10 +89,14 @@
     render();
     $('rosterModal').classList.remove('hidden');
     load(token);
+    // The check-in panel at the top of this modal loads alongside
+    // the roster for the same class (checkin.js).
+    if (window.EasyCheckinPanel) window.EasyCheckinPanel.load(id, title);
   }
 
   function close() {
     $('rosterModal').classList.add('hidden');
+    if (window.EasyCheckinPanel) window.EasyCheckinPanel.reset();
     eventId = null;
   }
 

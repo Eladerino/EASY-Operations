@@ -628,6 +628,10 @@
       <h3 id="rosterModalTitle">Students</h3>
       <p class="hint" id="rosterModalSub"></p>
       <div id="rosterModalError" class="error-summary hidden" role="alert"></div>
+      <div id="checkinPanel" class="checkin-panel">
+        <h4 class="checkin-heading">Class check-in</h4>
+        <div id="checkinBody"><p class="hint">Loading the check-in link…</p></div>
+      </div>
       <p id="rosterCount" class="roster-count"></p>
       <div id="rosterChips" class="roster-chips"></div>
       <p id="rosterEmpty" class="hint hidden">No students yet. Add the first one with the button below.</p>
@@ -673,6 +677,22 @@
         <button type="button" id="rosterAdd" class="btn btn-secondary">+ Add student</button>
         <span class="flex-spacer"></span>
         <button type="button" id="rosterClose" class="btn btn-primary">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="checkinQrModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="checkinQrTitle">
+    <div class="modal-box checkin-qr-box">
+      <h3 id="checkinQrTitle">Class check-in</h3>
+      <div class="checkin-qr-wrap checkin-qr-big">
+        <canvas id="checkinQrCanvas"></canvas>
+      </div>
+      <p id="checkinQrCode" class="checkin-code"></p>
+      <p id="checkinQrUrl" class="hint checkin-url"></p>
+      <div class="modal-actions">
+        <button type="button" id="checkinQrSave" class="btn btn-secondary">Save QR image</button>
+        <span class="flex-spacer"></span>
+        <button type="button" id="checkinQrClose" class="btn btn-primary">Done</button>
       </div>
     </div>
   </div>
@@ -738,7 +758,9 @@
   <script src="../shared.js"></script>
   <script src="renderer.js"></script>
   <script src="schedule.js"></script>
+  <script src="qrcode.js"></script>
   <script src="roster.js"></script>
+  <script src="checkin.js"></script>
   <script src="approvals.js"></script>
   <script src="cert-approvals.js"></script>
   <script src="class-approvals.js"></script>

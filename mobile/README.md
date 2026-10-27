@@ -66,6 +66,9 @@ WordPress credentials at runtime.
   (picked from the site's own event categories, which also sets the
   title and files the class under that course), title, description,
   dates and times or all day, instructor, location, cost, and seats.
+  A saved class's editor also has a Check-in section: its QR sign-in
+  link can be made ahead of time there (or replaced or closed), not
+  only from the Today tab on the day.
   Picking a course also fills the description with that course's
   preset text when the description is still empty, the same presets
   and the same fill-only-when-empty rule the desktop editor uses; an

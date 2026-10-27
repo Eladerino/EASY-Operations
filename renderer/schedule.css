@@ -319,6 +319,40 @@ textarea { resize: vertical; }
 
 #rosterModalSub { margin-bottom: 14px; }
 
+/* Check-in panel at the top of the roster modal (checkin.js). */
+.checkin-panel {
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  background: #fbfcfe;
+}
+.checkin-heading { margin: 0 0 6px; font-size: 15px; }
+.checkin-qr-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 10px;
+  background: #ffffff;
+}
+.checkin-qr-wrap canvas { max-width: 100%; height: auto; }
+.checkin-qr-big canvas { width: min(560px, 80vw); }
+.checkin-code {
+  text-align: center;
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  margin: 6px 0 0;
+}
+.checkin-url { text-align: center; word-break: break-all; }
+.checkin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.checkin-qr-box { text-align: center; }
+
 .roster-count {
   font-weight: 700;
   font-size: 13.5px;
