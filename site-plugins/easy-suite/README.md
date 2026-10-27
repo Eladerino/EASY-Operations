@@ -42,6 +42,9 @@ exactly like a wordpress.org plugin update.
   - pages kept out of search;
   - who can use "List a Product";
   - who can post certificates for other instructors;
+  - who can manage classes in the Schedule tab of both apps (handpicked
+    Schedule editors, granted the Events Calendar capabilities on top of
+    their role; everyone else keeps their current access);
   - Course Builder authors and extra reviewers;
   - how long online course keys and course access last;
   - practicals: whether a pass publishes the certificate or makes a draft,
@@ -120,7 +123,7 @@ All routes are under `/wp-json/easy/v1/`.
 | `pending-users…` | Accounts that can promote users |
 | `expiring-certs` | Accounts that can edit certificates (office accounts see all; others see only certificates they authored) |
 | `cert-number` | Accounts that can edit certificates |
-| `roster/<id>` (GET) | Office accounts (admins and proxy posters) |
+| `roster/<id>` (GET) | Office accounts (admins and proxy posters) and handpicked Schedule editors |
 | `roster/<id>` (PUT) | Accounts that can edit the class |
 | `checkin/<id>` (GET) | Office accounts and accounts that can edit the class |
 | `checkin/<id>/create`, `checkin/<id>/regenerate`, `checkin/<id>/close` (POST) | Accounts that can edit the class |

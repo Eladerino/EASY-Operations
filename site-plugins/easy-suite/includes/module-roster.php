@@ -265,10 +265,12 @@ function easy_roster_rest_get($request) {
         return new WP_Error('easy_roster_bad_event', 'Not a class event.', array('status' => 404));
     }
     // Full rosters carry student phone numbers, emails and payment
-    // state, so reads are office-only. (There is no account-to-
-    // instructor mapping on the site, so "their own classes" cannot be
-    // resolved; instructors see names only, in their calendar feed.)
-    if (!easy_suite_is_office_user()) {
+    // state, so reads are office-only — plus the handpicked Schedule
+    // editors (EASY Suite → Settings), who manage class rosters from
+    // the Schedule tab. (There is no account-to-instructor mapping on
+    // the site, so "their own classes" cannot be resolved; other
+    // instructors see names only, in their calendar feed.)
+    if (!easy_suite_is_office_user() && !(function_exists('easy_suite_is_schedule_editor') && easy_suite_is_schedule_editor())) {
         return new WP_Error('easy_roster_forbidden', 'Class student lists are only available to office accounts.', array('status' => 403));
     }
     return array(

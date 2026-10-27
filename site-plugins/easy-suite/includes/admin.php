@@ -525,6 +525,15 @@ function easy_suite_settings_page() {
         }
         update_option('easy_proxy_posters', implode("\n", array_unique($proxies)), false);
 
+        $sched = [];
+        foreach (preg_split('/[\s,]+/', (string) wp_unslash($_POST['easy_schedule_editors'] ?? '')) as $u) {
+            $u = sanitize_user($u, true);
+            if ($u !== '') {
+                $sched[] = $u;
+            }
+        }
+        update_option('easy_schedule_editors', implode("\n", array_unique($sched)), false);
+
         foreach (['easy_course_authors', 'easy_course_reviewers'] as $opt) {
             if (!isset($_POST[$opt])) {
                 continue;
@@ -638,6 +647,10 @@ function easy_suite_settings_page() {
         . '<td><textarea id="easy_proxy_posters" name="easy_proxy_posters" rows="4" class="regular-text code">'
         . esc_textarea(implode("\n", function_exists('easy_suite_proxy_posters') ? easy_suite_proxy_posters() : [])) . '</textarea>'
         . '<p class="description">WordPress usernames, one per line. Everyone else posts under their own name. Admins and anyone who can publish certificates can always post for others.</p></td></tr>';
+    echo '<tr><th scope="row"><label for="easy_schedule_editors">Can manage classes in the Schedule tab (both apps)</label></th>'
+        . '<td><textarea id="easy_schedule_editors" name="easy_schedule_editors" rows="4" class="regular-text code">'
+        . esc_textarea(implode("\n", function_exists('easy_suite_schedule_editors') ? easy_suite_schedule_editors() : [])) . '</textarea>'
+        . '<p class="description">WordPress usernames, one per line. Handpicked people can create, edit, publish and delete classes, manage class student lists and run check-in in the Schedule tab of the desktop app and EASY Manager, even if their website role cannot. Everyone not listed keeps the access they have now, and admins can always manage classes. Take a name off the list to take the access back.</p></td></tr>';
     if (function_exists('easy_course_authors')) {
         echo '<tr><th scope="row"><label for="easy_course_authors">Course Builder authors</label></th>'
             . '<td><textarea id="easy_course_authors" name="easy_course_authors" rows="3" class="regular-text code">'

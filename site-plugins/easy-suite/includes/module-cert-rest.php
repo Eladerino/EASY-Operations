@@ -515,6 +515,76 @@ function easy_suite_is_proxy_poster($user = null) {
     return $user && $user->ID && in_array(strtolower($user->user_login), easy_suite_proxy_posters(), true);
 }
 
+/* ==========================================================================
+ * EASY Suite: handpicked Schedule editors
+ * --------------------------------------------------------------------------
+ * WordPress usernames handpicked under EASY Suite → Settings (option
+ * easy_schedule_editors, same list shape as the proxy posters) who can
+ * manage classes in the Schedule tab of BOTH apps — create, edit, publish
+ * and delete classes, create venues/instructors inline, edit class
+ * rosters and run check-in — even when their website role cannot.
+ *
+ * Both apps gate Schedule writing on the site itself: an empty POST to
+ * the Events Calendar REST endpoint answers 400 for an account that can
+ * write events and 403 for one that cannot, and roster writes check
+ * edit_post on the class. So the grant below works through capabilities,
+ * not an app-side flag: a user_has_cap filter hands listed users the
+ * Events Calendar capabilities (read off the registered post types, so a
+ * TEC cap rename cannot silently break it). No app update is needed;
+ * adding a name in Settings is enough, and removing it revokes access on
+ * the next request. Accounts not on the list keep exactly the access
+ * their role already gives them; an empty list changes nothing.
+ * ========================================================================== */
+
+function easy_suite_schedule_editors() {
+    $raw = get_option('easy_schedule_editors', false);
+    if ($raw === false) {
+        return []; // Never configured: nobody is handpicked until Settings is saved.
+    }
+    return array_values(array_filter(array_map('strtolower', array_map('trim', preg_split('/[\s,]+/', (string) $raw)))));
+}
+
+function easy_suite_is_schedule_editor($user = null) {
+    $user = $user ?: wp_get_current_user();
+    return $user && $user->ID && in_array(strtolower($user->user_login), easy_suite_schedule_editors(), true);
+}
+
+/** Primitive caps a Schedule editor is granted, derived from the TEC post types. */
+function easy_suite_schedule_editor_caps() {
+    $caps = [];
+    foreach (['tribe_events', 'tribe_venue', 'tribe_organizer'] as $type) {
+        $pto = get_post_type_object($type);
+        if (!$pto || empty($pto->cap) || !is_object($pto->cap)) {
+            continue;
+        }
+        foreach (get_object_vars($pto->cap) as $cap) {
+            if (is_string($cap) && $cap !== '' && $cap !== 'read') {
+                $caps[$cap] = true;
+            }
+        }
+    }
+    return array_keys($caps);
+}
+
+add_filter('user_has_cap', function ($allcaps, $caps, $args, $user) {
+    if (!$user || empty($user->ID) || !easy_suite_is_schedule_editor($user)) {
+        return $allcaps;
+    }
+    $grant = easy_suite_schedule_editor_caps();
+    if (!$grant) {
+        return $allcaps; // Events Calendar inactive: nothing to grant.
+    }
+    // Grant when the capability being checked is one of the schedule caps
+    // (a direct check, or a meta check like edit_post already resolved to
+    // primitives in $caps). Nothing outside the TEC types is ever granted.
+    if (array_intersect((array) $caps, $grant)) {
+        foreach ($grant as $cap) {
+            $allcaps[$cap] = true;
+        }
+    }
+    return $allcaps;
+}, 10, 4);
+
 add_action('rest_api_init', function () {
     // Next free certificate number for a candidate (all statuses).
     register_rest_route('easy/v1', '/cert-number', [
@@ -534,8 +604,9 @@ add_action('rest_api_init', function () {
         'methods'             => 'GET',
         'callback'            => function () {
             return [
-                'proxyPoster' => easy_suite_is_proxy_poster(),
-                'version'     => EASY_SUITE_VERSION,
+                'proxyPoster'    => easy_suite_is_proxy_poster(),
+                'scheduleEditor' => easy_suite_is_schedule_editor(),
+                'version'        => EASY_SUITE_VERSION,
             ];
         },
         'permission_callback' => 'is_user_logged_in',
