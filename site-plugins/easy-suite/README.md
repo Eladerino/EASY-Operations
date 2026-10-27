@@ -73,7 +73,7 @@ always stay on.
 | Certificate emails | Student email on publish, expiry reminders, twice-daily employer digest. Email footers give the city only (St. John's, NL) and link the Privacy Policy, as does the branded wrapper around other outgoing mail |
 | Instructor calendar feed | Private calendar feed per instructor at `/instructor-calendar/<token>.ics` (tokened URLs; instructors re-subscribe once) |
 | Class rosters | Per-class student lists (manual enrollment in the app; online buyers added automatically) |
-| Class check-in (QR) | Per-class check-in link and QR code made from the class edit screen. Students scan, confirm their certificate name, add an emergency contact and sign the waiver on their phone, landing on the roster as checked in. Link token stored hashed, signatures private, page closed until a waiver text is saved |
+| Class check-in (QR) | Per-class check-in link and QR code made from the class edit screen or the staff apps. Students scan, confirm their certificate name, add an emergency contact and sign the waiver on their phone, landing on the roster as checked in. The desktop app can print the sign-in pack and EASY Manager can show the QR without wp-admin. Link token stored hashed, signatures private, page closed until a waiver text is saved |
 | Seat sales | Sells class seats as WooCommerce products: per-seat attendee details at checkout, roster sync, stock handling, sold-seat delete protection |
 | Portal cards | Student/instructor portal card hub (`/student-portal/`, `/instructor-portal/`) |
 | Management queue | Private decision page for the office (`[easy_management_queue]` shortcode). Questions move open, then decided, then resolved: a decided question can have its answer undone (it reopens) or be marked resolved from the EASY Manager app, which files it in an archive with its answer and both sets of attribution on record. The page's own information text (introduction, What's New, Payments and the other explainer sections, closing note) is edited on the same admin screen and stored in the database. A new question can say who it is for, and adding one (on the admin screen or from the app) queues a batched preview email to those people: one digest each, sent from the admin screen or the app, or automatically about 30 minutes later; adding silently is an option for seeding and fixes. Logged-out visitors to the queue page are redirected to the login page and back, so a link from an email does not dead-end at a private-page wall |
@@ -122,6 +122,8 @@ All routes are under `/wp-json/easy/v1/`.
 | `cert-number` | Accounts that can edit certificates |
 | `roster/<id>` (GET) | Office accounts (admins and proxy posters) |
 | `roster/<id>` (PUT) | Accounts that can edit the class |
+| `checkin/<id>` (GET) | Office accounts and accounts that can edit the class |
+| `checkin/<id>/create`, `checkin/<id>/regenerate`, `checkin/<id>/close` (POST) | Accounts that can edit the class |
 | `sale-state/<id>` | Accounts that can edit certificates |
 | `management-queue` | Admins |
 | `management-queue/questions` (POST) | Admins |

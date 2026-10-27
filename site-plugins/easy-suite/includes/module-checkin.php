@@ -11,8 +11,10 @@
  *
  * Privacy rules baked in (proposal section 4.9):
  *  - The token is stored HASHED (sha256). The plaintext exists only in
- *    the printed/shared link and, briefly, in a per-user transient right
+ *    the printed/shared link, in the one response that creates it for a
+ *    signed-in staff app, and briefly in a per-user transient right
  *    after it is created so the office can download or print the QR.
+ *    Later staff reads return the short-code link, never the token.
  *  - The check-in page is a standalone lightweight template (no theme,
  *    no trackers), sent with noindex headers, and the URL is never
  *    linked from any public page. Rewrite endpoints never appear in
@@ -263,6 +265,214 @@ function easy_checkin_close($event_id) {
     easy_checkin_save_record($event_id, $rec);
     easy_checkin_log($event_id, 'closed');
 }
+
+/* ==========================================================================
+ * Staff REST surface
+ *
+ * The class-day flow should not need wp-admin: the Operations desktop
+ * app reads a class here before rendering and printing its sign-in pack,
+ * and EASY Manager reads the same payload to show the QR as a backup.
+ * Both apps use the existing roster endpoint for the student list; this
+ * surface owns only the check-in link and its live counts.
+ *
+ * Reads are limited to office accounts and accounts that can edit the
+ * class. Create, regenerate and close use the same edit-the-class rule
+ * as the wp-admin box. A read never returns the full token: only the
+ * response that creates a link carries it, once. Later reads carry the
+ * short-code URL, which is the durable URL the apps print or display.
+ * ========================================================================== */
+
+function easy_checkin_rest_counts($event_id) {
+    $counts = array(
+        'total'          => 0,
+        'checked_in'     => 0,
+        'needs_review'   => 0,
+        'not_checked_in' => 0,
+    );
+    if (!function_exists('easy_roster_get')) {
+        return $counts;
+    }
+    foreach (easy_roster_get($event_id) as $rec) {
+        $counts['total']++;
+        $status = isset($rec['checkin_status']) ? (string) $rec['checkin_status'] : '';
+        if ($status === 'checked_in' || $status === 'manual') {
+            $counts['checked_in']++;
+        } elseif ($status === 'needs_review') {
+            $counts['needs_review']++;
+        }
+    }
+    $counts['not_checked_in'] = $counts['total'] - $counts['checked_in'] - $counts['needs_review'];
+    return $counts;
+}
+
+function easy_checkin_rest_payload($event_id, $token = '') {
+    $event_id = (int) $event_id;
+    $rec = easy_checkin_record($event_id);
+    $facts = easy_checkin_class_facts($event_id);
+    $waiver = easy_checkin_waiver($rec['waiver_type']);
+    $code_url = $rec['short_code'] !== '' ? easy_checkin_code_url($rec['short_code']) : '';
+    $waiver_ready = easy_checkin_waiver_ready($rec['waiver_type']);
+
+    $payload = array(
+        'event_id'      => $event_id,
+        'title'         => $facts['title'],
+        'when'          => $facts['when'],
+        'location'      => $facts['location'],
+        'instructor'    => $facts['instructor'],
+        'status'        => $rec['status'],
+        'is_open'       => easy_checkin_is_open($rec),
+        'has_link'      => $rec['token_hash'] !== '',
+        'short_code'    => $rec['short_code'],
+        'code_url'      => $code_url,
+        // For an existing link this is the short-code URL. It stays
+        // printable and displayable without ever exposing the token.
+        'qr_url'        => $code_url,
+        'checkin_url'   => $code_url,
+        'expires_at'    => $rec['expires'],
+        'expires_iso'   => $rec['expires'] > 0 ? gmdate('c', $rec['expires']) : null,
+        'created_at'    => $rec['created_at'],
+        'created_by'    => $rec['created_by'],
+        'waiver_type'   => $rec['waiver_type'],
+        'waiver_version' => $waiver['version'],
+        'waiver_ready'  => $waiver_ready,
+        'ready_to_open' => easy_checkin_is_open($rec)
+            && (empty($rec['toggles']['waiver']) || $waiver_ready),
+        'toggles'       => $rec['toggles'],
+        'counts'        => easy_checkin_rest_counts($event_id),
+    );
+
+    // The plaintext token is returned only by create/regenerate, in
+    // that one response. It is never stored or served again.
+    if (is_string($token) && preg_match('/^[a-f0-9]{64}$/', $token)) {
+        $token_url = easy_checkin_token_url($token);
+        $payload['token'] = $token;
+        $payload['token_url'] = $token_url;
+        $payload['qr_url'] = $token_url;
+        $payload['checkin_url'] = $token_url;
+    }
+    return $payload;
+}
+
+/** Validate the class and the caller's right to read or change its link. */
+function easy_checkin_rest_guard($request, $write) {
+    $event_id = isset($request['event_id']) ? (int) $request['event_id'] : 0;
+    if ($event_id <= 0 || get_post_type($event_id) !== 'tribe_events') {
+        return new WP_Error('easy_checkin_bad_event', 'Not a class event.', array('status' => 404));
+    }
+    $can_edit = current_user_can('edit_post', $event_id);
+    if ($write && !$can_edit) {
+        return new WP_Error(
+            'easy_checkin_forbidden',
+            'This account is not allowed to change check-in for this class.',
+            array('status' => 403)
+        );
+    }
+    if (!$write && !$can_edit && !easy_suite_is_office_user()) {
+        return new WP_Error(
+            'easy_checkin_forbidden',
+            'Check-in details are only available to office accounts and accounts that can edit this class.',
+            array('status' => 403)
+        );
+    }
+    return $event_id;
+}
+
+function easy_checkin_rest_get($request) {
+    $event_id = easy_checkin_rest_guard($request, false);
+    if (is_wp_error($event_id)) {
+        return $event_id;
+    }
+    return easy_checkin_rest_payload($event_id);
+}
+
+function easy_checkin_rest_mint($request, $regenerate) {
+    $event_id = easy_checkin_rest_guard($request, true);
+    if (is_wp_error($event_id)) {
+        return $event_id;
+    }
+    $rec = easy_checkin_record($event_id);
+    if (!$regenerate && $rec['status'] !== 'none') {
+        return new WP_Error(
+            'easy_checkin_link_exists',
+            'This class already has a check-in link. Regenerate it if a new link is needed.',
+            array('status' => 409, 'checkin' => easy_checkin_rest_payload($event_id))
+        );
+    }
+    if ($regenerate && $rec['status'] === 'none') {
+        return new WP_Error(
+            'easy_checkin_no_link',
+            'This class does not have a check-in link yet. Create one first.',
+            array('status' => 409, 'checkin' => easy_checkin_rest_payload($event_id))
+        );
+    }
+    $token = easy_checkin_mint($event_id, $regenerate);
+    if ($token === '') {
+        return new WP_Error(
+            'easy_checkin_mint_failed',
+            'The check-in link could not be created.',
+            array('status' => 500)
+        );
+    }
+    // Keep the wp-admin box consistent when the same account opens it
+    // right after creating the link from an app.
+    set_transient(
+        'easy_checkin_token_' . $event_id . '_' . get_current_user_id(),
+        $token,
+        15 * MINUTE_IN_SECONDS
+    );
+    return easy_checkin_rest_payload($event_id, $token);
+}
+
+function easy_checkin_rest_create($request) {
+    return easy_checkin_rest_mint($request, false);
+}
+
+function easy_checkin_rest_regenerate($request) {
+    return easy_checkin_rest_mint($request, true);
+}
+
+function easy_checkin_rest_close($request) {
+    $event_id = easy_checkin_rest_guard($request, true);
+    if (is_wp_error($event_id)) {
+        return $event_id;
+    }
+    $rec = easy_checkin_record($event_id);
+    if ($rec['status'] === 'none') {
+        return new WP_Error(
+            'easy_checkin_no_link',
+            'This class does not have a check-in link to close.',
+            array('status' => 409, 'checkin' => easy_checkin_rest_payload($event_id))
+        );
+    }
+    if ($rec['status'] !== 'closed') {
+        easy_checkin_close($event_id);
+    }
+    return easy_checkin_rest_payload($event_id);
+}
+
+add_action('rest_api_init', function () {
+    $permission = 'easy_cert_rest_can_access';
+    register_rest_route('easy/v1', '/checkin/(?P<event_id>\d+)', array(
+        'methods'             => 'GET',
+        'callback'            => 'easy_checkin_rest_get',
+        'permission_callback' => $permission,
+    ));
+    register_rest_route('easy/v1', '/checkin/(?P<event_id>\d+)/create', array(
+        'methods'             => 'POST',
+        'callback'            => 'easy_checkin_rest_create',
+        'permission_callback' => $permission,
+    ));
+    register_rest_route('easy/v1', '/checkin/(?P<event_id>\d+)/regenerate', array(
+        'methods'             => 'POST',
+        'callback'            => 'easy_checkin_rest_regenerate',
+        'permission_callback' => $permission,
+    ));
+    register_rest_route('easy/v1', '/checkin/(?P<event_id>\d+)/close', array(
+        'methods'             => 'POST',
+        'callback'            => 'easy_checkin_rest_close',
+        'permission_callback' => $permission,
+    ));
+});
 
 /* ==========================================================================
  * Signature storage (private folder, the cert-PDF pattern)
