@@ -566,21 +566,83 @@ function easy_suite_schedule_editor_caps() {
     return array_keys($caps);
 }
 
+/* ==========================================================================
+ * EASY Suite: handpicked account approvers + certificate publishers
+ * --------------------------------------------------------------------------
+ * Two more username lists under EASY Suite → Settings, same shape:
+ *
+ * - easy_account_approvers: can approve or reject new student accounts
+ *   in the apps' Accounts queue. The bridge routes check the
+ *   promote_users capability, so that single capability is granted —
+ *   and the routes still only ever act on accounts that are actually
+ *   awaiting review, and never on an administrator.
+ * - easy_cert_publishers: can publish certificate drafts in the apps'
+ *   certificate review queue. Only the cert post type's own publish
+ *   capability is granted (read off the registered post type), and only
+ *   for drafts the account can already edit.
+ *
+ * Deliberately NOT list-grantable: manage_options. It is full site
+ * control (settings, plugins, users), so the Management Queue, site
+ * health and the site-wide activity log stay administrators-only.
+ * ========================================================================== */
+
+function easy_suite_account_approvers() {
+    $raw = get_option('easy_account_approvers', false);
+    if ($raw === false) {
+        return [];
+    }
+    return array_values(array_filter(array_map('strtolower', array_map('trim', preg_split('/[\s,]+/', (string) $raw)))));
+}
+
+function easy_suite_is_account_approver($user = null) {
+    $user = $user ?: wp_get_current_user();
+    return $user && $user->ID && in_array(strtolower($user->user_login), easy_suite_account_approvers(), true);
+}
+
+function easy_suite_cert_publishers() {
+    $raw = get_option('easy_cert_publishers', false);
+    if ($raw === false) {
+        return [];
+    }
+    return array_values(array_filter(array_map('strtolower', array_map('trim', preg_split('/[\s,]+/', (string) $raw)))));
+}
+
+function easy_suite_is_cert_publisher($user = null) {
+    $user = $user ?: wp_get_current_user();
+    return $user && $user->ID && in_array(strtolower($user->user_login), easy_suite_cert_publishers(), true);
+}
+
+/** The cert post type's own publish capability, or '' when unknown. */
+function easy_suite_cert_publish_cap() {
+    $pto = get_post_type_object('cert');
+    return ($pto && !empty($pto->cap->publish_posts)) ? (string) $pto->cap->publish_posts : '';
+}
+
 add_filter('user_has_cap', function ($allcaps, $caps, $args, $user) {
-    if (!$user || empty($user->ID) || !easy_suite_is_schedule_editor($user)) {
+    if (!$user || empty($user->ID)) {
         return $allcaps;
     }
-    $grant = easy_suite_schedule_editor_caps();
-    if (!$grant) {
-        return $allcaps; // Events Calendar inactive: nothing to grant.
-    }
-    // Grant when the capability being checked is one of the schedule caps
-    // (a direct check, or a meta check like edit_post already resolved to
-    // primitives in $caps). Nothing outside the TEC types is ever granted.
-    if (array_intersect((array) $caps, $grant)) {
-        foreach ($grant as $cap) {
-            $allcaps[$cap] = true;
+    $caps = (array) $caps;
+    // Handpicked Schedule editors: the Events Calendar capabilities.
+    if (easy_suite_is_schedule_editor($user)) {
+        $grant = easy_suite_schedule_editor_caps();
+        // Grant when the capability being checked is one of the schedule
+        // caps (a direct check, or a meta check like edit_post already
+        // resolved to primitives in $caps). Nothing outside TEC is granted.
+        if ($grant && array_intersect($caps, $grant)) {
+            foreach ($grant as $cap) {
+                $allcaps[$cap] = true;
+            }
         }
+    }
+    // Handpicked account approvers: promote_users, nothing else.
+    if (in_array('promote_users', $caps, true) && easy_suite_is_account_approver($user)) {
+        $allcaps['promote_users'] = true;
+    }
+    // Handpicked certificate publishers: the cert publish cap, nothing else.
+    $publish_cap = easy_suite_cert_publish_cap();
+    if ($publish_cap !== '' && in_array($publish_cap, $caps, true) && easy_suite_is_cert_publisher($user)) {
+        $allcaps[$publish_cap] = true;
     }
     return $allcaps;
 }, 10, 4);
@@ -606,6 +668,8 @@ add_action('rest_api_init', function () {
             return [
                 'proxyPoster'    => easy_suite_is_proxy_poster(),
                 'scheduleEditor' => easy_suite_is_schedule_editor(),
+                'accountApprover' => easy_suite_is_account_approver(),
+                'certPublisher'  => easy_suite_is_cert_publisher(),
                 'version'        => EASY_SUITE_VERSION,
             ];
         },

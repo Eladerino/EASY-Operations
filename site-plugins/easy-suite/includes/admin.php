@@ -534,6 +534,17 @@ function easy_suite_settings_page() {
         }
         update_option('easy_schedule_editors', implode("\n", array_unique($sched)), false);
 
+        foreach (['easy_account_approvers', 'easy_cert_publishers'] as $list_opt) {
+            $names = [];
+            foreach (preg_split('/[\s,]+/', (string) wp_unslash($_POST[$list_opt] ?? '')) as $u) {
+                $u = sanitize_user($u, true);
+                if ($u !== '') {
+                    $names[] = $u;
+                }
+            }
+            update_option($list_opt, implode("\n", array_unique($names)), false);
+        }
+
         foreach (['easy_course_authors', 'easy_course_reviewers'] as $opt) {
             if (!isset($_POST[$opt])) {
                 continue;
@@ -651,6 +662,14 @@ function easy_suite_settings_page() {
         . '<td><textarea id="easy_schedule_editors" name="easy_schedule_editors" rows="4" class="regular-text code">'
         . esc_textarea(implode("\n", function_exists('easy_suite_schedule_editors') ? easy_suite_schedule_editors() : [])) . '</textarea>'
         . '<p class="description">WordPress usernames, one per line. Handpicked people can create, edit, publish and delete classes, manage class student lists and run check-in in the Schedule tab of the desktop app and EASY Manager, even if their website role cannot. Everyone not listed keeps the access they have now, and admins can always manage classes. Take a name off the list to take the access back.</p></td></tr>';
+    echo '<tr><th scope="row"><label for="easy_account_approvers">Can approve new student accounts</label></th>'
+        . '<td><textarea id="easy_account_approvers" name="easy_account_approvers" rows="3" class="regular-text code">'
+        . esc_textarea(implode("\n", function_exists('easy_suite_account_approvers') ? easy_suite_account_approvers() : [])) . '</textarea>'
+        . '<p class="description">WordPress usernames, one per line. Handpicked people can approve or reject new accounts waiting in the apps\' Accounts queue, even if their website role cannot. They can only act on accounts that are actually waiting for review, and never on an administrator. Admins can always do this.</p></td></tr>';
+    echo '<tr><th scope="row"><label for="easy_cert_publishers">Can publish certificates</label></th>'
+        . '<td><textarea id="easy_cert_publishers" name="easy_cert_publishers" rows="3" class="regular-text code">'
+        . esc_textarea(implode("\n", function_exists('easy_suite_cert_publishers') ? easy_suite_cert_publishers() : [])) . '</textarea>'
+        . '<p class="description">WordPress usernames, one per line. Handpicked people can publish certificate drafts from the apps\' certificate review queue, for drafts they can already edit. Creating and editing drafts works exactly as it does now; this list only adds the publish step. Admins can always publish.</p></td></tr>';
     if (function_exists('easy_course_authors')) {
         echo '<tr><th scope="row"><label for="easy_course_authors">Course Builder authors</label></th>'
             . '<td><textarea id="easy_course_authors" name="easy_course_authors" rows="3" class="regular-text code">'

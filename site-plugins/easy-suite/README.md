@@ -45,6 +45,10 @@ exactly like a wordpress.org plugin update.
   - who can manage classes in the Schedule tab of both apps (handpicked
     Schedule editors, granted the Events Calendar capabilities on top of
     their role; everyone else keeps their current access);
+  - who can approve new student accounts in the apps (handpicked account
+    approvers, granted only the account-promotion capability), and who
+    can publish certificate drafts (handpicked certificate publishers,
+    granted only the certificate publish capability);
   - Course Builder authors and extra reviewers;
   - how long online course keys and course access last;
   - practicals: whether a pass publishes the certificate or makes a draft,
