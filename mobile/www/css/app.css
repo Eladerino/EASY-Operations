@@ -542,9 +542,16 @@ a.btn { text-decoration: none; box-sizing: border-box; }
   font-size: 13px;
   color: var(--ink);
 }
-/* The option that was picked, on decided and archived questions. */
-.chip.chip-chosen { border-color: var(--accent); background: var(--accent-ring); color: var(--accent-dark); font-weight: 700; }
-
+/* Chips in a wrapping row must be able to shrink and break their
+   text: the card-head chip rule further down sets flex: none (right
+   for short status labels), and without this guard a long chip in a
+   .chips row slides off the card instead of wrapping. */
+.chips .chip {
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 /* ---------- today counts ---------- */
 
 .count-grid {

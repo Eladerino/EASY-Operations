@@ -35,11 +35,12 @@
     if (q.section) card.appendChild(U.el('div', 'card-section', q.section));
     card.appendChild(U.el('div', 'card-title', q.label));
     if (decided) {
-      if (Array.isArray(q.options) && q.options.length) {
-        const chips = U.el('div', 'chips');
-        for (const opt of q.options) chips.appendChild(U.el('span', opt === q.answer ? 'chip chip-chosen' : 'chip', opt));
-        card.appendChild(chips);
-      }
+      // The answer alone is the decision. The full list of options
+      // used to be re-shown here as chips, which was clutter once a
+      // question was settled (and pure noise for a write-in answer,
+      // where no chip is the answer), and the sentence-length chips
+      // overflowed the card on a phone. A picked option's text IS
+      // the answer, so nothing is lost by leaving the list off.
       if (q.answer) card.appendChild(U.el('div', 'card-answer', q.answer));
       const by = [
         q.decided_by ? 'Decided by ' + q.decided_by : '',
@@ -68,11 +69,8 @@
     const card = U.el('div', 'card');
     if (item.section) card.appendChild(U.el('div', 'card-section', item.section));
     card.appendChild(U.el('div', 'card-title', item.label));
-    if (Array.isArray(item.options) && item.options.length) {
-      const chips = U.el('div', 'chips');
-      for (const opt of item.options) chips.appendChild(U.el('span', opt === item.answer ? 'chip chip-chosen' : 'chip', opt));
-      card.appendChild(chips);
-    }
+    // Answer only, same as a decided card: the options list is not
+    // re-shown once a question is settled.
     if (item.answer) card.appendChild(U.el('div', 'card-answer', item.answer));
     const decidedBy = [
       item.decided_by ? 'Decided by ' + item.decided_by : '',

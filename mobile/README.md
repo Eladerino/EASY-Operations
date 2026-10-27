@@ -115,7 +115,8 @@ WordPress credentials at runtime.
   right in the app: tap a choice (or type a free-text answer), confirm,
   and the answer saves through the Suite with the same validation and
   notification email as the website queue form. Decided questions show
-  who decided and when. A decided question has two ways forward: Undo
+  the answer and who decided and when (the list of choices is not
+  shown again once a question is settled). A decided question has two ways forward: Undo
   answer clears the answer and returns the question to the open list,
   and Mark resolved files it in the collapsed Archive section once the
   decision has been acted on; archived questions keep their answer,
