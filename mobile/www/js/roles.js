@@ -14,6 +14,10 @@
 
   let caps = null; // null = unknown: show everything, as before roles
   let proxyPoster = false;
+  // Handpicked-list flags from the Suite's app-config (2.2.53+): the
+  // site handpicks people for specific functions, and those grants do
+  // not always show up as a capability this file would think to check.
+  let flags = {};
 
   function has(cap) {
     return Boolean(caps && caps[cap]);
@@ -24,17 +28,23 @@
     queue: () => has('manage_options'),
     siteHealth: () => has('manage_options'),
     siteActivity: () => has('manage_options'),
-    // Account signups (approve/reject).
-    accounts: () => has('promote_users'),
-    // Publishing certificate drafts: admins and the office proxy posters.
-    publishCerts: () => has('manage_options') || has('publish_posts') || proxyPoster,
+    // Account signups (approve/reject): the capability, or the
+    // handpicked account approvers list.
+    accounts: () => has('promote_users') || Boolean(flags.accountApprover),
+    // Publishing certificate drafts: admins, the office proxy posters,
+    // and the handpicked certificate publishers.
+    publishCerts: () => has('manage_options') || has('publish_posts') || proxyPoster || Boolean(flags.certPublisher),
     // Publishing class drafts.
     classDrafts: () => has('manage_options') || has('publish_tribe_events'),
-    // Full class rosters carry student contact details: office only.
-    rosters: () => has('manage_options') || proxyPoster,
+    // Full class rosters carry student contact details: office, plus
+    // the handpicked Schedule editors (the Suite lets them read
+    // rosters so they can manage their classes).
+    rosters: () => has('manage_options') || proxyPoster || Boolean(flags.scheduleEditor),
     // Practical evaluations for online courses: anyone who signs
     // certificates. The Suite narrows instructors to their own times.
     practicals: () => has('manage_options') || has('edit_posts') || proxyPoster,
+    // Listing shop products for review: handpicked accounts only.
+    listProduct: () => Boolean(flags.productLister),
     // The Approvals tab, when any of its queues applies.
     approvals: () => RULES.publishCerts() || RULES.accounts() || RULES.classDrafts(),
   };
@@ -45,14 +55,16 @@
     return rule ? Boolean(rule()) : true;
   }
 
-  function set(nextCaps, nextProxyPoster) {
+  function set(nextCaps, nextProxyPoster, nextFlags) {
     caps = nextCaps && typeof nextCaps === 'object' && Object.keys(nextCaps).length ? nextCaps : null;
     proxyPoster = Boolean(nextProxyPoster);
+    flags = nextFlags && typeof nextFlags === 'object' ? nextFlags : {};
   }
 
   function reset() {
     caps = null;
     proxyPoster = false;
+    flags = {};
   }
 
   // True when the account sees the management screens at all.

@@ -4,6 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="viewport-fit=cover, width=device-width, initial-scale=1.0" />
   <meta name="color-scheme" content="light dark" />
+  <!-- The web version is a staff tool behind a sign-in, never a page
+       for search results. -->
+  <meta name="robots" content="noindex, nofollow" />
   <script>
     // Apply the saved Theme choice before first paint where it can be
     // read synchronously. The store keeps a localStorage mirror of the
@@ -111,6 +114,11 @@
             <div class="count-box count-link" id="boxQueue" data-role="queue"><span id="countQueue" class="count-num">...</span><span class="count-label">Open questions</span></div>
             <div class="count-box hidden" id="boxReviews" data-role="publishCerts"><span id="countReviews" class="count-num">...</span><span class="count-label">Course reviews waiting</span></div>
           </div>
+          <div data-role="listProduct">
+            <h3 class="section-title">Shop</h3>
+            <button id="listItemBtn" type="button" class="btn btn-primary">List an item for the shop</button>
+            <p class="hint">Rentals and safety equipment. Take a photo, name it, price it — the office reviews it before it goes live.</p>
+          </div>
           <h3 class="section-title">Classes today</h3>
           <div id="todayClasses"></div>
           <p id="todayClassesNote" class="hint"></p>
@@ -147,6 +155,31 @@
           </div>
           <h3 id="checkinTitle" class="section-title"></h3>
           <div id="checkinBody"></div>
+        </div>
+        <div id="listProductView" class="hidden">
+          <div class="page-head">
+            <h2>List an item</h2>
+            <button id="lpBack" type="button" class="btn btn-small btn-secondary">Back</button>
+          </div>
+          <form id="lpForm" class="class-form">
+            <label for="lpName">What are you selling?</label>
+            <input id="lpName" type="text" maxlength="120" />
+            <label for="lpDesc">Describe it (condition, size, anything a buyer should know)</label>
+            <textarea id="lpDesc" rows="4"></textarea>
+            <label for="lpPrice">Price (CAD)</label>
+            <input id="lpPrice" type="text" inputmode="decimal" placeholder="0.00" />
+            <label for="lpStock">How many do you have in stock?</label>
+            <input id="lpStock" type="number" min="0" step="1" value="1" />
+            <label for="lpCat">Category</label>
+            <select id="lpCat"></select>
+            <label for="lpPhoto">Photo</label>
+            <input id="lpPhoto" type="file" accept="image/*" />
+            <p id="lpError" class="error-text"></p>
+            <p id="lpDone" class="hint"></p>
+            <button id="lpSubmit" type="button" class="btn btn-primary">Submit for review</button>
+          </form>
+          <h3 class="section-title">Your listings</h3>
+          <div id="lpListings"></div>
         </div>
         <div id="activityView" class="hidden">
           <div class="page-head">
@@ -568,6 +601,7 @@
   <script src="js/today.js"></script>
   <script src="js/qrcode.js"></script>
   <script src="js/checkin.js"></script>
+  <script src="js/list-product.js"></script>
   <script src="js/approvals.js"></script>
   <script src="js/queue.js"></script>
   <script src="js/alerts.js"></script>

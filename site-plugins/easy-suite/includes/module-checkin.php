@@ -606,6 +606,7 @@ function easy_checkin_serve_signature($ref) {
         exit;
     }
     nocache_headers();
+    header('X-Robots-Tag: noindex, nofollow');
     header('Content-Type: image/png');
     header('Content-Length: ' . filesize($path));
     header('X-Content-Type-Options: nosniff');

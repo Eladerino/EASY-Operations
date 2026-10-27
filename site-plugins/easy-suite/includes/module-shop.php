@@ -136,6 +136,23 @@ function easy_suite_product_form_users() {
 }
 
 /**
+ * Can this account use "List a Product" (web page and app alike)?
+ * Both gates the web form uses: the handpicked Settings list (page
+ * access) and a listing-capable role (form access).
+ */
+function easy_suite_is_product_lister($user = null) {
+    $user = $user ?: wp_get_current_user();
+    if (!$user || !$user->ID) {
+        return false;
+    }
+    $listed = array_map('strtolower', easy_suite_product_form_users());
+    if (!in_array(strtolower($user->user_login), $listed, true)) {
+        return false;
+    }
+    return (bool) array_intersect(['administrator', 'shop_manager', 'instructor'], (array) $user->roles);
+}
+
+/**
  * Page-level gate: any page containing [easy_product_form] is visible only
  * to the allowed user. Logged-out visitors are sent to log in first (with a
  * redirect back); anyone else gets a 404 as if the page didn't exist.
@@ -268,15 +285,54 @@ add_action('admin_post_easy_add_product', function () {
         exit;
     }
 
-    // The submitted category must be a real public category.
+    $product_id = easy_suite_create_pending_product([
+        'name'     => $name,
+        'desc'     => $desc,
+        'price'    => $price_raw,
+        'stock'    => $stock_raw,
+        'cat_id'   => $cat_id,
+        'author'   => get_current_user_id(),
+    ]);
+
+    if ($product_id && !empty($_FILES['easy_image']['name']) && current_user_can('upload_files')) {
+        require_once ABSPATH . 'wp-admin/includes/image.php';
+        require_once ABSPATH . 'wp-admin/includes/file.php';
+        require_once ABSPATH . 'wp-admin/includes/media.php';
+        $att_id = media_handle_upload('easy_image', $product_id);
+        if (!is_wp_error($att_id)) {
+            set_post_thumbnail($product_id, $att_id);
+        }
+    }
+
+    wp_safe_redirect(add_query_arg('easy_added', '1', $referer));
+    exit;
+});
+
+/**
+ * Create one pending-review product from already-sanitized fields, the
+ * way the web form does. Returns the product ID, or 0 when the fields
+ * fail the form's own validation (name required, price "12" or "12.34",
+ * stock a whole number) or WooCommerce is unavailable. The category is
+ * dropped unless it is a real public category.
+ */
+function easy_suite_create_pending_product($fields) {
+    if (!class_exists('WC_Product_Simple')) {
+        return 0;
+    }
+    $name      = (string) ($fields['name'] ?? '');
+    $price_raw = (string) ($fields['price'] ?? '');
+    $stock_raw = (string) ($fields['stock'] ?? '');
+    if ($name === '' || !preg_match('/^\d+(\.\d{1,2})?$/', $price_raw) || !preg_match('/^\d+$/', $stock_raw)) {
+        return 0;
+    }
+    $cat_id      = (int) ($fields['cat_id'] ?? 0);
     $allowed_ids = array_map(function ($t) { return $t->term_id; }, easy_public_product_cats());
     if (!in_array($cat_id, $allowed_ids, true)) {
         $cat_id = 0;
     }
-
     $product = new WC_Product_Simple();
     $product->set_name($name);
-    $product->set_description($desc);
+    $product->set_description((string) ($fields['desc'] ?? ''));
     $product->set_status('pending');
     $product->set_regular_price($price_raw);
     $product->set_manage_stock(true);
@@ -284,22 +340,105 @@ add_action('admin_post_easy_add_product', function () {
     if ($cat_id) {
         $product->set_category_ids([$cat_id]);
     }
-    $product_id = $product->save();
+    $product_id = (int) $product->save();
+    if ($product_id && !empty($fields['author'])) {
+        wp_update_post(['ID' => $product_id, 'post_author' => (int) $fields['author']]);
+    }
+    return $product_id;
+}
 
-    if ($product_id) {
-        wp_update_post(['ID' => $product_id, 'post_author' => get_current_user_id()]);
-        if (!empty($_FILES['easy_image']['name']) && current_user_can('upload_files')) {
-            require_once ABSPATH . 'wp-admin/includes/image.php';
-            require_once ABSPATH . 'wp-admin/includes/file.php';
-            require_once ABSPATH . 'wp-admin/includes/media.php';
-            $att_id = media_handle_upload('easy_image', $product_id);
-            if (!is_wp_error($att_id)) {
-                set_post_thumbnail($product_id, $att_id);
-            }
+/* ==========================================================================
+ * REST — "List an item" in EASY Manager (Suite 2.2.55)
+ * --------------------------------------------------------------------------
+ * The same listing flow as the web form, for the phone app: the app
+ * uploads a photo through the core media endpoint first (the account's
+ * own upload_files capability), then posts the listing here with the
+ * attachment ID. Gated exactly like the page: handpicked Settings list
+ * plus a listing-capable role. Listings are pending, never published.
+ * ========================================================================== */
+
+add_action('rest_api_init', function () {
+    register_rest_route('easy/v1', '/list-product', [
+        [
+            'methods'             => 'GET',
+            'callback'            => 'easy_shop_rest_list_product_get',
+            'permission_callback' => 'is_user_logged_in',
+        ],
+        [
+            'methods'             => 'POST',
+            'callback'            => 'easy_shop_rest_list_product_post',
+            'permission_callback' => 'is_user_logged_in',
+        ],
+    ]);
+});
+
+function easy_shop_rest_list_product_get() {
+    if (!easy_suite_is_product_lister()) {
+        return new WP_Error('easy_list_product_forbidden', 'This account is not on the List a Product list.', ['status' => 403]);
+    }
+    $cats = [];
+    foreach (easy_public_product_cats() as $t) {
+        $cats[] = ['id' => (int) $t->term_id, 'name' => $t->name];
+    }
+    $mine = get_posts([
+        'post_type'      => 'product',
+        'author'         => get_current_user_id(),
+        'posts_per_page' => 20,
+        'post_status'    => ['pending', 'draft', 'publish'],
+        'orderby'        => 'date',
+        'order'          => 'DESC',
+    ]);
+    $listings = [];
+    foreach ((array) $mine as $m) {
+        $listings[] = [
+            'id'     => (int) $m->ID,
+            'name'   => $m->post_title,
+            'status' => $m->post_status,
+            'price'  => get_post_meta($m->ID, '_regular_price', true),
+        ];
+    }
+    return ['categories' => $cats, 'listings' => $listings];
+}
+
+function easy_shop_rest_list_product_post($request) {
+    if (!easy_suite_is_product_lister()) {
+        return new WP_Error('easy_list_product_forbidden', 'This account is not on the List a Product list.', ['status' => 403]);
+    }
+    $params = $request->get_json_params();
+    if (!is_array($params)) {
+        $params = $request->get_body_params();
+    }
+    $params = is_array($params) ? $params : [];
+    $name   = isset($params['name']) ? sanitize_text_field((string) $params['name']) : '';
+    $name   = function_exists('mb_substr') ? mb_substr($name, 0, 120) : substr($name, 0, 120);
+    $desc   = isset($params['description']) ? wp_kses_post((string) $params['description']) : '';
+    $price  = isset($params['price']) ? sanitize_text_field((string) $params['price']) : '';
+    $stock  = isset($params['stock']) ? sanitize_text_field((string) $params['stock']) : '';
+    $cat_id = isset($params['category_id']) ? (int) $params['category_id'] : 0;
+
+    $product_id = easy_suite_create_pending_product([
+        'name'   => $name,
+        'desc'   => $desc,
+        'price'  => $price,
+        'stock'  => $stock,
+        'cat_id' => $cat_id,
+        'author' => get_current_user_id(),
+    ]);
+    if (!$product_id) {
+        return new WP_Error('easy_list_product_invalid', 'The listing could not be saved. Check the name, price (like 25 or 25.50) and how many you have in stock.', ['status' => 400]);
+    }
+    // Optional photo, already uploaded by the app: only an image the
+    // account uploaded itself (or can edit) may become the photo.
+    $image_id = isset($params['image_id']) ? (int) $params['image_id'] : 0;
+    if ($image_id && current_user_can('upload_files')) {
+        $att = get_post($image_id);
+        if ($att && $att->post_type === 'attachment'
+            && strpos((string) $att->post_mime_type, 'image/') === 0
+            && ((int) $att->post_author === get_current_user_id() || current_user_can('edit_post', $image_id))
+        ) {
+            set_post_thumbnail($product_id, $image_id);
         }
     }
-
-    wp_safe_redirect(add_query_arg('easy_added', '1', $referer));
-    exit;
-});
+    return ['id' => $product_id, 'status' => 'pending'];
+}
 

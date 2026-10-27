@@ -129,6 +129,7 @@ All routes are under `/wp-json/easy/v1/`.
 | `cert-number` | Accounts that can edit certificates |
 | `roster/<id>` (GET) | Office accounts (admins and proxy posters) and handpicked Schedule editors |
 | `roster/<id>` (PUT) | Accounts that can edit the class |
+| `list-product` (GET/POST) | Handpicked List a Product accounts (Settings list + a listing-capable role); listings are created pending, as on the web form |
 | `checkin/<id>` (GET) | Office accounts and accounts that can edit the class |
 | `checkin/<id>/create`, `checkin/<id>/regenerate`, `checkin/<id>/close` (POST) | Accounts that can edit the class |
 | `sale-state/<id>` | Accounts that can edit certificates |

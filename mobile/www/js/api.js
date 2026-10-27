@@ -34,6 +34,9 @@
 //   Cert PDF        GET  /wp-json/easy/v1/cert-pdf/<number> (Suite 2.2.31)
 //   Calendar links  GET  /wp-json/easy/v1/instructor-feeds (Suite 2.2.28)
 //   Site activity   GET  /wp-json/easy/v1/activity (Suite 2.2.36)
+//   List a Product  GET  /wp-json/easy/v1/list-product (Suite 2.2.55)
+//                   POST /wp-json/easy/v1/list-product (pending listing)
+//                   POST /wp-json/wp/v2/media (the photo, uploaded first)
 //   Practicals      GET  /wp-json/easy/v1/practicals (Suite 2.2.45)
 //                   POST /wp-json/easy/v1/practicals (new time)
 //                   POST /wp-json/easy/v1/practicals/<id>/cancel|book
@@ -1019,6 +1022,45 @@
     return r.json || {};
   }
 
+  /* ---------------- list a product (Suite 2.2.55) ---------------- */
+
+  // Categories the listing form may use, plus this account's own
+  // listings with their review status.
+  async function listProduct() {
+    const r = await request('/easy/v1/list-product');
+    const body = r.json || {};
+    return {
+      categories: Array.isArray(body.categories) ? body.categories : [],
+      listings: Array.isArray(body.listings) ? body.listings : [],
+    };
+  }
+
+  // One listing, created as pending for office review, never published.
+  async function createListing(fields) {
+    const r = await request('/easy/v1/list-product', { method: 'POST', body: fields });
+    return r.json || {};
+  }
+
+  // Photo upload through the core media endpoint (the account's own
+  // upload_files capability). FormData: the browser sets the boundary.
+  async function uploadMedia(file) {
+    const auth = authHeader();
+    const form = new FormData();
+    form.append('file', file, file && file.name ? file.name : 'photo.jpg');
+    const res = await fetchWithTimeout(WP + '/wp/v2/media', {
+      method: 'POST',
+      headers: { ...(auth ? { Authorization: auth } : {}) },
+      body: form,
+    });
+    const json = await res.json().catch(() => null);
+    if (res.status < 200 || res.status >= 300 || !json || !json.id) {
+      const err = new Error((json && json.message) || 'The photo could not be uploaded.');
+      err.status = res.status;
+      throw err;
+    }
+    return json;
+  }
+
   // Course-builder identity; pendingReviews is a real count only when
   // the caller is a reviewer.
   async function courseBuilderMe() {
@@ -1132,6 +1174,9 @@
     queueLifecycleErrorText,
     siteHealth,
     appConfig,
+    listProduct,
+    createListing,
+    uploadMedia,
     courseBuilderMe,
     practicals,
     practicalsWaiting,

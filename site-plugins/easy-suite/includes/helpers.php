@@ -65,22 +65,32 @@ function easy_core_get_notification_time() {
     return '09:00'; // default: 9 AM site time
 }
 
+/**
+ * Function-only pages that stay noindexed no matter what the Settings
+ * list says: a private page dropping off the list by accident should
+ * never make it indexable. Merged into every result below.
+ */
+define('EASY_NOINDEX_ALWAYS', [
+    'management-queue', // private: decision forms for Colleen and Scott only
+    'list-a-product',   // private: Dad's product-listing page (unlisted, gated)
+]);
+
 function easy_core_get_noindex_paths() {
+    $paths = [];
     $raw = get_option('easy_noindex_paths', '');
     if (is_string($raw) && trim($raw) !== '') {
         $lines = preg_split('/[\r\n]+/', $raw);
-        $paths = [];
         foreach ($lines as $line) {
             $line = trim(trim($line), '/');
             if ($line !== '') {
                 $paths[] = $line;
             }
         }
-        if (!empty($paths)) {
-            return $paths;
-        }
     }
-    return EASY_NOINDEX_PATHS; // historical default
+    if (empty($paths)) {
+        $paths = EASY_NOINDEX_PATHS; // historical default
+    }
+    return array_values(array_unique(array_merge($paths, EASY_NOINDEX_ALWAYS)));
 }
 
 /**
@@ -90,6 +100,7 @@ function easy_core_get_noindex_paths() {
  */
 
 define('EASY_NOINDEX_PATHS', [
+    'management-queue', // private: decision forms for Colleen and Scott only
     'list-a-product',   // private: Dad's product-listing page (unlisted, gated)
     'cart',
     'checkout',

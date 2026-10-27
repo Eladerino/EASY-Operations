@@ -418,9 +418,10 @@
   /* ---------------- roles ---------------- */
 
   // Shows only the screens this account can use (roles.js). The Suite's
-  // app-config adds proxyPoster (office staff who post for others); if
-  // it cannot be reached the capabilities alone decide. "Needs
-  // attention" disappears when none of its boxes apply.
+  // app-config adds the handpicked-list flags (proxy posters, Schedule
+  // editors, account approvers, certificate publishers, product
+  // listers); if it cannot be reached the capabilities alone decide.
+  // "Needs attention" disappears when none of its boxes apply.
   function applyRoles() {
     window.EasyRoles.apply();
     const grid = $('needsAttentionGrid');
@@ -432,14 +433,23 @@
 
   async function loadRoles(user) {
     const caps = user && user.capabilities;
-    window.EasyRoles.set(caps, false);
+    window.EasyRoles.set(caps, false, {});
     applyRoles();
-    if (!window.EasyRoles.isManager() && caps) {
+    if (caps) {
       try {
+        // app-config carries the handpicked-list flags (proxy posters,
+        // Schedule editors, account approvers, certificate publishers,
+        // product listers). Managers need it too: the product list is
+        // list-based, not a capability, so an admin on the list would
+        // otherwise never see the List an item screen.
         const cfg = await window.EasyApi.appConfig();
-        const proxy = Boolean(cfg && cfg.proxyPoster);
-        if (proxy) {
-          window.EasyRoles.set(caps, true);
+        if (cfg) {
+          window.EasyRoles.set(caps, Boolean(cfg.proxyPoster), {
+            scheduleEditor: Boolean(cfg.scheduleEditor),
+            accountApprover: Boolean(cfg.accountApprover),
+            certPublisher: Boolean(cfg.certPublisher),
+            productLister: Boolean(cfg.productLister),
+          });
           applyRoles();
           if (currentTab === 'today') window.EasyToday.show();
         }

@@ -670,6 +670,7 @@ add_action('rest_api_init', function () {
                 'scheduleEditor' => easy_suite_is_schedule_editor(),
                 'accountApprover' => easy_suite_is_account_approver(),
                 'certPublisher'  => easy_suite_is_cert_publisher(),
+                'productLister'  => function_exists('easy_suite_is_product_lister') ? easy_suite_is_product_lister() : false,
                 'version'        => EASY_SUITE_VERSION,
             ];
         },
