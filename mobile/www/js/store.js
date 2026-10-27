@@ -19,10 +19,40 @@
     return null;
   }
 
+  // The Secure Storage plugin's friendly getItem/setItem/removeItem
+  // live in its bundled JS wrapper, which this app does not load; the
+  // native bridge exposes only the internal methods underneath them
+  // (internalGetItem and friends, keyed by the plugin's own prefixed
+  // key). These adapters use whichever shape the loaded plugin has.
+  // (0.6.2 called setItem directly and sign-in failed on device with
+  // "secure.setItem is not a function".)
+  const SECURE_PREFIX = 'capacitor-storage_'; // the plugin's default
+
   function secureStorage() {
     const cap = window.Capacitor;
-    if (cap && cap.Plugins && cap.Plugins.SecureStorage) return cap.Plugins.SecureStorage;
+    const s = cap && cap.Plugins && cap.Plugins.SecureStorage;
+    if (!s) return null;
+    if (typeof s.getItem === 'function' || typeof s.internalGetItem === 'function') return s;
     return null;
+  }
+
+  async function secureGet(key) {
+    const s = secureStorage();
+    if (typeof s.getItem === 'function') return s.getItem(key);
+    const res = await s.internalGetItem({ prefixedKey: SECURE_PREFIX + key });
+    return res && res.data !== undefined ? res.data : null;
+  }
+
+  async function secureSet(key, value) {
+    const s = secureStorage();
+    if (typeof s.setItem === 'function') return s.setItem(key, value);
+    return s.internalSetItem({ prefixedKey: SECURE_PREFIX + key, data: value });
+  }
+
+  async function secureRemove(key) {
+    const s = secureStorage();
+    if (typeof s.removeItem === 'function') return s.removeItem(key);
+    return s.internalRemoveItem({ prefixedKey: SECURE_PREFIX + key });
   }
 
   async function get(key, fallback) {
@@ -70,37 +100,44 @@
   // Storage, so the Preferences/localStorage path is used as before.
 
   async function getCreds() {
-    const secure = secureStorage();
-    if (!secure) return get('creds', null);
+    if (!secureStorage()) return get('creds', null);
     try {
-      const raw = await secure.getItem('creds');
+      const raw = await secureGet('creds');
       if (raw !== null && raw !== undefined) return JSON.parse(raw);
     } catch (e) {
       // Fall through to the legacy copy rather than signing out.
     }
     const legacy = await get('creds', null);
     if (legacy) {
-      await setCreds(legacy);
-      await remove('creds');
+      try {
+        await setCreds(legacy);
+        await remove('creds');
+      } catch (e) {
+        // Migration is best-effort; the legacy copy still works.
+      }
     }
     return legacy;
   }
 
   async function setCreds(creds) {
-    const secure = secureStorage();
-    if (!secure) {
+    if (!secureStorage()) {
       await set('creds', creds);
       return;
     }
-    await secure.setItem('creds', JSON.stringify(creds === undefined ? null : creds));
-    await remove('creds'); // never leave a plain copy behind
+    try {
+      await secureSet('creds', JSON.stringify(creds === undefined ? null : creds));
+      await remove('creds'); // never leave a plain copy behind
+    } catch (e) {
+      // A sign-in that cannot save is worse than one saved the old
+      // way; the migration in getCreds keeps trying on later launches.
+      await set('creds', creds);
+    }
   }
 
   async function clearCreds() {
-    const secure = secureStorage();
-    if (secure) {
+    if (secureStorage()) {
       try {
-        await secure.removeItem('creds');
+        await secureRemove('creds');
       } catch (e) {
         // Already gone.
       }
