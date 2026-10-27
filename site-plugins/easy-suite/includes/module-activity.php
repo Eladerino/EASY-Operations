@@ -599,6 +599,7 @@ function easy_activity_item_from_row($row) {
         'title'    => (string) $row->title,
         'action'   => (string) $row->action,
         'summary'  => easy_activity_summary((string) $row->action, $detail),
+        'detail'   => $detail,
         'actor'    => $actor,
         'actor_id' => $user_id,
         'at'       => easy_activity_ts_ms((string) $row->created_at),
@@ -619,7 +620,7 @@ function easy_activity_item_from_row($row) {
 function easy_activity_query($args) {
     global $wpdb;
     $kind = isset($args['kind']) ? (string) $args['kind'] : 'all';
-    if (!in_array($kind, array('all', 'class', 'cert', 'account', 'queue'), true)) {
+    if (!in_array($kind, array('all', 'class', 'cert', 'account', 'queue', 'checkin'), true)) {
         $kind = 'all';
     }
     $user_id = isset($args['user_id']) ? max(0, (int) $args['user_id']) : 0;
@@ -786,6 +787,18 @@ function easy_activity_phrase($item) {
                 return 'Marked resolved: ' . $title;
             }
             return 'Answered: ' . $title;
+        case 'checkin':
+            if ($item['action'] === 'checked_in') {
+                $name = isset($item['detail']['name']) ? trim((string) $item['detail']['name']) : '';
+                return 'Checked in: ' . ($name !== '' ? $name . ' (' . $title . ')' : $title);
+            }
+            $verbs = array(
+                'link_created'     => 'Created check-in link',
+                'link_regenerated' => 'Created a new check-in link',
+                'closed'           => 'Closed check-in',
+            );
+            $verb = isset($verbs[$item['action']]) ? $verbs[$item['action']] : 'Check-in update';
+            return $verb . ': ' . $title;
     }
     return $title;
 }
@@ -795,7 +808,7 @@ function easy_activity_admin_page() {
         wp_die(esc_html__('You do not have permission to view this page.', 'easy-suite'));
     }
     $kind = isset($_GET['kind']) ? sanitize_key(wp_unslash($_GET['kind'])) : 'all';
-    if (!in_array($kind, array('all', 'class', 'cert', 'account', 'queue'), true)) {
+    if (!in_array($kind, array('all', 'class', 'cert', 'account', 'queue', 'checkin'), true)) {
         $kind = 'all';
     }
     $user_id = isset($_GET['user']) ? absint(wp_unslash($_GET['user'])) : 0;
@@ -825,7 +838,7 @@ function easy_activity_admin_page() {
 
     echo '<div class="wrap" style="max-width:1000px;"><h1>Activity</h1>';
     easy_suite_admin_tabs('easy-suite-activity');
-    echo '<p>Who did what across the website, the desktop app, and the phone app: classes scheduled or edited, certificates published, account signups decided, and management queue answers. Queue activity reflects current decisions: reopening a question removes its entry here. Entries are kept for 12 months.</p>';
+    echo '<p>Who did what across the website, the desktop app, and the phone app: classes scheduled or edited, certificates published, account signups decided, management queue answers, and class check-ins. Queue activity reflects current decisions: reopening a question removes its entry here. Entries are kept for 12 months.</p>';
 
     $base = admin_url('admin.php?page=easy-suite-activity');
     $kind_labels = array(
@@ -834,6 +847,7 @@ function easy_activity_admin_page() {
         'cert'    => 'Certificates',
         'account' => 'Accounts',
         'queue'   => 'Queue',
+        'checkin' => 'Check-ins',
     );
     echo '<p>';
     $first = true;

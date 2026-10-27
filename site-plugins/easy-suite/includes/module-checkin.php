@@ -105,6 +105,22 @@ function easy_checkin_waiver_ready($type) {
  * Tokens
  * ========================================================================== */
 
+/** The site's header logo, for the check-in page header. The Customizer
+ * logo wins when one is set; Avada keeps its header logo in its own
+ * options, so the fallback is the live site's current header logo file
+ * (verified on easysafety.ca, Oct 27, 2026). If the header logo is ever
+ * replaced with a new upload, update this path to match. */
+function easy_checkin_logo_url() {
+    $id = (int) get_theme_mod('custom_logo');
+    if ($id > 0) {
+        $url = wp_get_attachment_image_url($id, 'full');
+        if (is_string($url) && $url !== '') {
+            return $url;
+        }
+    }
+    return content_url('uploads/2026/10/EASYLOGO-300x300.png');
+}
+
 function easy_checkin_token_url($token) {
     return home_url('/check-in/' . $token . '/');
 }
@@ -565,10 +581,24 @@ function easy_checkin_page_head($title) {
         . '.done{text-align:center;padding:2rem 1rem;}'
         . '.check{width:6rem;height:6rem;line-height:6rem;border-radius:50%;background:#1e7a34;color:#fff;font-size:3.5rem;margin:1rem auto;}'
         . '.small{font-size:.95rem;color:#50575e;}'
-        . '</style></head><body><main>';
+        . '.brand{text-align:center;padding:1.25rem 1rem 0;}'
+        . '.brand a{text-decoration:none;}'
+        . '.brand img{width:84px;height:84px;}'
+        . '.brandname{font-size:1.25rem;font-weight:700;color:#1d2327;}'
+        . '</style></head><body>';
+    $logo = easy_checkin_logo_url();
+    echo '<header class="brand"><a href="' . esc_url(home_url('/')) . '" aria-label="EASY Safety Training home page">';
+    if ($logo !== '') {
+        echo '<img src="' . esc_url($logo) . '" alt="EASY Safety Training">';
+    } else {
+        echo '<span class="brandname">EASY Safety Training</span>';
+    }
+    echo '</a></header><main>';
 }
 
 function easy_checkin_page_foot() {
+    echo '<p class="small" style="text-align:center;">Questions? Call the office at '
+        . esc_html(EASY_CHECKIN_OFFICE_PHONE) . '.</p>';
     echo '</main></body></html>';
 }
 
@@ -962,6 +992,11 @@ function easy_checkin_handle_submit($event_id, $rec, $facts, $self_url) {
     if (is_wp_error($saved)) {
         easy_checkin_message_page('Something went wrong', 'Your check-in could not be saved. Please show this screen to your instructor so they can check you in another way.');
     }
+    easy_checkin_log($event_id, 'checked_in', array(
+        'name'   => (string) ($new['name'] ?? ''),
+        'status' => (string) $new['checkin_status'],
+        'via'    => (string) $new['checkin_source'],
+    ));
     easy_checkin_render_done($facts, $new);
 }
 
@@ -1154,6 +1189,10 @@ function easy_checkin_metabox($post) {
                 if (!empty($r['waiver_signature'])) {
                     echo ' <a href="' . esc_url(easy_checkin_signature_url($r['waiver_signature'])) . '" target="_blank" rel="noopener">signature</a>';
                 }
+                $emg = trim((string) ($r['emergency_name'] ?? '') . ' ' . (string) ($r['emergency_phone'] ?? ''));
+                if ($emg !== '') {
+                    echo '<br><span class="description">Emergency contact: ' . esc_html($emg) . '</span>';
+                }
                 echo '</li>';
             }
             echo '</ul>';
@@ -1280,7 +1319,8 @@ add_action('admin_post_easy_checkin_print', function () {
     $rows = max(12, count($roster));
     for ($i = 0; $i < $rows; $i++) {
         $name = isset($roster[$i]['name']) ? (string) $roster[$i]['name'] : '';
-        echo '<tr><td>' . (int) ($i + 1) . '</td><td>' . esc_html($name) . '</td><td class="sig">&nbsp;</td><td class="emg">&nbsp;</td></tr>';
+        $emg = isset($roster[$i]) ? trim((string) ($roster[$i]['emergency_name'] ?? '') . ' ' . (string) ($roster[$i]['emergency_phone'] ?? '')) : '';
+        echo '<tr><td>' . (int) ($i + 1) . '</td><td>' . esc_html($name) . '</td><td class="sig">&nbsp;</td><td class="emg">' . ($emg !== '' ? esc_html($emg) : '&nbsp;') . '</td></tr>';
     }
     echo '</tbody></table></section>';
 
