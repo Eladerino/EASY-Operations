@@ -56,6 +56,7 @@
         <button id="signinBtn" type="submit" class="btn btn-primary btn-block">Sign in</button>
       </form>
       <button id="signinUpdatesBtn" type="button" class="btn btn-small btn-ghost btn-block native-only">Check for app updates</button>
+      <p id="signinVersion" class="hint version-line"></p>
     </div>
   </section>
 
@@ -118,7 +119,6 @@
             <button id="todayActivityBtn" type="button" class="btn btn-small btn-ghost">View all</button>
           </div>
           <div id="todayRecent"></div>
-          <p id="suiteLine" class="hint"></p>
           <p class="footer-note">
             <button id="checkUpdatesBtn" type="button" class="btn btn-small btn-ghost native-only">Check for app updates</button>
           </p>
@@ -130,6 +130,7 @@
               <button type="button" class="seg-btn" data-theme-choice="dark">Dark</button>
             </div>
           </div>
+          <p id="appFooter" class="hint version-line"></p>
         </div>
         <div id="rosterView" class="hidden">
           <div class="page-head">
@@ -138,6 +139,14 @@
           </div>
           <h3 id="rosterTitle" class="section-title"></h3>
           <div id="rosterList"></div>
+        </div>
+        <div id="checkinView" class="hidden">
+          <div class="page-head">
+            <h2>Check-in</h2>
+            <button id="checkinBack" type="button" class="btn btn-small btn-secondary">Back</button>
+          </div>
+          <h3 id="checkinTitle" class="section-title"></h3>
+          <div id="checkinBody"></div>
         </div>
         <div id="activityView" class="hidden">
           <div class="page-head">
@@ -538,6 +547,17 @@
 
   <div id="toasts"></div>
 
+  <!-- Full-screen QR for holding the phone up in class -->
+  <div id="qrShowView" class="qr-show hidden">
+    <div class="qr-show-card">
+      <h2 id="qrShowTitle"></h2>
+      <canvas id="qrShowCanvas" width="880" height="880"></canvas>
+      <p id="qrShowCode" class="qr-show-code"></p>
+      <p id="qrShowUrl" class="hint"></p>
+      <button id="qrShowClose" type="button" class="btn btn-primary btn-block">Done</button>
+    </div>
+  </div>
+
   <script src="js/config.js"></script>
   <script src="js/util.js"></script>
   <script src="js/store.js"></script>
@@ -546,6 +566,8 @@
   <script src="js/websignin.js"></script>
   <script src="js/updater.js"></script>
   <script src="js/today.js"></script>
+  <script src="js/qrcode.js"></script>
+  <script src="js/checkin.js"></script>
   <script src="js/approvals.js"></script>
   <script src="js/queue.js"></script>
   <script src="js/alerts.js"></script>

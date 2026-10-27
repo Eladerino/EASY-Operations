@@ -953,3 +953,16 @@ textarea.answer-input { line-height: 1.45; }
 .chip-fail { border-color: var(--error); color: var(--error); }
 #askToggle { margin: var(--sp-2) 0 var(--sp-3); }
 #certSearchForm { margin-bottom: var(--sp-2); }
+
+/* Version footers (0.6.4): the sign-in card and the bottom of Today. */
+.version-line { text-align: center; font-size: 13px; margin-top: var(--sp-4); }
+
+/* Check-in QR (0.6.4) */
+.qr-wrap { text-align: center; margin: var(--sp-3) 0; }
+.qr-wrap canvas { background: #fff; padding: 10px; border-radius: 8px; width: 100%; max-width: 260px; height: auto; }
+.checkin-code { text-align: center; font-size: 26px; font-weight: 700; letter-spacing: 4px; margin: var(--sp-2) 0 0; }
+.checkin-url { text-align: center; word-break: break-all; }
+.qr-show { position: fixed; inset: 0; z-index: 60; background: #fff; color: #111; overflow-y: auto; display: flex; align-items: flex-start; justify-content: center; padding: 24px 16px; }
+.qr-show-card { width: 100%; max-width: 520px; text-align: center; }
+.qr-show-card canvas { width: 100%; height: auto; }
+.qr-show-code { font-size: 34px; font-weight: 700; letter-spacing: 6px; margin: 12px 0 4px; }

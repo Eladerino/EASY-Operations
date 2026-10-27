@@ -1,0 +1,8 @@
+qrcode.js: QR Code Generator for JavaScript, version 1.4.4
+Copyright (c) 2009 Kazuhiko Arase
+Licensed under the MIT license: https://www.opensource.org/licenses/mit-license.php
+Source: https://github.com/kazuhikoarase/qrcode-generator (npm package "qrcode-generator")
+
+Bundled so check-in QR codes are drawn locally in the browser. The
+check-in link (a secret token URL) is never sent to any third-party
+QR service.

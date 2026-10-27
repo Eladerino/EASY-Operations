@@ -663,6 +663,8 @@
     };
     $('checkUpdatesBtn').addEventListener('click', checkNow);
     $('signinUpdatesBtn').addEventListener('click', checkNow);
+    const signinVersion = $('signinVersion');
+    if (signinVersion) signinVersion.textContent = 'EASY Manager ' + window.EasyConfig.APP_VERSION;
     // A tab goes back to the page last open under it.
     for (const btn of document.querySelectorAll('.tab-btn')) {
       btn.addEventListener('click', () => showTab(lastPage[btn.dataset.tab] || btn.dataset.tab));

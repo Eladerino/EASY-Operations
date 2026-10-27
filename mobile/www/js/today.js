@@ -51,6 +51,15 @@
     if (withRoster) {
       card.appendChild(U.el('div', 'card-meta', 'Tap to see who is on the roster.'));
       card.addEventListener('click', () => openRoster(ev));
+      const actions = U.el('div', 'card-actions');
+      const qrBtn = U.el('button', 'btn btn-small btn-secondary', 'Check-in QR');
+      qrBtn.type = 'button';
+      qrBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (window.EasyCheckin) window.EasyCheckin.open(ev);
+      });
+      actions.appendChild(qrBtn);
+      card.appendChild(actions);
     }
     return card;
   }
@@ -274,20 +283,23 @@
         .then((me) => reviews(me && me.isReviewer && typeof me.pendingReviews === 'number' ? me.pendingReviews : null))
         .catch(() => reviews(null));
     }
-    // Suite version line: also the "is the site even answering" check.
+    // Footer line at the very bottom of Today: the app version, then
+    // site reachability and the Suite version (also the "is the site
+    // even answering" check).
     window.EasyApi.appConfig()
       .then((cfg) => {
-        const node = $('suiteLine');
+        const node = $('appFooter');
         if (!node) return;
-        node.textContent = cfg && cfg.version
-          ? 'Site reachable, EASY Suite ' + cfg.version
-          : 'Site reachable';
+        node.textContent = 'EASY Manager ' + window.EasyConfig.APP_VERSION + ' · ' +
+          (cfg && cfg.version
+            ? 'Site reachable, EASY Suite ' + cfg.version
+            : 'Site reachable');
         node.classList.remove('error-text');
       })
       .catch(() => {
-        const node = $('suiteLine');
+        const node = $('appFooter');
         if (!node) return;
-        node.textContent = 'Site did not answer just now.';
+        node.textContent = 'EASY Manager ' + window.EasyConfig.APP_VERSION + ' · Site did not answer just now.';
         node.classList.add('error-text');
       });
   }

@@ -40,8 +40,14 @@ WordPress credentials at runtime.
   read only. The Activity screen also has a This phone / Site switch:
   Site shows the site-wide activity log from EASY Suite (what the
   whole team did, on any surface), read from the site and never
-  stored on the device. Below it, a footer line showing the EASY Suite version
-  on the site, which doubles as a "did the site answer" check. The last
+  stored on the device. Below it, a footer line showing this app's version,
+  whether the site answered, and the EASY Suite version on the site. Each
+  class card also has a Check-in QR button (EASY Suite 2.2.51 or newer)
+  opening the class's QR sign-in link: live checked-in counts, the QR
+  drawn in the app, a full-screen show mode for the classroom, the QR
+  as a shareable PNG, and create / replace / close for the link, each
+  confirmed first. The sign-in screen shows the app version at the
+  bottom of its card. The last
   good class list is kept on the device, so the screen paints straight
   away and says when it is showing a saved copy instead of fresh data.
 - **Practicals** (EASY Suite 2.2.45 or newer): practical evaluations for

@@ -727,6 +727,33 @@
     return Array.isArray(body.roster) ? body.roster : [];
   }
 
+  /* ---------------- class check-in (QR) ---------------- */
+  // The Suite check-in routes (Suite 2.2.51+). A read gives the link
+  // state and live counts; the full token only ever comes back from
+  // create/regenerate, and the payload's qr_url already points at the
+  // right address for the moment (the full token right after minting,
+  // the short code afterwards), so callers always draw qr_url.
+
+  async function checkin(eventId) {
+    const r = await request('/easy/v1/checkin/' + eventId);
+    return r.json || {};
+  }
+
+  async function checkinCreate(eventId) {
+    const r = await request('/easy/v1/checkin/' + eventId + '/create', { method: 'POST', body: {} });
+    return r.json || {};
+  }
+
+  async function checkinRegenerate(eventId) {
+    const r = await request('/easy/v1/checkin/' + eventId + '/regenerate', { method: 'POST', body: {} });
+    return r.json || {};
+  }
+
+  async function checkinClose(eventId) {
+    const r = await request('/easy/v1/checkin/' + eventId + '/close', { method: 'POST', body: {} });
+    return r.json || {};
+  }
+
   /* ---------------- expiring certificates ---------------- */
 
   async function expiringCerts(days) {
@@ -1090,6 +1117,10 @@
     activityNeedsNewerSuite,
     saleState,
     roster,
+    checkin,
+    checkinCreate,
+    checkinRegenerate,
+    checkinClose,
     expiringCerts,
     mgmtQueue,
     addQuestion,
