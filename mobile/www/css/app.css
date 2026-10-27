@@ -373,6 +373,51 @@ a.btn { text-decoration: none; box-sizing: border-box; }
   width: 100%;
 }
 
+/* Web version scrolling (html.web-mode is set at boot when this is not
+   the native app): in a real browser the page itself scrolls, not the
+   inner .pages box. Mobile Safari pinch zoom pans a visual viewport
+   over the layout; an inner overflow scroller fights that pan, which
+   is the jank seen once the page is zoomed in and then scrolled
+   (reported Oct 27, 2026). Letting the document scroll makes zooming
+   and panning plain browser behaviour. The header and tab bar go
+   sticky so they stay put while the document scrolls, and the pages
+   grow with their content instead of clipping it into a box. The
+   native app keeps the shell above untouched: its WebView has no
+   pinch zoom, and its keyboard and pull-to-refresh behaviour were
+   tuned against the inner scroller. Pull-to-refresh in web mode
+   reads the window scroll position instead (app.js). */
+.web-mode body {
+  display: block;
+  height: auto;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+.web-mode #appView {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+.web-mode .app-header {
+  position: sticky;
+  top: 0;
+}
+.web-mode .pages {
+  flex: 1 0 auto;
+  min-height: 0;
+  overflow-y: visible;
+  overscroll-behavior: auto;
+}
+.web-mode .tabbar {
+  position: sticky;
+  bottom: 0;
+}
+.web-mode .signin {
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow-y: visible;
+}
+
 /* Pull-to-refresh indicator: first child of the scroller, height 0
    until a pull expands it. The ring winds as the pull grows and
    spins while the refresh runs. */

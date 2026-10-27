@@ -1,6 +1,6 @@
 {
   "name": "easy-manager",
-  "version": "0.6.5",
+  "version": "0.6.6",
   "description": "EASY Manager: personal management companion app for EASY Safety Training (sideloaded Android).",
   "private": true,
   "scripts": {

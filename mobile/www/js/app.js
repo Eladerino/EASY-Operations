@@ -214,7 +214,9 @@
   }
 
   /* ---------------- pull to refresh ---------------- */
-  // The .pages element is the app's one scroll container. A downward
+  // The .pages element is the app's one scroll container (in the web
+  // version the document scrolls instead; see pageScrollTop below).
+  // A downward
   // pull that starts with the scroller at the very top expands the
   // indicator at the head of the content; releasing it past the
   // threshold runs the active tab's own refresh, the same paths the
@@ -251,11 +253,22 @@
     let armed = false; // pull is past the release threshold
     let refreshing = false;
 
+    // In web mode the document scrolls instead of the .pages box
+    // (see the web-mode block in app.css), so "at the top" is the
+    // window's scroll position there and the container's elsewhere.
+    const webScroll = document.documentElement.classList.contains('web-mode');
+    const pageScrollTop = () => (webScroll ? window.scrollY || 0 : scroller.scrollTop);
+    // While the page is zoomed in (browser pinch zoom), a downward
+    // drag is the user panning the zoomed view, never a pull.
+    const pageZoomed = () =>
+      Boolean(window.visualViewport && window.visualViewport.scale > 1.05);
+
     const ptrAllowed = () =>
       !refreshing &&
       !$('appView').classList.contains('hidden') &&
       subviewClose === null &&
-      scroller.scrollTop <= 0;
+      !pageZoomed() &&
+      pageScrollTop() <= 0;
 
     function setBar(height, text, spinning) {
       bar.style.height = height + 'px';
@@ -295,7 +308,7 @@
     scroller.addEventListener(
       'touchstart',
       (ev) => {
-        if (ev.touches.length !== 1 || !ptrAllowed()) {
+        if (ev.touches.length !== 1 || pageZoomed() || !ptrAllowed()) {
           startY = null;
           return;
         }
@@ -310,7 +323,7 @@
       'touchmove',
       (ev) => {
         if (startY === null || refreshing) return;
-        if (ev.touches.length !== 1 || subviewClose !== null || scroller.scrollTop > 0) {
+        if (ev.touches.length !== 1 || subviewClose !== null || pageZoomed() || pageScrollTop() > 0) {
           // The gesture turned into something else (a second finger,
           // a subview opened, the container scrolled): abandon it.
           if (pull > 0) collapse();

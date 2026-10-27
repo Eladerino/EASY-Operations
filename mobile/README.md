@@ -236,6 +236,13 @@ the zip carries the app and the site serves it as plain files at
 the Suite's phone-app module). A phone app change reaches iPhones on
 the next Publish Suite; Android still needs Build APK.
 
+Scrolling differs by version (0.6.6): the Android app keeps its fixed
+shell with one inner scroll area, while in a browser the page itself
+scrolls (sticky header and tab bar, pull-to-refresh reading the window
+scroll position, and pull-to-refresh never engaging while the page is
+pinch-zoomed). The inner scroller fought mobile Safari's zoom pan and
+made scrolling feel broken once the page was zoomed in.
+
 - `manifest.webmanifest` and the `img/icon-*` files make Add to Home
   Screen open it full screen with the EASY icon.
 - `sw.js` fetches the app's own files fresh every time (so a Suite
