@@ -722,12 +722,41 @@
     return r.json || {};
   }
 
-  /* ---------------- class roster (read only) ---------------- */
+  /* ---------------- class roster ---------------- */
 
   async function roster(eventId) {
     const r = await request('/easy/v1/roster/' + eventId);
     const body = r.json || {};
     return Array.isArray(body.roster) ? body.roster : [];
+  }
+
+  // The roster with its revision, for editing: saves must carry the
+  // revision from the last load so the server can reject a save that
+  // would overwrite someone else's change (an online seat sale, a
+  // desktop edit) instead of silently clobbering it.
+  async function rosterFull(eventId) {
+    const r = await request('/easy/v1/roster/' + eventId);
+    const body = r.json || {};
+    return {
+      roster: Array.isArray(body.roster) ? body.roster : [],
+      revision: body.revision !== undefined ? body.revision : null,
+    };
+  }
+
+  // Save the whole roster back, the same write the desktop app makes.
+  // Records must go back complete (every field they arrived with),
+  // because the server sanitizes what it is sent: a field left out
+  // is a field erased. A 409 means the list changed since the load.
+  async function saveRoster(eventId, records, revision) {
+    const r = await request('/easy/v1/roster/' + eventId, {
+      method: 'PUT',
+      body: { roster: records, revision },
+    });
+    const body = r.json || {};
+    return {
+      roster: Array.isArray(body.roster) ? body.roster : [],
+      revision: body.revision !== undefined ? body.revision : null,
+    };
   }
 
   /* ---------------- class check-in (QR) ---------------- */
@@ -1159,6 +1188,8 @@
     activityNeedsNewerSuite,
     saleState,
     roster,
+    rosterFull,
+    saveRoster,
     checkin,
     checkinCreate,
     checkinRegenerate,

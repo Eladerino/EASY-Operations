@@ -983,9 +983,22 @@
     }
   }
 
+  // Start a NEW certificate filled in from elsewhere in the app
+  // (the roster's checked-in list): same form, same validation, no
+  // draft is being edited, so any edit mode is cleared first.
+  function prefillNew(acf) {
+    window.EasyViews.showView('certs');
+    if (window.EasyCertTabs) window.EasyCertTabs.show('new');
+    cancelEdit();
+    prefillFromAcf(acf || {});
+    window.scrollTo(0, 0);
+    $('studentName').focus();
+  }
+
   window.EasyCertEdit = {
     openDraft: openDraftById,
     cancel: cancelEdit,
+    prefillNew,
     isEditing: () => !!editingDraftId,
   };
 

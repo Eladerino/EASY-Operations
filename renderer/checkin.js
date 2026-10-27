@@ -36,6 +36,7 @@
   let classTitle = '';
   let payload = null;
   let loadToken = 0; // a stale load must not paint the wrong class
+  let attendeesOpen = true;
 
   /* ---------------- QR drawing (same as Manager's) ---------------- */
 
@@ -170,6 +171,66 @@
       'Making a new link replaces this one: the old code stops working, so print a fresh sign-in sheet if you already printed one.'));
   }
 
+  /* ---------------- who checked in (expandable) ---------------- */
+  // Rendered from roster.js's copy of the roster (it calls this on
+  // every render), so this list and the student chips never disagree.
+  // The buttons act through roster.js too: Edit opens its student
+  // form, Approve clears a needs-review flag, and Certificate opens
+  // the New certificate form prefilled from the record.
+
+  const ATTENDED = ['checked_in', 'manual', 'needs_review'];
+
+  function renderAttendees(records) {
+    const box = $('checkinAttendees');
+    if (!box) return;
+    box.innerHTML = '';
+    if (!Array.isArray(records)) return;
+    const attended = records
+      .filter((r) => r && ATTENDED.includes(r.checkin_status))
+      .sort((a, b) =>
+        (a.checkin_status === 'needs_review' ? 0 : 1) -
+          (b.checkin_status === 'needs_review' ? 0 : 1) ||
+        String(a.name || '').localeCompare(String(b.name || '')));
+    const reviewCount = attended.filter((r) => r.checkin_status === 'needs_review').length;
+    const head = el('div', 'checkin-attendees-head');
+    const toggle = actionBtn(
+      (attendeesOpen ? 'Hide' : 'Show') + ' who checked in (' + attended.length + ')' +
+        (reviewCount ? ' · ' + reviewCount + ' to review' : ''),
+      'btn-secondary btn-small',
+      () => { attendeesOpen = !attendeesOpen; renderAttendees(records); }
+    );
+    head.appendChild(toggle);
+    box.appendChild(head);
+    if (!attendeesOpen) return;
+    if (!attended.length) {
+      box.appendChild(el('p', 'hint', 'Nobody has checked in yet.'));
+      return;
+    }
+    for (const rec of attended) {
+      const row = el('div', 'checkin-attendee-row');
+      const main = el('div', 'checkin-attendee-main');
+      main.appendChild(el('span', 'checkin-attendee-name', rec.name || '(no name)'));
+      main.appendChild(el('span', 'hint',
+        (rec.checkin_status === 'needs_review' ? 'Needs review'
+          : rec.checkin_status === 'manual' ? 'Checked in (marked in person)' : 'Checked in') +
+        (rec.employer ? ' · ' + rec.employer : '')));
+      row.appendChild(main);
+      if (rec.id && window.EasyRoster) {
+        if (rec.checkin_status === 'needs_review') {
+          row.appendChild(actionBtn('Approve', 'btn-primary btn-small',
+            () => window.EasyRoster.approveCheckin(rec.id)));
+        }
+        row.appendChild(actionBtn('Edit', 'btn-secondary btn-small',
+          () => window.EasyRoster.editRecord(rec.id)));
+        if (rec.checkin_status !== 'needs_review') {
+          row.appendChild(actionBtn('Certificate', 'btn-secondary btn-small',
+            () => window.EasyRoster.createCert(rec.id)));
+        }
+      }
+      box.appendChild(row);
+    }
+  }
+
   /* ---------------- actions ---------------- */
 
   async function act(kind) {
@@ -288,11 +349,13 @@
     eventId = null;
     classTitle = '';
     payload = null;
+    const box = $('checkinAttendees');
+    if (box) box.innerHTML = '';
     hideBig();
   }
 
   $('checkinQrClose').addEventListener('click', hideBig);
   $('checkinQrSave').addEventListener('click', savePng);
 
-  window.EasyCheckinPanel = { load, reset };
+  window.EasyCheckinPanel = { load, reset, renderAttendees };
 })();

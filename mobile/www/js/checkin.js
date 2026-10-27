@@ -16,6 +16,14 @@
   const Plugins = (window.Capacitor && window.Capacitor.Plugins) || {};
   let current = null; // { ev, payload }
   let wakeLock = null;
+  // The class roster rides alongside the link state: check-in lives
+  // on the roster records themselves, so the checked-in students can
+  // be listed and edited here (name spelling above all) through the
+  // same roster write the desktop app uses.
+  let rosterData = null; // { records, revision }
+  let rosterLoadError = '';
+  let listOpen = false;
+  let editState = null; // { id, values } while one student is edited
 
   function drawQr(canvas, text, px) {
     const qr = window.qrcode(0, 'M');
@@ -61,6 +69,11 @@
   function render() {
     const body = $('checkinBody');
     body.innerHTML = '';
+    renderState(body);
+    renderList(body);
+  }
+
+  function renderState(body) {
     const p = current && current.payload;
     if (!p) {
       body.appendChild(U.el('p', 'hint', 'Loading the check-in link...'));
@@ -113,6 +126,159 @@
     body.appendChild(row2);
     body.appendChild(U.el('p', 'hint',
       'Making a new link replaces this one: the old code stops working, so print a fresh sign-in sheet if you already printed one.'));
+  }
+
+  /* ---------------- who checked in (expandable, editable) ---------------- */
+
+  const ATTENDED = ['checked_in', 'manual', 'needs_review'];
+
+  function statusLabel(rec) {
+    if (rec.checkin_status === 'needs_review') return 'Needs review';
+    if (rec.checkin_status === 'manual') return 'Checked in (marked in person)';
+    return 'Checked in';
+  }
+
+  function renderList(body) {
+    if (!current) return;
+    const section = U.el('div', 'ci-section');
+    if (rosterLoadError) {
+      section.appendChild(U.el('p', 'error-text',
+        'Could not load the student list: ' + rosterLoadError));
+      body.appendChild(section);
+      return;
+    }
+    if (!rosterData) {
+      section.appendChild(U.el('p', 'hint', 'Loading the student list...'));
+      body.appendChild(section);
+      return;
+    }
+    const attended = rosterData.records
+      .filter((r) => ATTENDED.includes(r.checkin_status))
+      .sort((a, b) =>
+        (a.checkin_status === 'needs_review' ? 0 : 1) -
+          (b.checkin_status === 'needs_review' ? 0 : 1) ||
+        String(a.name || '').localeCompare(String(b.name || '')));
+    section.appendChild(actionBtn(
+      (listOpen ? 'Hide' : 'Show') + ' who checked in (' + attended.length + ')',
+      'btn-secondary',
+      () => { listOpen = !listOpen; render(); }
+    ));
+    if (listOpen) {
+      if (!attended.length) {
+        section.appendChild(U.el('p', 'hint', 'Nobody has checked in yet.'));
+      }
+      for (const rec of attended) section.appendChild(listRow(rec));
+    }
+    body.appendChild(section);
+  }
+
+  function listRow(rec) {
+    const wrap = U.el('div', 'ci-item');
+    const row = U.el('div', 'ci-row');
+    const main = U.el('div', 'ci-main');
+    main.appendChild(U.el('p', 'ci-name', rec.name || '(no name)'));
+    main.appendChild(U.el('p', 'hint',
+      statusLabel(rec) + (rec.employer ? ' · ' + rec.employer : '')));
+    row.appendChild(main);
+    if (rec.id) {
+      row.appendChild(actionBtn(
+        rec.checkin_status === 'needs_review' ? 'Review' : 'Edit',
+        'btn-small btn-secondary',
+        () => startEdit(rec)
+      ));
+    }
+    wrap.appendChild(row);
+    if (editState && editState.id === rec.id) wrap.appendChild(editForm(rec));
+    return wrap;
+  }
+
+  const EDIT_FIELDS = [
+    ['name', 'Name (as it should appear on the certificate)', 'text'],
+    ['employer', 'Employer', 'text'],
+    ['email', 'Email', 'email'],
+    ['phone', 'Phone', 'tel'],
+    ['emergency_name', 'Emergency contact name', 'text'],
+    ['emergency_phone', 'Emergency contact phone', 'tel'],
+  ];
+
+  function startEdit(rec) {
+    const values = {};
+    for (const [key] of EDIT_FIELDS) values[key] = rec[key] || '';
+    editState = { id: rec.id, values };
+    listOpen = true;
+    render();
+  }
+
+  function editForm(rec) {
+    const form = U.el('div', 'ci-edit');
+    for (const [key, label, type] of EDIT_FIELDS) {
+      form.appendChild(U.el('label', '', label));
+      const input = document.createElement('input');
+      input.id = 'ciF-' + key;
+      input.type = type;
+      input.value = editState.values[key] || '';
+      form.appendChild(input);
+    }
+    const row = U.el('div', 'card-actions');
+    if (rec.checkin_status === 'needs_review') {
+      row.appendChild(actionBtn('Approve check-in', 'btn-primary', () => saveEdit(true)));
+      row.appendChild(actionBtn('Save changes', 'btn-secondary', () => saveEdit(false)));
+    } else {
+      row.appendChild(actionBtn('Save changes', 'btn-primary', () => saveEdit(false)));
+    }
+    row.appendChild(actionBtn('Cancel', 'btn-secondary', () => { editState = null; render(); }));
+    form.appendChild(row);
+    return form;
+  }
+
+  async function saveEdit(approve) {
+    if (!editState || !rosterData || !current) return;
+    const rec = rosterData.records.find((r) => r.id === editState.id);
+    if (!rec) { editState = null; render(); return; }
+    const values = {};
+    for (const [key] of EDIT_FIELDS) {
+      const input = $('ciF-' + key);
+      values[key] = input ? input.value.trim() : (editState.values[key] || '');
+    }
+    if (!values.name) {
+      window.EasyUi.toast('The name cannot be empty.', 'error');
+      return;
+    }
+    // Keep the draft: if the save bounces (the list changed on the
+    // site), the form reopens with this typing still in it.
+    editState.values = values;
+    // The record goes back complete, every field it arrived with:
+    // the server sanitizes what it is sent, so a field left out
+    // would be erased (waiver, signature and check-in stamps above
+    // all). Only the edited fields, and the status on an approval,
+    // change.
+    const next = rosterData.records.map((r) =>
+      r.id === rec.id
+        ? { ...r, ...values, ...(approve ? { checkin_status: 'checked_in' } : {}) }
+        : r);
+    try {
+      const saved = await window.EasyApi.saveRoster(current.ev.id, next, rosterData.revision);
+      rosterData = { records: saved.roster, revision: saved.revision };
+      editState = null;
+      try {
+        current.payload = await window.EasyApi.checkin(current.ev.id);
+      } catch (e) { /* the counts refresh is a nicety, not the save */ }
+      render();
+      window.EasyUi.toast(approve ? 'Check-in approved.' : 'Student updated.', 'success');
+    } catch (e) {
+      if (e && e.status === 409) {
+        try {
+          const full = await window.EasyApi.rosterFull(current.ev.id);
+          rosterData = { records: full.roster, revision: full.revision };
+        } catch (e2) { /* the toast below still explains the reload */ }
+        render();
+        window.EasyUi.toast(
+          'The list changed on the site and has been reloaded. Check your edit, then save again.',
+          'error', 7000);
+        return;
+      }
+      window.EasyUi.toast(errText(e), 'error', 7000);
+    }
   }
 
   async function act(kind) {
@@ -217,6 +383,10 @@
 
   async function open(ev) {
     current = { ev, payload: null };
+    rosterData = null;
+    rosterLoadError = '';
+    listOpen = false;
+    editState = null;
     $('todayMain').classList.add('hidden');
     $('rosterView').classList.add('hidden');
     $('checkinView').classList.remove('hidden');
@@ -232,6 +402,15 @@
       return;
     }
     render();
+    try {
+      const full = await window.EasyApi.rosterFull(ev.id);
+      if (!current || current.ev.id !== ev.id) return; // screen moved on
+      rosterData = { records: full.roster, revision: full.revision };
+    } catch (e) {
+      if (!current || current.ev.id !== ev.id) return;
+      rosterLoadError = errText(e);
+    }
+    render();
   }
 
   function close() {
@@ -239,6 +418,8 @@
     $('checkinView').classList.add('hidden');
     $('todayMain').classList.remove('hidden');
     current = null;
+    rosterData = null;
+    editState = null;
   }
 
   $('checkinBack').addEventListener('click', () => {

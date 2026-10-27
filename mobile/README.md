@@ -46,7 +46,11 @@ WordPress credentials at runtime.
   opening the class's QR sign-in link: live checked-in counts, the QR
   drawn in the app, a full-screen show mode for the classroom, the QR
   as a shareable PNG, and create / replace / close for the link, each
-  confirmed first. The sign-in screen shows the app version at the
+  confirmed first. Under the counts, an expandable list shows who has
+  checked in; a student's details (the certificate name spelling
+  above all) can be edited there, and a check-in waiting for review
+  can be approved, all through the same roster write the desktop app
+  uses. The sign-in screen shows the app version at the
   bottom of its card. The last
   good class list is kept on the device, so the screen paints straight
   away and says when it is showing a saved copy instead of fresh data.

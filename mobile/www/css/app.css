@@ -228,7 +228,7 @@ a.btn { text-decoration: none; box-sizing: border-box; }
 
 /* ---------- forms ---------- */
 
-.signin-card label, .ask-form label, .class-form label, .form-label {
+.signin-card label, .ask-form label, .class-form label, .ci-edit label, .form-label {
   display: block;
   font-size: 13.5px;
   font-weight: 600;
@@ -236,7 +236,7 @@ a.btn { text-decoration: none; box-sizing: border-box; }
   color: var(--ink);
 }
 .signin-card input, .ask-form input, .ask-form textarea, .ask-form select,
-.class-form input, .class-form textarea, .class-form select {
+.class-form input, .class-form textarea, .class-form select, .ci-edit input {
   width: 100%;
   min-height: 48px;
   padding: var(--sp-3);
@@ -251,7 +251,8 @@ a.btn { text-decoration: none; box-sizing: border-box; }
 .ask-form textarea, .class-form textarea { min-height: 0; line-height: 1.45; }
 .signin-card input:focus, .ask-form input:focus,
 .ask-form textarea:focus, .ask-form select:focus,
-.class-form input:focus, .class-form textarea:focus, .class-form select:focus {
+.class-form input:focus, .class-form textarea:focus, .class-form select:focus,
+.ci-edit input:focus {
   outline: none;
   border-color: var(--accent);
   background: var(--card);
@@ -1007,6 +1008,22 @@ textarea.answer-input { line-height: 1.45; }
 .qr-wrap canvas { background: #fff; padding: 10px; border-radius: 8px; width: 100%; max-width: 260px; height: auto; }
 .checkin-code { text-align: center; font-size: 26px; font-weight: 700; letter-spacing: 4px; margin: var(--sp-2) 0 0; }
 .checkin-url { text-align: center; word-break: break-all; }
+
+/* Who checked in: the expandable, editable list under the link state
+   on the check-in screen. Its edit fields borrow the class form's
+   label and input styling (see the .ci-edit selectors up with the
+   form rules). */
+.ci-section { margin-top: var(--sp-4); }
+.ci-item { border-top: 1px solid var(--line); }
+.ci-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) 0;
+}
+.ci-main { flex: 1 1 auto; min-width: 0; }
+.ci-name { font-weight: 600; margin: 0; }
+.ci-edit { padding-bottom: var(--sp-3); }
 .qr-show { position: fixed; inset: 0; z-index: 60; background: #fff; color: #111; overflow-y: auto; display: flex; align-items: flex-start; justify-content: center; padding: 24px 16px; }
 .qr-show-card { width: 100%; max-width: 520px; text-align: center; }
 .qr-show-card canvas { width: 100%; height: auto; }

@@ -24,7 +24,12 @@ against easysafety.ca and needs the site's **EASY Suite** plugin
   and the list stays in step with online seat sales. The roster window
   also holds the class's check-in panel: make or replace the QR
   sign-in link, close sign-in, show the QR full screen, save it as a
-  PNG, or copy the link, the same options EASY Manager has.
+  PNG, or copy the link, the same options EASY Manager has. Under it,
+  an expandable list shows who has checked in (the roster chips carry
+  the same marks); a check-in waiting for review can be approved
+  there, and each checked-in student has a Certificate button that
+  opens the New certificate form filled in from their check-in
+  record and the class, so nothing is retyped.
 - **Online Learning**: preview only, with sample data.
 - **Course Builder**: authors build online courses, and reviewers approve
   them or send them back with a note. Courses are saved to the site, so every

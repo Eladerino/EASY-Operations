@@ -352,6 +352,27 @@ textarea { resize: vertical; }
   margin-top: 8px;
 }
 .checkin-qr-box { text-align: center; }
+.checkin-attendees-head { margin-top: 10px; }
+.checkin-attendee-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 0;
+  border-top: 1px solid var(--line);
+}
+.checkin-attendee-main {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.checkin-attendee-name { font-weight: 600; }
+.roster-chip-status {
+  font-weight: 700;
+  color: #1c7c3c;
+  padding: 0 4px;
+}
+.roster-chip-review { color: #b45309; }
 
 .roster-count {
   font-weight: 700;

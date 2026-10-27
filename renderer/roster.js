@@ -32,6 +32,8 @@
   /* ---------------- state ---------------- */
 
   let eventId = null;
+  let currentTitle = '';
+  let currentDate = '';
   let roster = []; // the server's copy; re-rendered after every save
   let rosterRevision = null; // revision from the last load/save; sent back on save
   let editingIndex = -1; // -1 means the form is adding, not editing
@@ -78,6 +80,8 @@
     // wrong class's students (and risking a save onto the wrong class).
     const token = ++loadToken;
     eventId = id;
+    currentTitle = title || '';
+    currentDate = date || '';
     roster = [];
     rosterRevision = null;
     editingIndex = -1;
@@ -134,6 +138,58 @@
       n === 0 ? '' : `${n} student${n === 1 ? '' : 's'}`;
     $('rosterEmpty').classList.toggle('hidden', n !== 0);
     roster.forEach((student, i) => box.appendChild(studentChip(student, i)));
+    // The check-in panel's who-checked-in list renders from this same
+    // copy, so an edit or approval here is reflected there at once.
+    if (window.EasyCheckinPanel) window.EasyCheckinPanel.renderAttendees(roster);
+  }
+
+  /* ---------------- check-in list actions (checkin.js buttons) ---------------- */
+
+  function findById(id) {
+    return roster.findIndex((r) => r && r.id === id);
+  }
+
+  function editRecord(id) {
+    const index = findById(id);
+    if (index >= 0) editStudent(index);
+  }
+
+  async function approveCheckin(id) {
+    const index = findById(id);
+    if (index < 0) return;
+    const student = roster[index];
+    if (!student || student.checkin_status !== 'needs_review') return;
+    const next = roster.slice();
+    next[index] = { ...student, checkin_status: 'checked_in' };
+    await saveRoster(next, `Check-in approved for ${String(student.name || 'the student')}.`);
+  }
+
+  // The certificate pipeline: open the New certificate form filled
+  // in from the checked-in record (the name exactly as confirmed at
+  // check-in) and this class, so nothing gets retyped. The form's
+  // own validation still applies before anything is posted, and the
+  // draft lands in Approvals like any other.
+  function createCert(id) {
+    const index = findById(id);
+    if (index < 0) return;
+    const student = roster[index];
+    if (!student) return;
+    if (!window.EasyCertEdit || typeof window.EasyCertEdit.prefillNew !== 'function') {
+      rosterError('The certificate form is not available. Try reloading the app.');
+      return;
+    }
+    let phone = String(student.phone || '').replace(/\D/g, '');
+    if (phone.length === 11 && phone.startsWith('1')) phone = phone.slice(1);
+    const acf = {
+      student_name: String(student.name || ''),
+      student_email: String(student.email || ''),
+      student_phone: phone.length === 10 ? phone : '',
+      company: String(student.employer || ''),
+      course_title: currentTitle,
+      completion_date: currentDate,
+    };
+    close();
+    window.EasyCertEdit.prefillNew(acf);
   }
 
   function studentChip(student, index) {
@@ -156,6 +212,22 @@
     if (details) nameBtn.title = details;
     nameBtn.addEventListener('click', () => editStudent(index));
     chip.appendChild(nameBtn);
+
+    // Check-in state rides on the record: mark it on the chip so the
+    // list itself shows who is in and who still needs a review.
+    if (student.checkin_status === 'checked_in' || student.checkin_status === 'manual') {
+      const mark = document.createElement('span');
+      mark.className = 'roster-chip-status';
+      mark.textContent = '✓';
+      mark.title = 'Checked in';
+      chip.appendChild(mark);
+    } else if (student.checkin_status === 'needs_review') {
+      const mark = document.createElement('span');
+      mark.className = 'roster-chip-status roster-chip-review';
+      mark.textContent = '!';
+      mark.title = 'Check-in needs review';
+      chip.appendChild(mark);
+    }
 
     const xBtn = document.createElement('button');
     xBtn.type = 'button';
@@ -213,10 +285,17 @@
       return;
     }
 
-    // On edit, carry the server-managed fields through untouched; new
-    // entries are tagged as manual (the server defaults it anyway).
+    // On edit, the record goes back COMPLETE: start from the loaded
+    // record and override only the form's fields. The server
+    // sanitizes what it is sent, so any field left out is erased -
+    // and a roster record carries far more than this form shows
+    // (check-in status and stamps, emergency contact, waiver and
+    // signature references, attendance days). Carrying the loaded
+    // record through is what keeps an edit from wiping a student's
+    // check-in when all that was meant was a name fix.
     const base = editingIndex >= 0 ? roster[editingIndex] : null;
     const record = {
+      ...(base || {}),
       name,
       employer: $('rosterEmployer').value.trim(),
       phone: $('rosterPhone').value.trim(),
@@ -225,12 +304,6 @@
       notes: $('rosterNotes').value.trim(),
       source: (base && base.source) || 'manual',
     };
-    if (base) {
-      if (base.id !== undefined) record.id = base.id;
-      if (base.order_id !== undefined) record.order_id = base.order_id;
-      if (base.added !== undefined) record.added = base.added;
-      if (base.added_by !== undefined) record.added_by = base.added_by;
-    }
 
     const next = roster.slice();
     if (editingIndex >= 0) {
@@ -317,6 +390,6 @@
   $('rosterFormSave').addEventListener('click', saveForm);
   $('rosterClose').addEventListener('click', close);
 
-  window.EasyRoster = { open, close };
+  window.EasyRoster = { open, close, editRecord, approveCheckin, createCert };
 
 })();
