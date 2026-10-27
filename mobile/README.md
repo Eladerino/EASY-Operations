@@ -201,11 +201,17 @@ password instead". Either way the app checks the sign-in with
 so a website login in the same browser does not interfere with the
 application password.
 
-Credentials are stored with Capacitor's Preferences API in the app's
-private Android storage. Private means no other app can read it, but it
-is **not encrypted**. That is an accepted trade for a personal sideloaded
-app on a personal phone; it would not be acceptable for a store release
-or a shared device. Signing out wipes the stored credentials.
+Since 0.6.2 the saved sign-in is stored with the Secure Storage
+plugin, encrypted by the Android Keystore; an install upgrading from
+an older version moves its saved sign-in across on first launch and
+deletes the plain copy. Everything else the app keeps on the phone
+(history, snapshots, choices) still uses Capacitor's Preferences API
+in the app's private Android storage: no other app can read it, but
+it is not encrypted, and none of it is secret. Signing out wipes the
+stored credentials and, when the site can be reached, removes that
+application password from the website profile straight away; if the
+site can't be reached, the removal is noted and completed at the
+next sign-in as the same person.
 
 Android backup is turned off for this app (`allowBackup="false"`), so
 the saved sign-in does not travel inside phone backups or device
@@ -214,7 +220,7 @@ else the app stores would be missed.
 
 The web version keeps the sign-in in the browser's storage for the
 site (on iPhone, the home-screen app has its own, separate from
-Safari). Same trade: private to that browser, not encrypted.
+Safari). Private to that browser, not encrypted.
 
 ## Web version
 

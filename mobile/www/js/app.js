@@ -485,22 +485,29 @@
   }
 
   // Each website sign-in makes a new application password. Signing out
-  // notes the one this phone used (only if the website sign-in made it
-  // for EASY Manager), and the next sign-in as the same person removes
-  // it from their profile once the new one works. Another person's
-  // sign-in can't remove it, so it is dropped and left for its owner's
-  // profile page. If the site can't be reached it is tried again on the
-  // next launch.
+  // removes the one this phone used straight away while it still can
+  // (only if the website sign-in made it for EASY Manager). If the site
+  // can't be reached at that moment, its id is noted instead and the
+  // next sign-in as the same person removes it from their profile once
+  // the new one works. Another person's sign-in can't remove it, so it
+  // is dropped and left for its owner's profile page. A note left
+  // behind is also tried again on the next launch.
   const REVOKE_KEY = 'revokePending';
 
-  async function noteAppPasswordForRetiring(username) {
-    // Sign-out waits at most a few seconds for this on a slow connection.
+  async function retireAppPasswordOnSignOut(username) {
+    // Sign-out waits at most a few seconds for the site on a slow
+    // connection before falling back to the note.
     const record = await Promise.race([
       window.EasyApi.introspectAppPassword(),
       new Promise((resolve) => setTimeout(() => resolve(null), 5000)),
     ]);
     const pending = window.EasyWebSignIn.revokeCandidate(record, username);
-    if (pending) await window.EasyStore.set(REVOKE_KEY, pending);
+    if (!pending) return;
+    if (await window.EasyApi.deleteAppPassword(pending.uuid)) {
+      await window.EasyStore.remove(REVOKE_KEY);
+      return;
+    }
+    await window.EasyStore.set(REVOKE_KEY, pending);
   }
 
   async function retirePendingAppPassword(username) {
@@ -627,7 +634,7 @@
     const yes = await confirm('Sign out?', 'The saved sign-in will be removed from this device.', 'Sign out');
     if (!yes) return;
     const creds = await window.EasyStore.getCreds();
-    if (creds) await noteAppPasswordForRetiring(creds.username);
+    if (creds) await retireAppPasswordOnSignOut(creds.username);
     await window.EasyStore.clearCreds();
     window.EasyApi.setCreds(null);
     window.EasyRoles.reset();

@@ -1,10 +1,13 @@
-// store.js: small async key/value layer over Capacitor Preferences.
+// store.js: small async key/value layer over Capacitor Preferences,
+// with the sign-in kept in Secure Storage instead (see Credentials).
 //
 // On device, Preferences lives in the app's private Android storage
-// (SharedPreferences). It is private to this app but NOT encrypted; the
-// README explains why that is acceptable for this personal sideloaded app.
-// In a plain desktop browser (layout preview only) it falls back to
-// localStorage so the screens can still be exercised.
+// (SharedPreferences). It is private to this app but NOT encrypted,
+// which is fine for the app's own data (history, snapshots, choices)
+// but not for the saved sign-in; that lives in Secure Storage, which
+// is backed by the Android Keystore. In a plain desktop browser
+// (layout preview only) everything falls back to localStorage so the
+// screens can still be exercised.
 (function () {
   'use strict';
 
@@ -13,6 +16,12 @@
   function nativePrefs() {
     const cap = window.Capacitor;
     if (cap && cap.Plugins && cap.Plugins.Preferences) return cap.Plugins.Preferences;
+    return null;
+  }
+
+  function secureStorage() {
+    const cap = window.Capacitor;
+    if (cap && cap.Plugins && cap.Plugins.SecureStorage) return cap.Plugins.SecureStorage;
     return null;
   }
 
@@ -53,10 +62,51 @@
   }
 
   /* ---------------- credentials ---------------- */
+  // The saved sign-in is the one secret the app holds, so on device
+  // it is kept in Secure Storage (Android Keystore-backed encryption),
+  // not Preferences. Versions before 0.6.2 kept it in Preferences; the
+  // first read after updating moves it across and deletes the plain
+  // copy. In a plain browser there is no keystore behind Secure
+  // Storage, so the Preferences/localStorage path is used as before.
 
-  const getCreds = () => get('creds', null);
-  const setCreds = (creds) => set('creds', creds);
-  const clearCreds = () => remove('creds');
+  async function getCreds() {
+    const secure = secureStorage();
+    if (!secure) return get('creds', null);
+    try {
+      const raw = await secure.getItem('creds');
+      if (raw !== null && raw !== undefined) return JSON.parse(raw);
+    } catch (e) {
+      // Fall through to the legacy copy rather than signing out.
+    }
+    const legacy = await get('creds', null);
+    if (legacy) {
+      await setCreds(legacy);
+      await remove('creds');
+    }
+    return legacy;
+  }
+
+  async function setCreds(creds) {
+    const secure = secureStorage();
+    if (!secure) {
+      await set('creds', creds);
+      return;
+    }
+    await secure.setItem('creds', JSON.stringify(creds === undefined ? null : creds));
+    await remove('creds'); // never leave a plain copy behind
+  }
+
+  async function clearCreds() {
+    const secure = secureStorage();
+    if (secure) {
+      try {
+        await secure.removeItem('creds');
+      } catch (e) {
+        // Already gone.
+      }
+    }
+    await remove('creds');
+  }
 
   /* ---------------- activity history (local only) ---------------- */
   // Every action the app completes is recorded here: the Today screen

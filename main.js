@@ -203,8 +203,8 @@ function loadConfig() {
   if (!raw.wpBaseUrl) missing.push('wpBaseUrl');
   const hasInstructorAuth = raw.wpUser && raw.wpUser.user && (raw.wpUser.appPassword || raw.wpUser.appPasswordEnc);
   const hasLegacyAuth =
-    raw.mediaAuth && raw.mediaAuth.user && raw.mediaAuth.appPassword &&
-    raw.postAuth && raw.postAuth.user && raw.postAuth.appPassword;
+    raw.mediaAuth && raw.mediaAuth.user && (raw.mediaAuth.appPassword || raw.mediaAuth.appPasswordEnc) &&
+    raw.postAuth && raw.postAuth.user && (raw.postAuth.appPassword || raw.postAuth.appPasswordEnc);
   if (!hasInstructorAuth && !hasLegacyAuth) {
     missing.push('wpUser.user / wpUser.appPassword (or the legacy mediaAuth/postAuth)');
   }
@@ -253,16 +253,27 @@ function writeConfigAtomic(filePath, data) {
   fs.renameSync(tmpPath, filePath);
 }
 
-// Migrate a plaintext stored password to OS-keychain encryption, once.
+// Migrate plaintext stored passwords to OS-keychain encryption, once:
+// the per-instructor login and the legacy shared mediaAuth/postAuth
+// pairs alike, in a single rewrite of the file.
 function maybeMigratePasswordEncryption(config) {
-  if (!config.ok || !config.wpUser || !config.wpUser.appPassword || config.wpUser.appPasswordEnc) return;
-  if (!encryptionAvailable()) return;
-  const enc = encryptPassword(config.wpUser.appPassword);
-  if (!enc) return;
+  if (!config.ok || !encryptionAvailable()) return;
+  let raw;
   try {
-    const raw = JSON.parse(fs.readFileSync(config.path, 'utf8'));
-    raw.wpUser.appPasswordEnc = enc;
-    delete raw.wpUser.appPassword;
+    raw = JSON.parse(fs.readFileSync(config.path, 'utf8'));
+  } catch (e) { return; }
+  let changed = false;
+  for (const key of ['wpUser', 'mediaAuth', 'postAuth']) {
+    const holder = raw[key];
+    if (!holder || !holder.appPassword || holder.appPasswordEnc) continue;
+    const enc = encryptPassword(holder.appPassword);
+    if (!enc) continue;
+    holder.appPasswordEnc = enc;
+    delete holder.appPassword;
+    changed = true;
+  }
+  if (!changed) return;
+  try {
     writeConfigAtomic(config.path, raw);
     cachedConfig = null;
   } catch (e) { /* keep the plaintext config rather than breaking sign-in */ }
@@ -276,8 +287,8 @@ function effectiveAuth(config) {
     return { media: creds, post: creds };
   }
   return {
-    media: { user: config.mediaAuth.user, appPassword: config.mediaAuth.appPassword },
-    post: { user: config.postAuth.user, appPassword: config.postAuth.appPassword },
+    media: { user: config.mediaAuth.user, appPassword: wpAppPassword(config.mediaAuth) },
+    post: { user: config.postAuth.user, appPassword: wpAppPassword(config.postAuth) },
   };
 }
 
@@ -548,6 +559,10 @@ const WHATS_NEW_FILE = () => path.join(app.getPath('userData'), 'whats-new.json'
 // Keep notes short and plain-language: Pam reads these. Nothing
 // business-internal here — instructors see these notes too.
 const WHATS_NEW_NOTES = {
+  '1.3.3': [
+    'Sign out now removes this computer\'s sign-in from your website profile straight away, instead of waiting for the next sign-in.',
+    'Older shared office sign-ins saved on this computer are now encrypted the same way as personal sign-ins.',
+  ],
   '1.3.2': [
     'Signing in again on this computer now removes its old sign-in from your website profile, so the list there stays tidy.',
   ],
@@ -851,11 +866,11 @@ async function retireReplacedAppPassword(base, oldAuth) {
   if (old) await deleteAppPassword(base, oldAuth, old.uuid);
 }
 
-// After Sign out the old password is no longer on this computer, so its
-// id is kept in revoke-pending.json and the next sign-in as the same
-// person removes it. Another person's sign-in can't remove it; that one
-// is left for its owner's profile page. Tried again at launch if the
-// site couldn't be reached.
+// When sign-out could not remove the old password (the site could not
+// be reached, or it refused), its id is kept in revoke-pending.json and
+// the next sign-in as the same person removes it. Another person's
+// sign-in can't remove it; that one is left for its owner's profile
+// page. Tried again at launch if the site couldn't be reached.
 async function retirePendingAppPassword(base, newAuth) {
   const file = revokePendingPath();
   let pending = null;
@@ -940,12 +955,18 @@ ipcMain.handle('set-printer', async (_event, name) => {
 // Signs out: deletes the saved login so the setup wizard runs again.
 ipcMain.handle('reset-setup', async () => {
   try {
-    // Note the password being signed out of, so the next sign-in as the
-    // same person can remove it (see retirePendingAppPassword).
+    // Remove the password being signed out of while this computer
+    // still can (it removes itself, like a replaced sign-in). Only
+    // when that fails is its id noted, so the next sign-in as the same
+    // person can remove it (see retirePendingAppPassword).
     const previous = getConfig();
     if (previous.ok && previous.wpUser && previous.wpUser.user) {
-      const old = await oldAppPassword(previous.wpBaseUrl.replace(/\/+$/, ''), effectiveAuth(previous).post);
-      if (old) writeConfigAtomic(revokePendingPath(), old);
+      const base = previous.wpBaseUrl.replace(/\/+$/, '');
+      const auth = effectiveAuth(previous).post;
+      const old = await oldAppPassword(base, auth);
+      if (old && !(await deleteAppPassword(base, auth, old.uuid))) {
+        writeConfigAtomic(revokePendingPath(), old);
+      }
     }
     const { userPath, devPath } = configPaths();
     if (fs.existsSync(userPath)) fs.unlinkSync(userPath);

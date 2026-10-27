@@ -1,6 +1,6 @@
 {
   "name": "easy-manager",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "EASY Manager: personal management companion app for EASY Safety Training (sideloaded Android).",
   "private": true,
   "scripts": {
@@ -8,6 +8,7 @@
     "open": "cap open android"
   },
   "dependencies": {
+    "@aparajita/capacitor-secure-storage": "^7.1.6",
     "@capacitor/android": "^7.4.3",
     "@capacitor/app": "^7.1.2",
     "@capacitor/core": "^7.4.3",
